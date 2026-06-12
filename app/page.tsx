@@ -1,336 +1,322 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { PageTransition } from '@/components/animations/PageTransition'
+import { motion } from 'framer-motion'
+import {
+  ArrowRight,
+  Crosshair,
+  Fingerprint,
+  Lock,
+  Scale,
+  Search,
+  Shield,
+  Target,
+} from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
+
+const services = [
+  {
+    icon: Search,
+    title: 'OSINT',
+    body: 'Open-source intelligence gathering and analysis.',
+  },
+  {
+    icon: Fingerprint,
+    title: 'FORENSICS',
+    body: 'Digital evidence analysis and chain-of-custody compliance.',
+  },
+  {
+    icon: Crosshair,
+    title: 'RESEARCH',
+    body: 'Threat research, attack methodology, and vulnerability analysis.',
+  },
+  {
+    icon: Shield,
+    title: 'CONSULTING',
+    body: 'Security assessments, opsec consulting, and risk mitigation.',
+  },
+]
+
+const principles = [
+  {
+    icon: Shield,
+    title: 'OPSEC DRIVEN',
+    body: 'Operations security is our foundation.',
+  },
+  {
+    icon: Scale,
+    title: 'LEGAL & ETHICAL',
+    body: 'All investigations are legal and ethical.',
+  },
+  {
+    icon: Lock,
+    title: 'DISCREET & SECURE',
+    body: 'Client confidentiality is non-negotiable.',
+  },
+  {
+    icon: Target,
+    title: 'RESULTS FOCUSED',
+    body: 'Intelligence that drives decisions.',
+  },
+]
+
+const navItems = [
+  { label: 'SERVICES', href: '#services' },
+  { label: 'ABOUT', href: '#about' },
+  { label: 'METHODOLOGY', href: '#methodology' },
+  { label: 'REQUEST', href: '/request', active: true },
+  { label: 'CONTACT', href: '#contact' },
+]
 
 export default function Home() {
-  const [isLoaded, setIsLoaded] = useState(false)
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-slate-900 to-background">
-      {/* Grid background effect */}
-      <div className="fixed inset-0 opacity-10 pointer-events-none">
-        <div className="absolute inset-0" style={{
-          backgroundImage: 'linear-gradient(90deg, #94e945 1px, transparent 1px), linear-gradient(#00ff41 1px, transparent 1px)',
-          backgroundSize: '50px 50px'
-        }} />
-      </div>
+    <PageTransition>
+      <main className="min-h-screen overflow-hidden bg-background text-foreground">
+        <div className="fixed inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_30%,rgba(38,185,99,0.16),transparent_26%),radial-gradient(circle_at_28%_18%,rgba(38,185,99,0.1),transparent_22%),linear-gradient(180deg,rgba(4,7,8,0.2),#050808_76%)]" />
+          <div className="absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(38,185,99,0.22)_1px,transparent_1px),linear-gradient(90deg,rgba(38,185,99,0.22)_1px,transparent_1px)] [background-size:68px_68px]" />
+          <div className="absolute inset-x-0 top-24 h-px bg-primary/20" />
+          <div className="absolute left-1/2 top-28 h-[480px] w-[780px] -translate-x-1/2 opacity-20 [background-image:radial-gradient(rgba(39,213,110,0.9)_1px,transparent_1.4px)] [background-size:8px_8px] [mask-image:radial-gradient(ellipse_at_center,black_0%,black_45%,transparent_72%)]" />
+          <div className="absolute right-0 top-28 h-[520px] w-[520px] rounded-full border border-primary/15 opacity-60" />
+          <div className="absolute right-16 top-44 h-[360px] w-[360px] rounded-full border border-primary/10" />
+        </div>
 
-      {/* Content */}
-      <div className="relative z-10">
-        {/* Navigation */}
-        <nav className="border-b border-border/30 backdrop-blur-md sticky top-0 z-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center flex-shrink-0">
-                <span className="text-primary-foreground font-bold text-sm">SIB</span>
+        <nav className="sticky top-0 z-30 border-b border-primary/10 bg-background/82 backdrop-blur-xl">
+          <div className="mx-auto flex h-24 max-w-[1480px] items-center justify-between px-5 sm:px-8 lg:px-16">
+            <Link href="/" className="flex min-w-0 items-center gap-4" aria-label="ShadowNode home">
+              <div className="relative grid h-14 w-14 shrink-0 place-items-center">
+                <div className="absolute inset-0 bg-primary/20 [clip-path:polygon(50%_0,95%_25%,95%_75%,50%_100%,5%_75%,5%_25%)]" />
+                <div className="absolute inset-[3px] bg-background [clip-path:polygon(50%_0,95%_25%,95%_75%,50%_100%,5%_75%,5%_25%)]" />
+                <span className="relative font-mono text-base tracking-wider text-white">SIB</span>
               </div>
-              <span className="text-lg sm:text-xl font-bold text-primary truncate">SHADOWNODE INTELLIGENCE BUREAU</span>
+              <div className="leading-none">
+                <div className="font-mono text-xl font-bold tracking-[0.08em] text-white sm:text-2xl">
+                  SHADOWNODE
+                </div>
+                <div className="mt-2 font-mono text-xs tracking-[0.22em] text-primary">
+                  INTELLIGENCE BUREAU
+                </div>
+              </div>
+            </Link>
+
+            <div className="hidden items-center gap-10 font-mono text-sm tracking-[0.08em] text-white/78 lg:flex">
+              {navItems.map((item) => (
+                <Link key={item.label} href={item.href} className="group relative transition hover:text-primary">
+                  {item.label}
+                  {item.active && (
+                    <span className="absolute -right-3 -top-1 h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_rgba(39,213,110,0.9)]" />
+                  )}
+                </Link>
+              ))}
             </div>
-            <div className="flex items-center gap-2 sm:gap-4 ml-4">
-              <Link href="/request" className="text-xs sm:text-sm text-foreground/70 hover:text-primary transition whitespace-nowrap">
-                New Request
-              </Link>
-              <Link href="/login" className="text-xs sm:text-sm text-foreground/70 hover:text-primary transition whitespace-nowrap">
-                Login
-              </Link>
-            </div>
+
+            <Link href="/request" className="hidden sm:block">
+              <Button
+                variant="outline"
+                className="h-12 rounded-md border-primary/60 bg-transparent px-8 font-mono text-sm tracking-[0.06em] text-white hover:bg-primary/10 hover:text-primary"
+              >
+                SUBMIT REQUEST
+              </Button>
+            </Link>
           </div>
         </nav>
 
-        {/* Hero Section */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-            <div>
-              <div className="inline-block mb-4 sm:mb-6 px-3 sm:px-4 py-2 rounded border border-primary/30 bg-primary/5 text-primary text-xs sm:text-sm font-mono">
-                &gt; CLASSIFIED INTELLIGENCE DIVISION
+        <section className="relative z-10 mx-auto max-w-[1480px] px-5 pb-10 pt-20 sm:px-8 lg:px-16 lg:pt-24">
+          <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
+            <motion.div
+              initial={{ opacity: 0, y: 22 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7 }}
+            >
+              <div className="mb-6 flex items-center gap-4 font-mono text-sm tracking-[0.08em] text-primary">
+                <span className="h-10 w-4 border-y border-l border-primary/45" />
+                CLASSIFIED INTELLIGENCE DIVISION
               </div>
-              
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold mb-4 sm:mb-6 text-balance leading-tight">
-                <span className="text-primary">Invisible</span> Intelligence.<br />
-                <span className="text-secondary">Visible</span> Results.
+
+              <h1 className="max-w-3xl font-mono text-[clamp(2.7rem,7vw,5.9rem)] font-black uppercase leading-[0.98] text-white">
+                <span className="block drop-shadow-[0_0_18px_rgba(255,255,255,0.04)]">Invisible</span>
+                <span className="block drop-shadow-[0_0_18px_rgba(255,255,255,0.04)]">Intelligence.</span>
+                <span className="block text-primary drop-shadow-[0_0_20px_rgba(39,213,110,0.6)]">
+                  Visible Results.
+                </span>
               </h1>
-              
-              <p className="text-base sm:text-lg lg:text-xl text-foreground/70 mb-6 sm:mb-8 max-w-xl leading-relaxed">
-                <p>Professional intelligence bureau specializing in digital investigations.</p>
-                <p>OSINT: Open-source intelligence gathering and investigative research.</p>
-                <p>FORENSICS: Digital evidence analysis, chain-of-custody compliance, court-admissible documentation.</p>
-                <p>SECURITY RESEARCH: Understanding attack methodologies and system vulnerabilities to strengthen client security posture.</p>
-                <p>Professional methodology. Institutional-grade standards.</p>
-                <p>Invisible intelligence. Visible results.</p>
+
+              <p className="mt-8 max-w-2xl text-lg leading-8 text-white/72">
+                Professional intelligence bureau specializing in digital investigations, open-source
+                intelligence, and security research.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <Link href="/request" className="w-full sm:w-auto">
-                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 text-sm sm:text-base px-6 sm:px-8 py-5 sm:py-6">
-                    Initiate Request
+              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+                <Link href="/request">
+                  <Button className="h-14 w-full rounded-md border border-primary/70 bg-primary/10 px-9 font-mono text-base tracking-[0.06em] text-primary shadow-[0_0_28px_rgba(39,213,110,0.08)] hover:bg-primary hover:text-background sm:w-auto">
+                    SUBMIT REQUEST
                   </Button>
                 </Link>
-                <Link href="#services" className="w-full sm:w-auto">
-                  <Button variant="outline" className="w-full border-secondary/50 text-secondary hover:bg-secondary/10 text-sm sm:text-base px-6 sm:px-8 py-5 sm:py-6">
-                    Explore Services
-                  </Button>
+                <Link
+                  href="#services"
+                  className="inline-flex h-14 items-center gap-4 px-2 font-mono text-base tracking-[0.06em] text-white/88 transition hover:text-primary"
+                >
+                  LEARN MORE <ArrowRight className="h-5 w-5" />
                 </Link>
               </div>
+            </motion.div>
 
-              <p className="mt-6 sm:mt-8 text-xs sm:text-sm text-foreground/50 font-mono">
-                Status: <span className="text-primary">OPERATIONAL</span> | Uptime: 99.97%
-              </p>
-            </div>
+            <motion.div
+              initial={{ opacity: 0, x: 28 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.12, duration: 0.7 }}
+              className="relative"
+            >
+              <div className="absolute -inset-10 bg-primary/5 blur-3xl" />
+              <div className="relative rounded-md border border-white/12 bg-[#070c0d]/82 shadow-[0_0_0_1px_rgba(39,213,110,0.08),0_28px_90px_rgba(0,0,0,0.34)] backdrop-blur">
+                <div className="flex items-center justify-between border-b border-white/10 px-6 py-5 font-mono text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="h-3 w-3 rounded-full bg-primary shadow-[0_0_14px_rgba(39,213,110,0.9)]" />
+                    <span className="text-primary">SIB</span>
+                    <span className="text-white/45">//</span>
+                    <span className="text-white/76">OPERATIONS CONSOLE</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-white/82">
+                    SECURE <Lock className="h-4 w-4 text-primary" />
+                  </div>
+                </div>
 
-            <div className="relative hidden sm:block">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-lg blur-3xl" />
-              <div className="relative bg-card border border-border/30 rounded-lg p-6 sm:p-8 backdrop-blur">
-                <div className="space-y-4 font-mono text-xs sm:text-sm">
+                <div className="space-y-8 p-6 font-mono text-sm sm:p-8">
                   <div>
-                    <span className="text-muted-foreground">$</span>
-                    <span className="text-foreground ml-2">whoami</span>
-                  </div>
-                  <div className="text-primary ml-4">shadownode-intelligence-bureau</div>
-                  
-                  <div className="mt-6">
-                    <span className="text-muted-foreground">$</span>
-                    <span className="text-foreground ml-2">cat services.txt</span>
-                  </div>
-                  <div className="text-secondary ml-4 space-y-2">
-                    <div>├─ OSINT: Open-source intelligence gathering</div>
-                    <div>├─ FORENSICS: Digital evidence analysis</div>
-                    <div>├─ HACKING: Ethical penetration testing</div>
-                    <div>└─ SECURE: End-to-end encrypted comms</div>
+                    <p className="text-primary">$ whoami</p>
+                    <p className="mt-2 text-white/58">shadownode-intelligence-bureau</p>
                   </div>
 
-                  <div className="mt-6">
-                    <span className="text-muted-foreground">$</span>
-                    <span className="text-foreground ml-2">client_status</span>
+                  <div>
+                    <p className="text-primary">$ cat services.txt</p>
+                    <div className="mt-3 space-y-3 rounded border border-primary/20 bg-background/35 p-4">
+                      {services.map((service) => (
+                        <p key={service.title} className="text-white/58">
+                          <span className="mr-2 text-white/32">▸</span>
+                          <span className="text-primary">{service.title}:</span> {service.body}
+                        </p>
+                      ))}
+                    </div>
                   </div>
-                  <div className="text-accent ml-4">anonymity: ████████████ 100%</div>
+
+                  <div>
+                    <p className="text-primary">$ client_status</p>
+                    <div className="mt-3 flex items-center gap-3 text-primary">
+                      <span>anonymity:</span>
+                      <span className="h-4 min-w-0 flex-1 bg-primary/20">
+                        <span className="block h-full w-full bg-gradient-to-r from-primary/70 to-primary" />
+                      </span>
+                      <span>100%</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </section>
 
-        {/* Services Section */}
-        <section id="services" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
-          <div className="mb-12 sm:mb-16">
-            <h2 className="text-3xl sm:text-4xl lg:text-4xl font-bold mb-3 sm:mb-4">Our Services</h2>
-            <p className="text-sm sm:text-base lg:text-lg text-foreground/60 max-w-2xl">
-              Your specific intelligence requirements handled by our elite team of analysts, forensic specialists, and security professionals.
-            </p>
-          </div>
+        <section id="services" className="relative z-10 mx-auto max-w-[1480px] px-5 py-10 sm:px-8 lg:px-16">
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {services.map((service, index) => {
+              const Icon = service.icon
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-            {/* OSINT Card */}
-            <div className="group relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition duration-300" />
-              <div className="relative bg-card border border-border/30 hover:border-primary/50 rounded-lg p-6 sm:p-8 transition duration-300">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded bg-primary/20 flex items-center justify-center text-primary font-bold text-sm sm:text-base flex-shrink-0">
-                    01
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-bold">OSINT</h3>
-                </div>
-                <p className="text-foreground/70 mb-4">
-                  Open-source intelligence gathering from public data, social networks, and web infrastructure. Comprehensive intelligence profiles in 24-48 hours.
-                </p>
-                <ul className="space-y-2 text-sm text-foreground/60">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    Individual background checks
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    Organization monitoring
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    Threat landscape analysis
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    Data leak verification
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Forensics Card */}
-            <div className="group relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-secondary/10 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition duration-300" />
-              <div className="relative bg-card border border-border/30 hover:border-secondary/50 rounded-lg p-6 sm:p-8 transition duration-300">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded bg-secondary/20 flex items-center justify-center text-secondary font-bold text-sm sm:text-base flex-shrink-0">
-                    02
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-bold">FORENSICS</h3>
-                </div>
-                <p className="text-foreground/70 mb-4">
-                  Digital forensics analysis for incident response, eDiscovery, and evidence recovery. Chain of custody maintained throughout.
-                </p>
-                <ul className="space-y-2 text-sm text-foreground/60">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-secondary rounded-full" />
-                    Device forensics (mobile, desktop)
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-secondary rounded-full" />
-                    Network traffic analysis
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-secondary rounded-full" />
-                    Memory dump analysis
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-secondary rounded-full" />
-                    Log analysis & timeline
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Ethical Hacking Card */}
-            <div className="group relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-accent/10 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition duration-300" />
-              <div className="relative bg-card border border-border/30 hover:border-accent/50 rounded-lg p-6 sm:p-8 transition duration-300">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded bg-accent/20 flex items-center justify-center text-accent font-bold text-sm sm:text-base flex-shrink-0">
-                    03
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-bold">ETHICAL HACKING</h3>
-                </div>
-                <p className="text-foreground/70 mb-4">
-                  Authorized penetration testing and vulnerability assessments. Identify security weaknesses before adversaries do.
-                </p>
-                <ul className="space-y-2 text-sm text-foreground/60">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-accent rounded-full" />
-                    Web application testing
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-accent rounded-full" />
-                    Infrastructure assessment
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-accent rounded-full" />
-                    Social engineering tests
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-accent rounded-full" />
-                    Red team operations
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Security Card */}
-            <div className="group relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition duration-300" />
-              <div className="relative bg-card border border-border/30 hover:border-primary/50 rounded-lg p-6 sm:p-8 transition duration-300">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded bg-primary/20 flex items-center justify-center text-primary font-bold text-sm sm:text-base flex-shrink-0">
-                    04
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-bold">SECURE COMMS</h3>
-                </div>
-                <p className="text-foreground/70 mb-4">
-                  End-to-end encrypted communication for case discussions, updates, and sensitive information exchange.
-                </p>
-                <ul className="space-y-2 text-sm text-foreground/60">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    E2E encrypted messaging
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    Secure file transfer
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    PGP key management
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1 h-1 bg-primary rounded-full" />
-                    Communication logs: 30-day retention
-                  </li>
-                </ul>
-              </div>
-            </div>
+              return (
+                <motion.article
+                  key={service.title}
+                  initial={{ opacity: 0, y: 24 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.06, duration: 0.55 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  className="group relative min-h-56 overflow-hidden rounded-md border border-primary/25 bg-card/72 p-8 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70 hover:bg-card"
+                >
+                  <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+                  <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+                  <Icon className="mb-7 h-14 w-14 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+                  <h2 className="font-mono text-2xl font-bold tracking-[0.04em] text-white">{service.title}</h2>
+                  <p className="mt-4 max-w-[18rem] leading-7 text-white/58">{service.body}</p>
+                  <Link
+                    href="/request"
+                    className="mt-9 inline-flex items-center gap-3 font-mono text-sm tracking-[0.08em] text-primary"
+                  >
+                    LEARN MORE <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </motion.article>
+              )
+            })}
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg blur-2xl" />
-            <div className="relative bg-card/50 border border-primary/30 rounded-lg p-8 sm:p-12 text-center backdrop-blur">
-              <h2 className="text-2xl sm:text-3xl lg:text-3xl font-bold mb-3 sm:mb-4">
-                Ready to Begin Your Investigation?
+        <section
+          id="about"
+          className="relative z-10 mt-6 border-y border-primary/10 bg-[#070b0c]/70"
+        >
+          <div className="mx-auto grid max-w-[1480px] gap-8 px-5 py-8 sm:px-8 md:grid-cols-2 lg:grid-cols-4 lg:px-16">
+            {principles.map((principle, index) => {
+              const Icon = principle.icon
+
+              return (
+                <div key={principle.title} className="flex gap-5 lg:border-r lg:border-primary/20 lg:last:border-r-0">
+                  <Icon className="mt-1 h-10 w-10 shrink-0 text-primary" strokeWidth={1.35} />
+                  <div>
+                    <h3 className="font-mono text-sm tracking-[0.08em] text-white">{principle.title}</h3>
+                    <p className="mt-2 max-w-52 text-sm leading-6 text-white/54">{principle.body}</p>
+                  </div>
+                  {index < principles.length - 1 && <span className="hidden" />}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        <section
+          id="methodology"
+          className="relative z-10 mx-auto grid max-w-[1480px] gap-8 px-5 py-20 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-16"
+        >
+          <div>
+            <p className="font-mono text-sm tracking-[0.12em] text-primary">METHODOLOGY</p>
+            <h2 className="mt-4 max-w-2xl font-mono text-3xl font-bold uppercase leading-tight text-white sm:text-5xl">
+              Quiet process. Verifiable intelligence.
+            </h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {['Scope', 'Collect', 'Report'].map((step, index) => (
+              <div key={step} className="rounded-md border border-primary/18 bg-card/62 p-6">
+                <p className="font-mono text-primary">0{index + 1}</p>
+                <h3 className="mt-5 font-mono text-xl text-white">{step}</h3>
+                <p className="mt-3 text-sm leading-6 text-white/56">
+                  {index === 0 && 'Define objectives, constraints, jurisdiction, and reporting standards.'}
+                  {index === 1 && 'Gather, preserve, and validate evidence through documented workflows.'}
+                  {index === 2 && 'Deliver decision-ready findings with clear confidence levels.'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="contact" className="relative z-10 mx-auto max-w-[1480px] px-5 pb-20 sm:px-8 lg:px-16">
+          <div className="rounded-md border border-primary/25 bg-primary/5 p-8 sm:flex sm:items-center sm:justify-between sm:p-10">
+            <div>
+              <p className="font-mono text-sm tracking-[0.12em] text-primary">SECURE INTAKE OPEN</p>
+              <h2 className="mt-3 font-mono text-2xl font-bold uppercase text-white sm:text-3xl">
+                Ready to submit an intelligence request?
               </h2>
-              <p className="text-sm sm:text-base text-foreground/70 mb-6 sm:mb-8 max-w-2xl mx-auto">
-                Submit your intelligence request anonymously or create a secure client account. Either way, your privacy is paramount.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-                <Link href="/request" className="w-full sm:w-auto">
-                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 px-6 sm:px-8 py-5 sm:py-6 text-sm sm:text-base">
-                    Anonymous Request
-                  </Button>
-                </Link>
-                <Link href="/login" className="w-full sm:w-auto">
-                  <Button variant="outline" className="w-full border-secondary/50 text-secondary hover:bg-secondary/10 px-6 sm:px-8 py-5 sm:py-6 text-sm sm:text-base">
-                    Client Portal
-                  </Button>
-                </Link>
-              </div>
             </div>
+            <Link href="/request" className="mt-6 block sm:mt-0">
+              <Button className="h-14 w-full rounded-md bg-primary px-8 font-mono text-background hover:bg-primary/85 sm:w-auto">
+                SUBMIT REQUEST
+              </Button>
+            </Link>
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="border-t border-border/30 mt-12 sm:mt-16 lg:mt-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-8 mb-8 sm:mb-12">
-              <div>
-                <h4 className="font-bold mb-3 sm:mb-4 text-sm sm:text-base">Services</h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-foreground/60">
-                  <li><a href="#services" className="hover:text-primary transition">OSINT</a></li>
-                  <li><a href="#services" className="hover:text-primary transition">Forensics</a></li>
-                  <li><a href="#services" className="hover:text-primary transition">Ethical Hacking</a></li>
-                  <li><a href="#services" className="hover:text-primary transition">Secure Comms</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-bold mb-3 sm:mb-4 text-sm sm:text-base">Access</h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-foreground/60">
-                  <li><Link href="/request" className="hover:text-primary transition">New Request</Link></li>
-                  <li><Link href="/login" className="hover:text-primary transition">Client Login</Link></li>
-                  <li><Link href="/status" className="hover:text-primary transition">Case Status</Link></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-bold mb-3 sm:mb-4 text-sm sm:text-base">Legal</h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-foreground/60">
-                  <li><a href="#" className="hover:text-primary transition">Privacy Policy</a></li>
-                  <li><a href="#" className="hover:text-primary transition">Terms of Service</a></li>
-                  <li><a href="#" className="hover:text-primary transition">Ethics</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-bold mb-3 sm:mb-4 text-sm sm:text-base">Security</h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-foreground/60">
-                  <li><a href="#" className="hover:text-primary transition">PGP Key</a></li>
-                  <li><a href="#" className="hover:text-primary transition">Bug Bounty</a></li>
-                  <li><a href="#" className="hover:text-primary transition">Status</a></li>
-                </ul>
-              </div>
-            </div>
-            <div className="border-t border-border/20 pt-6 sm:pt-8 text-center text-xs sm:text-sm text-foreground/40">
-              <p>© 2026 ShadowNode Intelligence Bureau. All inquiries confidential.</p>
-              <p className="mt-2 font-mono text-xs">STATUS: <span className="text-primary">OPERATIONAL</span></p>
-            </div>
-          </div>
+        <footer className="relative z-10 border-t border-primary/10 px-5 py-8 text-center font-mono text-xs tracking-[0.08em] text-white/42 sm:px-8">
+          <p>© 2026 SHADOWNODE INTELLIGENCE BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
+          <p className="mt-2">
+            STATUS: <span className="text-primary">OPERATIONAL</span>
+          </p>
         </footer>
-      </div>
-    </div>
+      </main>
+    </PageTransition>
   )
 }

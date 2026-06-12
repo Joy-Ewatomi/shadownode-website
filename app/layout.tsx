@@ -4,12 +4,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Shadownode Intelligence Bureau',
   description:
-    'Professional intelligence bureau specializing in digital investigations. ' +
-    'OSINT: Open-source intelligence gathering and investigative research. ' +
-    'FORENSICS: Digital evidence analysis, chain-of-custody compliance, court-admissible documentation. ' +
-    'Security Research: Understanding attack methodologies and system vulnerabilities to strengthen client security posture. ' +
-    'Professional methodology. Institutional-grade standards. ' +
-    'Invisible intelligence. Visible results.',
+    'ShadowNode Intelligence Bureau | Professional investigations | OSINT • Forensics • Security Research',
   icons: {
     icon: [
       {
