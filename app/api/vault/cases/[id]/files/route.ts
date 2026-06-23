@@ -8,11 +8,11 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 
 // GET - Get files for a case
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     const { data, error } = await supabase
       .from('forensic_files')

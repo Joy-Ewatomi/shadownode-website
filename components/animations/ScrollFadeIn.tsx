@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { motion, type TargetAndTransition } from 'framer-motion'
 import { ReactNode } from 'react'
 import { fadeInUpVariants, useInViewVariants } from '@/lib/animations'
 
@@ -28,13 +28,14 @@ export function ScrollFadeIn({
   onHover = false,
 }: ScrollFadeInProps) {
   const inViewProps = useInViewVariants(fadeInUpVariants)
+  const visible = inViewProps.whileInView as TargetAndTransition
 
   return (
     <motion.div
       {...inViewProps}
       whileHover={onHover ? { y: -5, transition: { duration: 0.3 } } : undefined}
       transition={{
-        ...inViewProps.transition,
+        ...visible.transition,
         delay,
       }}
       className={className}

@@ -4,7 +4,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Shadownode Intelligence Bureau',
   description:
-    'ShadowNode Intelligence Bureau | Professional investigations | OSINT • Forensics • Security Research',
+    'ShadowNode Intelligence Bureau | Professional investigations and intelligence services for individuals and businesses. Expert analysis, surveillance, and risk assessment to protect your interests',
   icons: {
     icon: [
       {
