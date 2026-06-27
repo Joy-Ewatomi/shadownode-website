@@ -12,6 +12,10 @@ import {
   Search,
   Shield,
   Target,
+  Youtube,
+  Linkedin,
+  Instagram,
+  Github,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -19,22 +23,22 @@ const services = [
   {
     icon: Search,
     title: 'OSINT',
-    body: 'Open-source intelligence gathering and analysis.',
+    body: 'Advanced open-source intelligence and cross-platform data correlation for litigation support.',
   },
   {
     icon: Fingerprint,
     title: 'FORENSICS',
-    body: 'Digital evidence analysis and chain-of-custody compliance.',
+    body: 'Cryptographically verified digital forensics and court-ready evidentiary reporting.',
   },
   {
     icon: Crosshair,
     title: 'RESEARCH',
-    body: 'Threat research, attack methodology, and vulnerability analysis.',
+    body: 'Proactive corporate threat hunting and syndicate intelligence mapping.',
   },
   {
     icon: Shield,
     title: 'CONSULTING',
-    body: 'Security assessments, opsec consulting, and risk mitigation.',
+    body: 'Strategic operational security (OPSEC) architecture and institutional risk advisory.',
   },
 ]
 
@@ -42,22 +46,22 @@ const principles = [
   {
     icon: Shield,
     title: 'OPSEC DRIVEN',
-    body: 'Operations security is our foundation.',
+    body: 'Operational security protocols dictate every engagement, protecting both tradecraft and client identity.',
   },
   {
     icon: Scale,
     title: 'LEGAL & ETHICAL',
-    body: 'All investigations are legal and ethical.',
+    body: 'Strictly compliant with NDPA and global data regulations to guarantee absolute courtroom admissibility.',
   },
   {
     icon: Lock,
     title: 'DISCREET & SECURE',
-    body: 'Client confidentiality is non-negotiable.',
+    body: 'Zero-knowledge data management infrastructures ensure client confidentiality is structurally non-negotiable.',
   },
   {
     icon: Target,
     title: 'RESULTS FOCUSED',
-    body: 'Intelligence that drives decisions.',
+    body: 'High-fidelity, actionable intelligence optimized directly for executive leadership and legal counsel decision-making.',
   },
 ]
 
@@ -69,10 +73,34 @@ const navItems = [
   { label: 'CONTACT', href: '#contact' },
 ]
 
+// 🟢 Custom SVG Components for platforms missing from default lucide-react sets
+const TikTokIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+  </svg>
+)
+
+const XIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M4 4l11.733 16h4.267l-11.733 -16z" />
+    <path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" />
+  </svg>
+)
+
+const socialMedia = [
+  { name: 'TikTok', icon: TikTokIcon, href: 'https://www.tiktok.com/@shadownodeib?is_from_webapp=1&sender_device=pc' },
+  { name: 'YouTube', icon: Youtube, href: 'https://youtube.com/@shadownodeintelligencebureau?si=SoolMlCN1R4Bn4QD' },
+  { name: 'LinkedIn', icon: Linkedin, href: 'https://www.youtube.com/@ShadowNodeIntelligenceBureau' },
+  { name: 'X', icon: XIcon, href: '#' },
+  { name: 'Instagram', icon: Instagram, href: '#' },
+  { name: 'GitHub', icon: Github, href: '#' },
+]
+
 export default function Home() {
   return (
     <PageTransition>
       <main className="min-h-screen overflow-hidden bg-background text-foreground">
+        {/* Background Decorative Grids & Glows */}
         <div className="fixed inset-0 pointer-events-none">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_30%,rgba(38,185,99,0.16),transparent_26%),radial-gradient(circle_at_28%_18%,rgba(38,185,99,0.1),transparent_22%),linear-gradient(180deg,rgba(4,7,8,0.2),#050808_76%)]" />
           <div className="absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(38,185,99,0.22)_1px,transparent_1px),linear-gradient(90deg,rgba(38,185,99,0.22)_1px,transparent_1px)] [background-size:68px_68px]" />
@@ -82,6 +110,7 @@ export default function Home() {
           <div className="absolute right-16 top-44 h-[360px] w-[360px] rounded-full border border-primary/10" />
         </div>
 
+        {/* Global Navigation Bar */}
         <nav className="sticky top-0 z-30 border-b border-primary/10 bg-background/82 backdrop-blur-xl">
           <div className="mx-auto flex h-24 max-w-[1480px] items-center justify-between px-5 sm:px-8 lg:px-16">
             <Link href="/" className="flex min-w-0 items-center gap-4" aria-label="ShadowNode home">
@@ -114,14 +143,15 @@ export default function Home() {
             <Link href="/request" className="hidden sm:block">
               <Button
                 variant="outline"
-                className="h-12 rounded-md border-primary/60 bg-transparent px-8 font-mono text-sm tracking-[0.06em] text-white hover:bg-primary/10 hover:text-primary"
+                className="h-12 rounded-md border-primary/60 bg-transparent px-6 font-mono text-sm tracking-[0.06em] text-white hover:bg-primary/10 hover:text-primary"
               >
-                SUBMIT REQUEST
+                INITIALIZE SECURE PORTAL
               </Button>
             </Link>
           </div>
         </nav>
 
+        {/* Hero Segment */}
         <section className="relative z-10 mx-auto max-w-[1480px] px-5 pb-10 pt-20 sm:px-8 lg:px-16 lg:pt-24">
           <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
             <motion.div
@@ -143,14 +173,14 @@ export default function Home() {
               </h1>
 
               <p className="mt-8 max-w-2xl text-lg leading-8 text-white/72">
-                Professional intelligence bureau specializing in digital investigations, open-source
-                intelligence, and security research.
+                 Institutional-grade digital investigations, threat intelligence, and court-admissible forensics 
+                 designed to mitigate enterprise risk and secure legal outcomes.
               </p>
 
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link href="/request">
                   <Button className="h-14 w-full rounded-md border border-primary/70 bg-primary/10 px-9 font-mono text-base tracking-[0.06em] text-primary shadow-[0_0_28px_rgba(39,213,110,0.08)] hover:bg-primary hover:text-background sm:w-auto">
-                    SUBMIT REQUEST
+                    INITIALIZE SECURE PORTAL
                   </Button>
                 </Link>
                 <Link
@@ -162,6 +192,7 @@ export default function Home() {
               </div>
             </motion.div>
 
+            {/* Terminal Console Component Layout */}
             <motion.div
               initial={{ opacity: 0, x: 28 }}
               animate={{ opacity: 1, x: 0 }}
@@ -216,7 +247,8 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="services" className="relative z-10 mx-auto max-w-[1480px] px-5 py-10 sm:px-8 lg:px-16">
+        {/* Services Grid Segment */}
+        <section id="services" className="relative z-10 mx-auto max-w-[1480px] px-5 py-16 sm:px-8 lg:px-16">
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
             {services.map((service, index) => {
               const Icon = service.icon
@@ -228,13 +260,13 @@ export default function Home() {
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.06, duration: 0.55 }}
                   viewport={{ once: true, amount: 0.2 }}
-                  className="group relative min-h-56 overflow-hidden rounded-md border border-primary/25 bg-card/72 p-8 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70 hover:bg-card"
+                  className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-8 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70 hover:bg-card"
                 >
                   <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
                   <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
                   <Icon className="mb-7 h-14 w-14 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
                   <h2 className="font-mono text-2xl font-bold tracking-[0.04em] text-white">{service.title}</h2>
-                  <p className="mt-4 max-w-[18rem] leading-7 text-white/58">{service.body}</p>
+                  <p className="mt-4 leading-7 text-white/58">{service.body}</p>
                   <Link
                     href="/request"
                     className="mt-9 inline-flex items-center gap-3 font-mono text-sm tracking-[0.08em] text-primary"
@@ -247,31 +279,38 @@ export default function Home() {
           </div>
         </section>
 
-        <section
-          id="about"
-          className="relative z-10 mt-6 border-y border-primary/10 bg-[#070b0c]/70"
-        >
-          <div className="mx-auto grid max-w-[1480px] gap-8 px-5 py-8 sm:px-8 md:grid-cols-2 lg:grid-cols-4 lg:px-16">
-            {principles.map((principle, index) => {
-              const Icon = principle.icon
+        {/* About & Operational Principles Segment */}
+        <section id="about" className="relative z-10 border-t border-primary/10 bg-[#070b0c]/70 pt-20 pb-12">
+          <div className="mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16 mb-12">
+            <p className="font-mono text-sm tracking-[0.12em] text-primary">OPERATIONAL POSTURE</p>
+            <h2 className="mt-4 font-mono text-3xl font-bold uppercase text-white sm:text-4xl">
+              Core Directives & Compliance
+            </h2>
+          </div>
+          
+          <div className="border-b border-primary/10 pb-12">
+            <div className="mx-auto grid max-w-[1480px] gap-8 px-5 sm:px-8 md:grid-cols-2 lg:grid-cols-4 lg:px-16">
+              {principles.map((principle) => {
+                const Icon = principle.icon
 
-              return (
-                <div key={principle.title} className="flex gap-5 lg:border-r lg:border-primary/20 lg:last:border-r-0">
-                  <Icon className="mt-1 h-10 w-10 shrink-0 text-primary" strokeWidth={1.35} />
-                  <div>
-                    <h3 className="font-mono text-sm tracking-[0.08em] text-white">{principle.title}</h3>
-                    <p className="mt-2 max-w-52 text-sm leading-6 text-white/54">{principle.body}</p>
+                return (
+                  <div key={principle.title} className="flex gap-5 lg:border-r lg:border-primary/20 lg:last:border-r-0">
+                    <Icon className="mt-1 h-10 w-10 shrink-0 text-primary" strokeWidth={1.35} />
+                    <div>
+                      <h3 className="font-mono text-sm tracking-[0.08em] text-white">{principle.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-white/54">{principle.body}</p>
+                    </div>
                   </div>
-                  {index < principles.length - 1 && <span className="hidden" />}
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </section>
 
+        {/* Investigative Methodology Segment */}
         <section
           id="methodology"
-          className="relative z-10 mx-auto grid max-w-[1480px] gap-8 px-5 py-20 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-16"
+          className="relative z-10 mx-auto grid max-w-[1480px] gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-16"
         >
           <div>
             <p className="font-mono text-sm tracking-[0.12em] text-primary">METHODOLOGY</p>
@@ -285,36 +324,63 @@ export default function Home() {
                 <p className="font-mono text-primary">0{index + 1}</p>
                 <h3 className="mt-5 font-mono text-xl text-white">{step}</h3>
                 <p className="mt-3 text-sm leading-6 text-white/56">
-                  {index === 0 && 'Define objectives, constraints, jurisdiction, and reporting standards.'}
-                  {index === 1 && 'Gather, preserve, and validate evidence through documented workflows.'}
-                  {index === 2 && 'Deliver decision-ready findings with clear confidence levels.'}
+                  {index === 0 && 'Define tactical objectives, asset parameters, cross-border jurisdictions, and evidentiary standards.'}
+                  {index === 1 && 'Gather, preserve, and cryptographically validate intelligence through chain-of-custody workflows.'}
+                  {index === 2 && 'Compile institutional-grade, peer-reviewed findings optimized for executive boards and courtroom litigation.'}
                 </p>
               </div>
             ))}
           </div>
         </section>
 
-        <section id="contact" className="relative z-10 mx-auto max-w-[1480px] px-5 pb-20 sm:px-8 lg:px-16">
-          <div className="rounded-md border border-primary/25 bg-primary/5 p-8 sm:flex sm:items-center sm:justify-between sm:p-10">
+        {/* Encrypted Intake Engagement / Contact Segment */}
+        <section id="contact" className="relative z-10 mx-auto max-w-[1480px] px-5 pt-12 pb-20 sm:px-8 lg:px-16">
+          <div className="rounded-md border border-primary/25 bg-primary/5 p-8 sm:flex sm:items-center sm:justify-between sm:p-10 shadow-[0_0_50px_rgba(39,213,110,0.02)]">
             <div>
-              <p className="font-mono text-sm tracking-[0.12em] text-primary">SECURE INTAKE OPEN</p>
+              <p className="font-mono text-sm tracking-[0.12em] text-primary">ENCRYPTED CASE INTAKE ACTIVE</p>
               <h2 className="mt-3 font-mono text-2xl font-bold uppercase text-white sm:text-3xl">
-                Ready to submit an intelligence request?
+                Establish a Secure Intake Engagement
               </h2>
             </div>
             <Link href="/request" className="mt-6 block sm:mt-0">
-              <Button className="h-14 w-full rounded-md bg-primary px-8 font-mono text-background hover:bg-primary/85 sm:w-auto">
-                SUBMIT REQUEST
+              <Button className="h-14 w-full rounded-md bg-primary px-8 font-mono text-background hover:bg-primary/85 sm:w-auto shadow-[0_0_20px_rgba(39,213,110,0.2)]">
+                INITIALIZE SECURE PORTAL
               </Button>
             </Link>
           </div>
         </section>
 
-        <footer className="relative z-10 border-t border-primary/10 px-5 py-8 text-center font-mono text-xs tracking-[0.08em] text-white/42 sm:px-8">
-          <p>© 2026 SHADOWNODE INTELLIGENCE BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
-          <p className="mt-2">
-            STATUS: <span className="text-primary">OPERATIONAL</span>
-          </p>
+        {/* Global Terminal Footer with Social Media Connect Grid */}
+        <footer className="relative z-10 border-t border-primary/10 bg-background/50 px-5 py-12 text-center font-mono text-xs tracking-[0.08em] text-white/42 sm:px-8 backdrop-blur-sm">
+          <div className="mx-auto max-w-[1480px] flex flex-col items-center gap-6">
+            <p>© 2026 SHADOWNODE INTELLIGENCE BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
+            
+            <p className="text-xs">
+              STATUS: <span className="text-primary animate-pulse font-bold">OPERATIONAL</span>
+            </p>
+
+            {/* 🚀 Social Media Platform Grid Placeholder Layout */}
+            <div className="mt-4 flex flex-wrap justify-center gap-6 border-t border-primary/5 pt-6 w-full max-w-xl">
+              {socialMedia.map((platform) => {
+                const Icon = platform.icon
+                return (
+                  <Link
+                    key={platform.name}
+                    href={platform.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center gap-2 rounded border border-primary/10 bg-primary/5 px-3 py-1.5 transition-all hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
+                    aria-label={`ShadowNode on ${platform.name}`}
+                  >
+                    <Icon className="h-4 w-4 text-white/60 transition-colors group-hover:text-primary" />
+                    <span className="text-[10px] tracking-[0.12em] text-white/40 group-hover:text-primary">
+                      {platform.name.toUpperCase()}
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
         </footer>
       </main>
     </PageTransition>
