@@ -7,12 +7,23 @@ type Particle = {
   vx: number
   vy: number
   size: number
-  hue: number
   phase: number
+  anchorX: number
+  anchorY: number
+  orbit: number
 }
 
-const PARTICLE_COUNT = 160
-const MAX_LINK_DISTANCE = 165
+const PARTICLE_COUNT = 145
+const MAX_LINK_DISTANCE = 150
+const CLUSTER_CENTERS = [
+  [0.18, 0.2],
+  [0.24, 0.58],
+  [0.42, 0.16],
+  [0.5, 0.72],
+  [0.7, 0.42],
+  [0.84, 0.22],
+  [0.82, 0.68],
+] as const
 
 export function ThreatNodeNetwork() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -38,28 +49,38 @@ export function ThreatNodeNetwork() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
     if (particlesRef.current.length === 0) {
-      particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-        createParticle(width, height)
+      particlesRef.current = Array.from({ length: PARTICLE_COUNT }, (_, index) =>
+        createParticle(width, height, index)
       )
     } else {
-      // Reposition on resize
-      const w = width, h = height
-      particlesRef.current.forEach(p => {
-        p.x = Math.random() * w
-        p.y = Math.random() * h
+      particlesRef.current.forEach((p, index) => {
+        const center = CLUSTER_CENTERS[index % CLUSTER_CENTERS.length]
+        p.anchorX = center[0] * width + (Math.random() - 0.5) * width * 0.18
+        p.anchorY = center[1] * height + (Math.random() - 0.5) * height * 0.24
+        p.x = Math.max(0, Math.min(width, p.anchorX))
+        p.y = Math.max(0, Math.min(height, p.anchorY))
       })
     }
   }, [])
 
-  function createParticle(width: number, height: number): Particle {
+  function createParticle(width: number, height: number, index: number): Particle {
+    const center = CLUSTER_CENTERS[index % CLUSTER_CENTERS.length]
+    const spreadX = width * (0.1 + Math.random() * 0.1)
+    const spreadY = height * (0.12 + Math.random() * 0.12)
+    const anchorX = center[0] * width + (Math.random() - 0.5) * spreadX
+    const anchorY = center[1] * height + (Math.random() - 0.5) * spreadY
+    const stray = Math.random() < 0.2
+
     return {
-      x: Math.random() * width,
-      y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 2.2,
-      vy: (Math.random() - 0.5) * 2.2,
-      size: Math.random() * 2.4 + 1.3,
-      hue: 90 + Math.random() * 45,
+      x: stray ? Math.random() * width : Math.max(0, Math.min(width, anchorX)),
+      y: stray ? Math.random() * height : Math.max(0, Math.min(height, anchorY)),
+      vx: (Math.random() - 0.5) * 0.55,
+      vy: (Math.random() - 0.5) * 0.55,
+      size: Math.random() < 0.72 ? Math.random() * 1.45 + 1.2 : Math.random() * 2.5 + 2.3,
       phase: Math.random() * Math.PI * 2,
+      anchorX: stray ? Math.random() * width : anchorX,
+      anchorY: stray ? Math.random() * height : anchorY,
+      orbit: 22 + Math.random() * 82,
     }
   }
 
@@ -73,57 +94,33 @@ export function ThreatNodeNetwork() {
     const height = canvas.clientHeight
     timeRef.current += 0.016
 
-    // Soft cinematic trails
-    ctx.fillStyle = 'rgba(5, 5, 5, 0.78)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.clearRect(0, 0, width, height)
+    ctx.fillStyle = 'rgba(0, 2, 1, 0.96)'
+    ctx.fillRect(0, 0, width, height)
 
     const particles = particlesRef.current
     const t = timeRef.current
 
-    // Update particles with constant energy
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i]
+      const targetX = p.anchorX + Math.sin(t * 0.16 + p.phase) * p.orbit
+      const targetY = p.anchorY + Math.cos(t * 0.13 + p.phase * 1.2) * p.orbit
 
-      // Strong flowing organic movement (never dies)
-      const waveX = Math.sin(t * 0.4 + p.phase) * 0.65
-      const waveY = Math.cos(t * 0.35 + p.phase * 1.3) * 0.55
-      
-      p.vx += waveX * 0.045
-      p.vy += waveY * 0.045
-
-      // Gentle random turbulence (keeps it alive when idle)
-      p.vx += (Math.random() - 0.5) * 0.12
-      p.vy += (Math.random() - 0.5) * 0.12
-
-      // Soft damping so it doesn't go too crazy
-      p.vx *= 0.935
-      p.vy *= 0.935
+      p.vx += (targetX - p.x) * 0.0009 + (Math.random() - 0.5) * 0.018
+      p.vy += (targetY - p.y) * 0.0009 + (Math.random() - 0.5) * 0.018
+      p.vx *= 0.975
+      p.vy *= 0.975
 
       p.x += p.vx
       p.y += p.vy
 
-      // Natural wrapping
-      if (p.x < 0) p.x = width
-      if (p.x > width) p.x = 0
-      if (p.y < 0) p.y = height
-      if (p.y > height) p.y = 0
-
-      // Draw node with breathing glow
-      const pulse = Math.sin(t * 3 + p.phase) * 0.5 + 0.5
-      const drawSize = p.size + pulse * 1.6
-
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(p.x, p.y, drawSize, 0, Math.PI * 2)
-      ctx.fillStyle = `hsla(${p.hue}, 90%, 78%, 0.92)`
-      ctx.shadowBlur = 22 + pulse * 12
-      ctx.shadowColor = `hsla(${p.hue + 15}, 100%, 82%, 0.95)`
-      ctx.fill()
-      ctx.restore()
+      if (p.x < -12) p.x = width + 12
+      if (p.x > width + 12) p.x = -12
+      if (p.y < -12) p.y = height + 12
+      if (p.y > height + 12) p.y = -12
     }
 
-    // Dynamic connections
-    ctx.lineWidth = 1.05
+    ctx.lineWidth = 0.8
     for (let i = 0; i < particles.length; i++) {
       const a = particles[i]
       for (let j = i + 1; j < particles.length; j++) {
@@ -133,14 +130,29 @@ export function ThreatNodeNetwork() {
         const dist = Math.hypot(dx, dy)
 
         if (dist < MAX_LINK_DISTANCE) {
-          const alpha = (1 - dist / MAX_LINK_DISTANCE) * (0.26 + Math.sin(t + i) * 0.08)
-          ctx.strokeStyle = `hsla(105, 82%, 72%, ${alpha})`
+          const alpha = (1 - dist / MAX_LINK_DISTANCE) * (0.18 + Math.sin(t * 0.7 + i) * 0.035)
+          ctx.strokeStyle = `rgba(110, 238, 118, ${Math.max(0.025, alpha)})`
           ctx.beginPath()
           ctx.moveTo(a.x, a.y)
           ctx.lineTo(b.x, b.y)
           ctx.stroke()
         }
       }
+    }
+
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i]
+      const pulse = Math.sin(t * 1.9 + p.phase) * 0.5 + 0.5
+      const drawSize = p.size + pulse * 0.75
+
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, drawSize, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(144, 246, 141, ${0.82 + pulse * 0.16})`
+      ctx.shadowBlur = 14 + pulse * 18
+      ctx.shadowColor = 'rgba(114, 255, 130, 0.88)'
+      ctx.fill()
+      ctx.restore()
     }
 
     frameRef.current = requestAnimationFrame(animate)
@@ -161,8 +173,8 @@ export function ThreatNodeNetwork() {
   }, [handleResize, animate])
 
   return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#050505]">
-      <canvas ref={canvasRef} className="block h-full w-full" />
+    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      <canvas ref={canvasRef} className="block h-full w-full opacity-90" />
     </div>
   )
 }

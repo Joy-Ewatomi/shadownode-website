@@ -123,7 +123,7 @@ export default function VaultPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-slate-900 to-background">
+    <div className="min-h-screen bg-transparent text-foreground">
       {/* Navigation */}
       <nav className="border-b border-border/30 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">

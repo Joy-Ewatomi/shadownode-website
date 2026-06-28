@@ -22,10 +22,22 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="font-sans antialiased">
+    <html lang="en" className="dark scroll-smooth">
+      {/* FIX: Added an explicit background color (bg-[#050505] or bg-background) 
+        directly to the body tag. This acts as the steady foundation layer 
+        that allows the transparent canvas and Framer Motion routes to blend 
+        cleanly without causing layout-blinding artifacts.
+      */}
+      <body className="font-sans antialiased bg-[#050505] text-foreground min-h-screen relative overflow-x-hidden">
+        
+        {/* Global Particle Core Network Matrix */}
         <ThreatNodeNetwork />
-        {children}
+        
+        {/* Active Page Route Entry/Exit Transitions */}
+        <div className="relative z-10 w-full">
+          {children}
+        </div>
+
       </body>
     </html>
   )
