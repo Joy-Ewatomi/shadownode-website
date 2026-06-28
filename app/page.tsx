@@ -16,6 +16,7 @@ import {
   Linkedin,
   Instagram,
   Github,
+  ArrowUpRight,
   Terminal,
   EyeOff
 } from 'lucide-react'
@@ -23,13 +24,36 @@ import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { useState, type FormEvent } from 'react'
 
+const principles = [
+  {
+    icon: Shield,
+    title: 'OPSEC DRIVEN',
+    body: 'Operational security protocols dictate every engagement, protecting both tradecraft and client identity.',
+  },
+  {
+    icon: Scale,
+    title: 'LEGAL & ETHICAL',
+    body: 'Strictly compliant with NDPA and global data regulations to guarantee absolute courtroom admissibility.',
+  },
+  {
+    icon: EyeOff,
+    title: 'DISCREET & SECURE',
+    body: 'Zero-knowledge data management infrastructures ensure client confidentiality is structurally non-negotiable.',
+  },
+  {
+    icon: Target,
+    title: 'RESULTS FOCUSED',
+    body: 'High-fidelity, actionable intelligence optimized directly for executive leadership and legal counsel decision-making.',
+  },
+]
+
 const navItems = [
   { label: 'SERVICES', href: '#services' },
   { label: 'ABOUT', href: '#about' },
   { label: 'METHODOLOGY', href: '#methodology' },
   { label: 'REQUEST', href: '/request', active: true },
   { label: 'CONTACT', href: '#contact' },
-]
+ ]
 
 const TikTokIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -43,6 +67,15 @@ const XIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" />
   </svg>
 )
+
+const socialMedia = [
+  { name: 'TikTok', icon: TikTokIcon, href: 'https://www.tiktok.com/@shadownodeib' },
+  { name: 'YouTube', icon: Youtube, href: 'https://youtube.com/@shadownodeintelligencebureau' },
+  { name: 'LinkedIn', icon: Linkedin, href: 'https://linkedin.com' },
+  { name: 'X', icon: XIcon, href: 'https://x.com/Joy_Elvera' },
+  { name: 'Instagram', icon: Instagram, href: 'https://www.instagram.com/shadownodeintelligence' },
+  { name: 'GitHub', icon: Github, href: 'https://github.com/Joy-Ewatomi' },
+]
 
 export default function Home() {
   const [activeTrack, setActiveTrack] = useState<string | null>(null)
@@ -59,16 +92,14 @@ export default function Home() {
 
   return (
     <PageTransition>
-      <main className="min-h-screen overflow-hidden bg-transparent text-foreground relative">
-        
-        {/* BASE BACKGROUND DECORATIONS */}
-        <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),#000_92%)]" />
+      <main className="relative min-h-screen overflow-hidden bg-transparent text-foreground">
+        {/* Background tint sits above the global canvas without hiding the node network. */}
+        <div className="fixed inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.2)_92%)]" />
           <div className="absolute inset-x-0 top-24 h-px bg-primary/10" />
         </div>
 
-        {/* STICKY HEADER NAVIGATION (Layer 3 - z-30) */}
-        {/* Keeps links, buttons, and dropdowns safely interactive above the moving canvas nodes */}
+        {/* Global Navigation Bar */}
         <nav className="sticky top-0 z-30 border-b border-primary/10 bg-background/82 backdrop-blur-xl">
           <div className="mx-auto flex h-24 max-w-[1480px] items-center justify-between px-5 sm:px-8 lg:px-16">
             <Link href="/" className="flex min-w-0 items-center gap-4" aria-label="ShadowNode home">
@@ -109,9 +140,8 @@ export default function Home() {
           </div>
         </nav>
 
-        {/* HERO INTERFACE COMPONENT PANEL (Layer 3 - z-20) */}
-        {/* Pushed to z-20 so it layers perfectly on top of the moving matrix particles */}
-        <section className="relative z-20 mx-auto max-w-[1480px] px-5 pb-10 pt-20 sm:px-8 lg:px-16 lg:pt-24">
+        {/* Hero Segment */}
+        <section className="relative z-10 mx-auto max-w-[1480px] px-5 pb-10 pt-20 sm:px-8 lg:px-16 lg:pt-24">
           <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
             <motion.div
               initial={{ opacity: 0, y: 22 }}
@@ -151,7 +181,7 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Terminal Console Layout Window */}
+            {/* Terminal Console Component Layout */}
             <motion.div
               initial={{ opacity: 0, x: 28 }}
               animate={{ opacity: 1, x: 0 }}
@@ -205,8 +235,8 @@ export default function Home() {
           </div>
         </section>
 
-        {/* SERVICES CONTENT SECTION (Layer 3 - z-20) */}
-        <section id="services" className="relative z-20 mx-auto max-w-[1480px] px-5 py-16 sm:px-8 lg:px-16 space-y-10">
+        {/* Dynamic & Complete Service Cards Grid Section */}
+        <section id="services" className="relative z-10 mx-auto max-w-[1480px] px-5 py-16 sm:px-8 lg:px-16 space-y-10">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             
             {/* OSINT CARD */}
@@ -256,7 +286,7 @@ export default function Home() {
               </button>
             </motion.article>
 
-            {/* ETHICAL HACKING CARD */}
+            {/* ETHICAL HACKING & PENETRATION TESTING CARD */}
             <motion.article
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -324,9 +354,10 @@ export default function Home() {
                 {activeTrack === 'consulting' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
               </button>
             </motion.article>
+
           </div>
 
-          {/* Drawer Modules Expansion Code */}
+          {/* Expandable Module Sub-Drawer Content Panel */}
           <AnimatePresence mode="wait">
             {activeTrack && (
               <motion.div
@@ -362,6 +393,7 @@ export default function Home() {
                         <ul className="space-y-1">
                           <li>• Platform Cross-Correlation Schemes</li>
                           <li>• Documented Background Profile Verification</li>
+                          <li>• Deep-Web Domain Infrastructure Audits</li>
                           <li>• Litigation Evidence Package Accumulation</li>
                         </ul>
                       </div>
@@ -440,7 +472,7 @@ export default function Home() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 text-white/70">
                       <div>
                         <span className="text-primary font-bold block mb-1.5">// PENETRATION TESTING</span>
-                        <ul className="space-y-1">
+                        <ul className="space-y-1 text-white/50">
                           <li>• Network Infrastructure Testing</li>
                           <li>• Application Security Assessments</li>
                           <li>• Social Engineering Audits</li>
@@ -449,7 +481,7 @@ export default function Home() {
                       </div>
                       <div>
                         <span className="text-primary font-bold block mb-1.5">// VULNERABILITY ASSESSMENT</span>
-                        <ul className="space-y-1">
+                        <ul className="space-y-1 text-white/50">
                           <li>• System Exploitation Profiling</li>
                           <li>• Flaw Categorization Matrix</li>
                           <li>• Exploitability Risk Verification</li>
@@ -458,7 +490,7 @@ export default function Home() {
                       </div>
                       <div>
                         <span className="text-primary font-bold block mb-1.5">// RED TEAM OPERATIONS</span>
-                        <ul className="space-y-1">
+                        <ul className="space-y-1 text-white/50">
                           <li>• Simulated Attack Exercises</li>
                           <li>• Multi-Vector Attack Campaigns</li>
                           <li>• Long-Duration Footprint Probing</li>
@@ -467,13 +499,66 @@ export default function Home() {
                       </div>
                       <div>
                         <span className="text-primary font-bold block mb-1.5">// INFRASTRUCTURE REVIEW</span>
-                        <ul className="space-y-1">
+                        <ul className="space-y-1 text-white/50">
                           <li>• Architecture Security Diagnostics</li>
                           <li>• Segmentation Architecture Verification</li>
                           <li>• Complete Access Control Auditing</li>
                           <li>• Threat Vector Validation Models</li>
                         </ul>
                       </div>
+                      <div>
+                        <span className="text-primary font-bold block mb-1.5">// SECURE CODE REVIEW</span>
+                        <ul className="space-y-1 text-white/50">
+                          <li>• Source Code Analysis Schematics</li>
+                          <li>• Vulnerability Detection Audits</li>
+                          <li>• OWASP Compliance Checklists</li>
+                          <li>• Secure Pipeline Integration Guides</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <span className="text-primary font-bold block mb-1.5">// AWARENESS TRAINING</span>
+                        <ul className="space-y-1 text-white/50">
+                          <li>• Controlled Phishing Campaigns</li>
+                          <li>• Dynamic Employee Attack Readiness</li>
+                          <li>• Password Security Operations</li>
+                          <li>• Social Engineering Countermeasures</li>
+                        </ul>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <span className="text-primary font-bold block mb-1.5">// INCIDENT RESPONSE SIMULATION</span>
+                        <ul className="space-y-1 text-white/50">
+                          <li>• Data Breach Scenario Tabletop Deployments</li>
+                          <li>• Response Workflow Validation Runs</li>
+                          <li>• Operational Team Readiness Assessment</li>
+                          <li>• Continuity Plan Strategic Validation</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center pt-4 border-t border-primary/10">
+                      <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl w-full">
+                        {notifySuccess === 'hacking' ? (
+                          <p className="text-primary font-bold">✓ Direct routing active. Your system will be flagged at operational deployment in April 2027.</p>
+                        ) : (
+                          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'hacking')} className="space-y-2">
+                            <label className="text-white/60 font-bold block text-[11px]">QUEUE LAUNCH VERIFICATION MONITORING:</label>
+                            <div className="flex gap-2">
+                              <Input 
+                                type="email" 
+                                required 
+                                value={notifyEmail} 
+                                onChange={(e) => setNotifyEmail(e.target.value)} 
+                                placeholder="Secure matrix alert routing link..." 
+                                className="bg-background border-primary/10 text-xs h-9 text-white" 
+                              />
+                              <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+                            </div>
+                          </form>
+                        )}
+                      </div>
+                      <Link href="/request" className="w-full sm:w-auto self-stretch sm:self-auto flex">
+                        <Button variant="outline" className="border-primary/50 text-primary bg-primary/5 text-xs font-bold tracking-wider uppercase rounded-sm h-full sm:h-12 px-6 w-full hover:bg-primary hover:text-background">REQUEST PRE-LAUNCH CONSULTATION</Button>
+                      </Link>
                     </div>
                   </>
                 )}
@@ -482,28 +567,28 @@ export default function Home() {
                   <>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
                       <div>
-                        <h4 className="text-primary font-bold text-base uppercase">Syndicate Intelligence & Proactive Threat Hunting</h4>
-                        <p className="text-white/40 mt-1">Deep threat actor profiling, underground node monitoring, and risk intelligence vectors.</p>
+                        <h4 className="text-primary font-bold text-base uppercase">Research & Threat Intelligence</h4>
+                        <p className="text-white/40 mt-1">Proactive threat tracking, organized group profiling, and strategic foresight reports.</p>
                       </div>
                       <Link href="/request">
-                        <Button className="bg-primary text-background font-bold tracking-wider uppercase rounded-sm h-10 px-5 text-xs hover:bg-primary/85">Initiate Research Request</Button>
+                        <Button className="bg-primary text-background font-bold tracking-wider uppercase rounded-sm h-10 px-5 text-xs hover:bg-primary/85">Request Consultation</Button>
                       </Link>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-white/70">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
                       <div>
-                        <span className="text-primary font-bold block mb-1.5">// CYBER THREAT HUNTING</span>
+                        <span className="text-primary font-bold block mb-1.5">// COMBAT ENVIRONMENTS</span>
                         <ul className="space-y-1">
-                          <li>• Darknet Network Intelligence Mapping</li>
-                          <li>• Leaked Credential & Database Tracking</li>
-                          <li>• Targeted Attack Surface Auditing</li>
+                          <li>• Corporate Threat Hunting Operations</li>
+                          <li>• Criminal Syndicate Map Layouts</li>
+                          <li>• Asset Theft/Fraud Group Identification</li>
                         </ul>
                       </div>
                       <div>
-                        <span className="text-primary font-bold block mb-1.5">// CORPORATE RISK MONITORING</span>
+                        <span className="text-primary font-bold block mb-1.5">// STRATEGIC COMPLIANCE</span>
                         <ul className="space-y-1">
-                          <li>• Corporate Espionage Vector Analysis</li>
-                          <li>• Bad-Actor & Brand Damage Discovery</li>
-                          <li>• Inside Threat Detection Paradigms</li>
+                          <li>• Sanction List Verification Records</li>
+                          <li>• Supply Chain Vulnerability Mapping</li>
+                          <li>• High-Value Competitor Threat Assessment</li>
                         </ul>
                       </div>
                     </div>
@@ -514,28 +599,28 @@ export default function Home() {
                   <>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
                       <div>
-                        <h4 className="text-primary font-bold text-base uppercase">Strategic Operational Security (OPSEC) Architecture</h4>
-                        <p className="text-white/40 mt-1">Institutional defense planning, risk management modeling, and physical/digital secure communications integration.</p>
+                        <h4 className="text-primary font-bold text-base uppercase">Operational Security & Strategic Advisory</h4>
+                        <p className="text-white/40 mt-1">C-level threat mitigation blueprints, personal digital footprint scaling, and evidentiary guidance.</p>
                       </div>
                       <Link href="/request">
-                        <Button className="bg-primary text-background font-bold tracking-wider uppercase rounded-sm h-10 px-5 text-xs hover:bg-primary/85">Request Advisory</Button>
+                        <Button className="bg-primary text-background font-bold tracking-wider uppercase rounded-sm h-10 px-5 text-xs hover:bg-primary/85">Request Consultation</Button>
                       </Link>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white/70">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
                       <div>
-                        <span className="text-primary font-bold block mb-1">// SECURE SYSTEMS</span>
+                        <span className="text-primary font-bold block mb-1.5">// DEFENSIVE OPSEC</span>
                         <ul className="space-y-1">
-                          <li>• Zero-Knowledge Workspace Design</li>
-                          <li>• Encrypted Network Implementations</li>
-                          <li>• Hardened Node Comms Protocols</li>
+                          <li>• Tailored Information Security Design</li>
+                          <li>• Active Threat Model Architectures</li>
+                          <li>• Executive Footprint Reduction Auditing</li>
                         </ul>
                       </div>
                       <div>
-                        <span className="text-primary font-bold block mb-1">// EXECUTIVE PROTECTION</span>
+                        <span className="text-primary font-bold block mb-1.5">// ENTERPRISE RISK</span>
                         <ul className="space-y-1">
-                          <li>• Digital Footprint Reduction</li>
-                          <li>• VIP Travel Profile Assessments</li>
-                          <li>• Threat Mitigation Modeling</li>
+                          <li>• Organization-wide Security Gap Analysis</li>
+                          <li>• Legal Evidence Admissibility Consultation</li>
+                          <li>• Operational Intelligence Capability Vetting</li>
                         </ul>
                       </div>
                     </div>
@@ -545,6 +630,144 @@ export default function Home() {
             )}
           </AnimatePresence>
         </section>
+
+        {/* Integrated Intelligence Packages Segment */}
+        <section className="relative z-10 mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16">
+          <div className="bg-[#05090a]/50 border border-primary/10 rounded-md p-6 sm:p-8 space-y-8">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-primary/10 pb-4 gap-4">
+              <div className="space-y-1">
+                <h2 className="font-mono text-xs font-bold tracking-[0.2em] text-primary uppercase">Integrated Intelligence Packages</h2>
+                <p className="font-mono text-[11px] text-white/40">Synthesized multi-vector bundles combining core fields for complex corporate and judicial operations.</p>
+              </div>
+              <Link href="/request" className="font-mono text-xs text-primary hover:underline flex items-center gap-1.5">
+                View All Package Options <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
+              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Fraud Investigation Complete</h4>
+                <p className="text-[11px] text-white/40 leading-5">Merges cross-platform open source mapping, storage diagnostic extractions, and network mapping to compile fully court-admissible action reports.</p>
+              </div>
+              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Corporate Due Diligence Complete</h4>
+                <p className="text-[11px] text-white/40 leading-5">Deploys deep-vector corporate asset hunting, structural vulnerability profiling, and background mapping on organization principals prior to M&A ventures.</p>
+              </div>
+              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Security Threat Assessment Complete</h4>
+                <p className="text-[11px] text-white/40 leading-5">Uncovers and catalogues total public enterprise footprint exposures, tracks active external actors, and deploys high-grade OPSEC defenses.</p>
+              </div>
+              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Litigation Support Complete</h4>
+                <p className="text-[11px] text-white/40 leading-5">Pairs advanced target intelligence gathering with verified cryptographic evidence parameters to prepare robust, expert-witness legal filings.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* About & Operational Principles Segment */}
+        <section id="about" className="relative z-10 border-t border-primary/10 bg-[#070b0c]/70 pt-20 pb-12">
+          <div className="mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16 mb-12">
+            <p className="font-mono text-sm tracking-[0.12em] text-primary">OPERATIONAL POSTURE</p>
+            <h2 className="mt-4 font-mono text-3xl font-bold uppercase text-white sm:text-4xl">
+              Core Directives & Compliance
+            </h2>
+          </div>
+          
+          <div className="border-b border-primary/10 pb-12">
+            <div className="mx-auto grid max-w-[1480px] gap-8 px-5 sm:px-8 md:grid-cols-2 lg:grid-cols-4 lg:px-16">
+              {principles.map((principle) => {
+                const Icon = principle.icon
+
+                return (
+                  <div key={principle.title} className="flex gap-5 lg:border-r lg:border-primary/20 lg:last:border-r-0">
+                    <Icon className="mt-1 h-10 w-10 shrink-0 text-primary" strokeWidth={1.35} />
+                    <div>
+                      <h3 className="font-mono text-sm tracking-[0.08em] text-white">{principle.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-white/54">{principle.body}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Investigative Methodology Segment */}
+        <section
+          id="methodology"
+          className="relative z-10 mx-auto grid max-w-[1480px] gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-16"
+        >
+          <div>
+            <p className="font-mono text-sm tracking-[0.12em] text-primary">METHODOLOGY</p>
+            <h2 className="mt-4 max-w-2xl font-mono text-3xl font-bold uppercase leading-tight text-white sm:text-5xl">
+              Quiet process. Verifiable intelligence.
+            </h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {['Scope', 'Collect', 'Report'].map((step, index) => (
+              <div key={step} className="rounded-md border border-primary/18 bg-card/62 p-6">
+                <p className="font-mono text-primary">0{index + 1}</p>
+                <h3 className="mt-5 font-mono text-xl text-white">{step}</h3>
+                <p className="mt-3 text-sm leading-6 text-white/56">
+                  {index === 0 && 'Define tactical objectives, asset parameters, cross-border jurisdictions, and security baseline metrics.'}
+                  {index === 1 && 'Gather intelligence, exploit network flaws with authorization boundaries, and log step-by-step verification proofs.'}
+                  {index === 2 && 'Compile institutional-grade, peer-reviewed findings optimized for executive boards and courtroom litigation.'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Encrypted Intake Engagement / Contact Segment */}
+        <section id="contact" className="relative z-10 mx-auto max-w-[1480px] px-5 pt-12 pb-20 sm:px-8 lg:px-16">
+          <div className="rounded-md border border-primary/25 bg-primary/5 p-8 sm:flex sm:items-center sm:justify-between sm:p-10 shadow-[0_0_50px_rgba(39,213,110,0.02)]">
+            <div>
+              <p className="font-mono text-sm tracking-[0.12em] text-primary">ENCRYPTED CASE INTAKE ACTIVE</p>
+              <h2 className="mt-3 font-mono text-2xl font-bold uppercase text-white sm:text-3xl">
+                Establish a Secure Intake Engagement
+              </h2>
+            </div>
+            <Link href="/request" className="mt-6 block sm:mt-0">
+              <Button className="h-14 w-full rounded-md bg-primary px-8 font-mono text-background hover:bg-primary/85 sm:w-auto shadow-[0_0_20px_rgba(39,213,110,0.2)]">
+                INITIALIZE SECURE PORTAL
+              </Button>
+            </Link>
+          </div>
+        </section>
+
+        {/* Global Terminal Footer with Social Media Connect Grid */}
+        <footer className="relative z-10 border-t border-primary/10 bg-background/50 px-5 py-12 text-center font-mono text-xs tracking-[0.08em] text-white/42 sm:px-8 backdrop-blur-sm">
+          <div className="mx-auto max-w-[1480px] flex flex-col items-center gap-6">
+            <p>© 2026 SHADOWNODE INTELLIGENCE BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
+            
+            <p className="text-xs">
+              STATUS: <span className="text-primary animate-pulse font-bold">OPERATIONAL</span>
+            </p>
+
+            {/* Social Media Platform Grid Placeholder Layout */}
+            <div className="mt-4 flex flex-wrap justify-center gap-6 border-t border-primary/5 pt-6 w-full max-w-xl">
+              {socialMedia.map((platform) => {
+                const Icon = platform.icon
+                return (
+                  <Link
+                    key={platform.name}
+                    href={platform.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center gap-2 rounded border border-primary/10 bg-primary/5 px-3 py-1.5 transition-all hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
+                    aria-label={`ShadowNode on ${platform.name}`}
+                  >
+                    <Icon className="h-4 w-4 text-white/60 transition-colors group-hover:text-primary" />
+                    <span className="text-[10px] tracking-[0.12em] text-white/40 group-hover:text-primary">
+                      {platform.name.toUpperCase()}
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </footer>
       </main>
     </PageTransition>
   )
