@@ -12,6 +12,7 @@ import {
   Search,
   Shield,
   Target,
+  Users,
   Youtube,
   Linkedin,
   Instagram,
@@ -79,6 +80,7 @@ const socialMedia = [
 
 export default function Home() {
   const [activeTrack, setActiveTrack] = useState<string | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [notifyEmail, setNotifyEmail] = useState('')
   const [notifySuccess, setNotifySuccess] = useState<string | null>(null)
 
@@ -92,7 +94,7 @@ export default function Home() {
 
   return (
     <PageTransition>
-      <main className="relative min-h-screen overflow-hidden bg-transparent text-foreground">
+      <main className="relative min-h-screen overflow-x-hidden bg-transparent text-foreground">
         {/* Background tint sits above the global canvas without hiding the node network. */}
         <div className="fixed inset-0 z-0 pointer-events-none">
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.2)_92%)]" />
@@ -100,7 +102,7 @@ export default function Home() {
         </div>
 
         {/* Global Navigation Bar */}
-        <nav className="sticky top-0 z-30 border-b border-primary/10 bg-background/82 backdrop-blur-xl">
+        <nav className="relative sticky top-0 z-30 border-b border-primary/10 bg-background/82 backdrop-blur-xl">
           <div className="mx-auto flex h-24 max-w-[1480px] items-center justify-between px-5 sm:px-8 lg:px-16">
             <Link href="/" className="flex min-w-0 items-center gap-4" aria-label="ShadowNode home">
               <div className="relative grid h-14 w-14 shrink-0 place-items-center">
@@ -129,15 +131,58 @@ export default function Home() {
               ))}
             </div>
 
-            <Link href="/request" className="hidden sm:block">
-              <Button
-                variant="outline"
-                className="h-12 rounded-md border-primary/60 bg-transparent px-6 font-mono text-sm tracking-[0.06em] text-white hover:bg-primary/10 hover:text-primary"
+            <div className="flex items-center gap-3">
+              <Link href="/request" className="hidden sm:inline-flex">
+                <Button
+                  variant="outline"
+                  className="h-12 rounded-md border-primary/60 bg-transparent px-6 font-mono text-sm tracking-[0.06em] text-white hover:bg-primary/10 hover:text-primary"
+                >
+                  INITIALIZE SECURE PORTAL
+                </Button>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen((prev) => !prev)}
+                aria-expanded={mobileNavOpen}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white transition hover:bg-white/10 lg:hidden"
               >
-                INITIALIZE SECURE PORTAL
-              </Button>
-            </Link>
+                <span className="sr-only">{mobileNavOpen ? 'Close menu' : 'Open menu'}</span>
+                {mobileNavOpen ? (
+                  <XIcon className="h-5 w-5" />
+                ) : (
+                  <span className="flex h-5 w-5 flex-col justify-between">
+                    <span className="block h-[2px] w-full rounded-full bg-current" />
+                    <span className="block h-[2px] w-full rounded-full bg-current" />
+                    <span className="block h-[2px] w-full rounded-full bg-current" />
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
+
+          {mobileNavOpen && (
+            <div className="absolute inset-x-0 top-full z-20 border-t border-primary/10 bg-background/95 px-5 py-4 backdrop-blur-xl shadow-2xl lg:hidden">
+              <div className="mx-auto flex max-w-[1480px] flex-col gap-3 sm:px-8">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setMobileNavOpen(false)}
+                    className="rounded-md border border-primary/10 bg-[#040809]/80 px-4 py-3 text-sm font-mono uppercase tracking-[0.18em] text-white transition hover:border-primary/50 hover:text-primary"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+                <Link
+                  href="/request"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="inline-flex h-12 items-center justify-center rounded-md border border-primary/60 bg-primary/10 px-5 text-sm font-mono uppercase tracking-[0.06em] text-primary transition hover:bg-primary/20"
+                >
+                  INITIALIZE SECURE PORTAL
+                </Link>
+              </div>
+            </div>
+          )}
         </nav>
 
         {/* Hero Segment */}
@@ -237,131 +282,194 @@ export default function Home() {
 
         {/* Dynamic & Complete Service Cards Grid Section */}
         <section id="services" className="relative z-10 mx-auto max-w-[1480px] px-5 py-16 sm:px-8 lg:px-16 space-y-10">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          
             
-            {/* OSINT CARD */}
-            <motion.article
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
-            >
-              <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
-              <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
-              <Search className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
-              <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">OSINT</h2>
-              <p className="mt-4 leading-6 text-white/58 text-xs">
-                Advanced open-source intelligence and cross-platform data correlation for litigation support, background verification, and fraud investigation.
-              </p>
-              <button
-                onClick={() => setActiveTrack(activeTrack === 'osint' ? null : 'osint')}
-                className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left"
-              >
-                {activeTrack === 'osint' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
-              </button>
-            </motion.article>
+      
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 px-4 md:px-0 w-100%">
 
-            {/* FORENSICS CARD */}
-            <motion.article
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
-            >
-              <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
-              <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
-              <div className="flex items-center justify-between mb-7">
-                <Fingerprint className="h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
-                <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">Jan 2027</span>
-              </div>
-              <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">FORENSICS</h2>
-              <p className="mt-4 leading-6 text-white/58 text-xs">
-                Cryptographically verified digital forensics and court-ready evidentiary reporting. Available January 2027.
-              </p>
-              <button
-                onClick={() => setActiveTrack(activeTrack === 'forensics' ? null : 'forensics')}
-                className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left"
-              >
-                {activeTrack === 'forensics' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
-              </button>
-            </motion.article>
+  {/* 1. OSINT */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <Search className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">OSINT</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Advanced open-source intelligence, digital footprint mapping, and threat intelligence gathering.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'osint' ? null : 'osint')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'osint' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
 
-            {/* ETHICAL HACKING & PENETRATION TESTING CARD */}
-            <motion.article
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
-            >
-              <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
-              <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
-              <div className="flex items-center justify-between mb-7">
-                <Terminal className="h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
-                <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">Apr 2027</span>
-              </div>
-              <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">PENTESTING</h2>
-              <p className="mt-4 leading-6 text-white/58 text-xs">
-                Authorized security testing, red team simulation operations, and infrastructure validation tracking. Available April 2027.
-              </p>
-              <button
-                onClick={() => setActiveTrack(activeTrack === 'hacking' ? null : 'hacking')}
-                className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left"
-              >
-                {activeTrack === 'hacking' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
-              </button>
-            </motion.article>
+  {/* 2. DIGITAL FORENSICS */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <div className="flex items-center justify-between mb-7">
+      <Fingerprint className="h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+      <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">Jan 2027</span>
+    </div>
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">DIGITAL FORENSICS</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Device forensics, data recovery, crypto tracing, and court-admissible evidence handling.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'forensics' ? null : 'forensics')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'forensics' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
 
-            {/* RESEARCH CARD */}
-            <motion.article
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
-            >
-              <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
-              <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
-              <div className="flex items-center justify-between mb-7">
-              <Crosshair className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
-              <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">coming soon</span>
-              </div>
-              <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">RESEARCH</h2>
-              <p className="mt-4 leading-6 text-white/58 text-xs">
-                Proactive corporate threat hunting and syndicate intelligence mapping for strategic foresight and security planning.
-              </p>
-              <button
-                onClick={() => setActiveTrack(activeTrack === 'research' ? null : 'research')}
-                className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left"
-              >
-                {activeTrack === 'research' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
-              </button>
-            </motion.article>
+  {/* 3. ETHICAL HACKING */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <div className="flex items-center justify-between mb-7">
+      <Terminal className="h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+      <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">Apr 2027</span>
+    </div>
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">ETHICAL HACKING</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Authorized penetration testing, red team operations, and vulnerability assessments.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'hacking' ? null : 'hacking')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'hacking' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
 
-            {/* CONSULTING CARD */}
-            <motion.article
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
-            >
-              <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
-              <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
-            <div className="flex items-center justify-between mb-7">
-              <Shield className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
-               <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">coming soon</span>
-              </div>
-              <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">CONSULTING</h2>
-              <p className="mt-4 leading-6 text-white/58 text-xs">
-                Strategic operational security (OPSEC) architecture and institutional risk advisory for corporate and executive protection.
-              </p>
-              <button
-                onClick={() => setActiveTrack(activeTrack === 'consulting' ? null : 'consulting')}
-                className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left"
-              >
-                {activeTrack === 'consulting' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
-              </button>
-            </motion.article>
+  {/* 4. GOVERNMENT CONSULTING */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <Users className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">GOVERNMENT CONSULTING</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Intelligence training, lawful surveillance support, and advisory for law enforcement agencies.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'gov' ? null : 'gov')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'gov' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
 
-          </div>
+  {/* 5. CORRECTIONAL INTELLIGENCE */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <Shield className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">CORRECTIONAL INTELLIGENCE</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Inmate monitoring, risk assessment, and intelligence support for correctional facilities.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'correctional' ? null : 'correctional')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'correctional' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
+
+  {/* 6. LEGAL & COMPLIANCE */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <Scale className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">LEGAL ADVISORY</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Litigation support, AML investigations, compliance consulting, and court-ready evidence preparation.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'legal' ? null : 'legal')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'legal' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
+
+  {/* 7. RESEARCH & THREAT HUNTING */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <Crosshair className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">RESEARCH</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Proactive threat hunting, syndicate mapping, and deep strategic intelligence research.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'research' ? null : 'research')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'research' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
+
+  {/* 8. STRATEGIC CONSULTING & OPSEC */}
+  <motion.article
+    initial={{ opacity: 0, y: 24 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+  >
+    <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+    <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+    <Shield className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">OPSEC CONSULTING</h2>
+    <p className="mt-4 leading-6 text-white/70 text-sm">
+      Strategic security architecture, executive protection, and operational security (OPSEC) advisory.
+    </p>
+    <button
+      onClick={() => setActiveTrack(activeTrack === 'opsec' ? null : 'opsec')}
+      className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
+    >
+      {activeTrack === 'opsec' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
+    </button>
+  </motion.article>
+
+</div>
 
           {/* Expandable Module Sub-Drawer Content Panel */}
           <AnimatePresence mode="wait">
@@ -602,7 +710,7 @@ export default function Home() {
     {/* Email Capture Interface Layer */}
     <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-4">
       {notifySuccess === 'research' ? (
-        <p className="text-primary font-bold">Get Notified When Research Launches (date not specified)</p>
+        <p className="text-primary font-bold">Your email will be alerted immediately when this research & threat intelligence channel is operational.</p>
       ) : (
         <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'research')} className="space-y-2">
           <label className="text-white/60 font-bold block text-[11px] uppercase tracking-wider">
@@ -693,38 +801,75 @@ export default function Home() {
         </section>
 
         {/* Integrated Intelligence Packages Segment */}
-        <section className="relative z-10 mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16">
-          <div className="bg-[#05090a]/50 border border-primary/10 rounded-md p-6 sm:p-8 space-y-8">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-primary/10 pb-4 gap-4">
-              <div className="space-y-1">
-                <h2 className="font-mono text-xs font-bold tracking-[0.2em] text-primary uppercase">Integrated Intelligence Packages</h2>
-                <p className="font-mono text-[11px] text-white/40">Synthesized multi-vector bundles combining core fields for complex corporate and judicial operations.</p>
-              </div>
-              <Link href="/request" className="font-mono text-xs text-primary hover:underline flex items-center gap-1.5">
-                View All Package Options <ArrowUpRight className="h-3 w-3" />
-              </Link>
-            </div>
+<section className="relative z-10 mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16">
+  <div className="bg-[#05090a]/50 border border-primary/10 rounded-md p-6 sm:p-8 space-y-8 relative overflow-hidden">
+    
+    {/* LOCKOUT STATUS BANNER WITH EMAIL CAPTURE */}
+    <div className="bg-primary/[0.02] border-b border-primary/20 -mx-6 -mt-6 sm:-mx-8 sm:-mt-8 px-6 py-4 sm:px-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4 font-mono text-[10px] tracking-wider">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-primary font-bold uppercase text-xs">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+          Vector Status: Locked / Pending Deployment
+        </div>
+        <div className="text-white/40 text-[10px]">
+          [ Available once all core operations channels are verified fully operational ]
+        </div>
+      </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
-              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Fraud Investigation Complete</h4>
-                <p className="text-[11px] text-white/40 leading-5">Merges cross-platform open source mapping, storage diagnostic extractions, and network mapping to compile fully court-admissible action reports.</p>
-              </div>
-              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Corporate Due Diligence Complete</h4>
-                <p className="text-[11px] text-white/40 leading-5">Deploys deep-vector corporate asset hunting, structural vulnerability profiling, and background mapping on organization principals prior to M&A ventures.</p>
-              </div>
-              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Security Threat Assessment Complete</h4>
-                <p className="text-[11px] text-white/40 leading-5">Uncovers and catalogues total public enterprise footprint exposures, tracks active external actors, and deploys high-grade OPSEC defenses.</p>
-              </div>
-              <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Litigation Support Complete</h4>
-                <p className="text-[11px] text-white/40 leading-5">Pairs advanced target intelligence gathering with verified cryptographic evidence parameters to prepare robust, expert-witness legal filings.</p>
-              </div>
-            </div>
-          </div>
-        </section>
+      <div className="w-full lg:max-w-md shrink-0">
+        {notifySuccess === 'packages' ? (
+          <p className="text-primary font-bold text-xs py-2">You will be alerted immediately when Integrated Intelligence Packages are available.</p>
+        ) : (
+          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'packages')} className="flex flex-col sm:flex-row gap-2">
+            <Input 
+              type="email" 
+              required 
+              value={notifyEmail} 
+              onChange={(e) => setNotifyEmail(e.target.value)} 
+              placeholder="Your Email:" 
+              className="bg-background border-primary/20 text-xs h-9 text-white placeholder:text-white/30 rounded-sm focus-visible:border-primary/50" 
+            />
+            <Button type="submit" className="bg-primary text-background text-xs font-bold px-5 h-9 rounded-sm hover:bg-primary/80 uppercase tracking-widest shrink-0">
+              NOTIFY ME
+            </Button>
+          </form>
+        )}
+      </div>
+    </div>
+
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-primary/10 pb-4 gap-4 pt-2">
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <h2 className="font-mono text-xs font-bold tracking-[0.2em] text-primary uppercase">Integrated Intelligence Packages</h2>
+          <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
+            Coming Soon
+          </span>
+        </div>
+        <p className="font-mono text-[11px] text-white/40">Synthesized multi-vector bundles combining core fields for complex corporate and judicial operations.</p>
+      </div>
+    </div>
+
+    {/* Locked State grid - opacity styled to display pending status */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono opacity-60 selection:bg-transparent">
+      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
+        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Fraud Investigation Complete</h4>
+        <p className="text-[11px] text-white/100 leading-5">Merges cross-platform open source mapping, storage diagnostic extractions, and network mapping to compile fully court-admissible action reports.</p>
+      </div>
+      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
+        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Corporate Due Diligence Complete</h4>
+        <p className="text-[11px] text-white/100 leading-5">Deploys deep-vector corporate asset hunting, structural vulnerability profiling, and background mapping on organization principals prior to M&A ventures.</p>
+      </div>
+      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
+        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Security Threat Assessment Complete</h4>
+        <p className="text-[11px] text-white/100 leading-5">Uncovers and catalogues total public enterprise footprint exposures, tracks active external actors, and deploys high-grade OPSEC defenses.</p>
+      </div>
+      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
+        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Litigation Support Complete</h4>
+        <p className="text-[11px] text-white/100 leading-5">Pairs advanced target intelligence gathering with verified cryptographic evidence parameters to prepare robust, expert-witness legal filings.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
         {/* About & Operational Principles Segment */}
         <section id="about" className="relative z-10 border-t border-primary/10 bg-[#070b0c]/70 pt-20 pb-12">
