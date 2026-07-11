@@ -18,7 +18,7 @@ const intakeOptions = [
     title: 'Create Client Account',
     description: 'Register for a secure client portal. Access case updates, encrypted messaging, and document vault.',
     icon: UserPlus,
-    href: '/request/register',
+    href: '/signup',
   },
   {
     id: 'login',

@@ -369,6 +369,7 @@ export default function Home() {
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
     <Users className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">currently locked</span>
     <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">GOVERNMENT CONSULTING</h2>
     <p className="mt-4 leading-6 text-white/70 text-sm">
       Intelligence training, lawful surveillance support, and advisory for law enforcement agencies.
@@ -391,6 +392,7 @@ export default function Home() {
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
     <Shield className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">currently locked</span>
     <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">CORRECTIONAL INTELLIGENCE</h2>
     <p className="mt-4 leading-6 text-white/70 text-sm">
       Inmate monitoring, risk assessment, and intelligence support for correctional facilities.
@@ -413,6 +415,7 @@ export default function Home() {
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
     <Scale className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">currently locked</span>
     <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">LEGAL ADVISORY</h2>
     <p className="mt-4 leading-6 text-white/70 text-sm">
       Litigation support, AML investigations, compliance consulting, and court-ready evidence preparation.
@@ -435,6 +438,7 @@ export default function Home() {
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
     <Crosshair className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">currently locked</span>
     <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">RESEARCH</h2>
     <p className="mt-4 leading-6 text-white/70 text-sm">
       Proactive threat hunting, syndicate mapping, and deep strategic intelligence research.
@@ -457,6 +461,7 @@ export default function Home() {
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
     <Shield className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+    <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">currently locked</span>
     <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">OPSEC CONSULTING</h2>
     <p className="mt-4 leading-6 text-white/70 text-sm">
       Strategic security architecture, executive protection, and operational security (OPSEC) advisory.

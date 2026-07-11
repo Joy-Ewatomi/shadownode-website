@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
     return Response.json(estimate);
   } catch (error) {
-    console.error('[v0] Pricing estimation error:', error);
+    console.error('Pricing estimation error:', error);
     return Response.json(
       { error: 'Failed to estimate price' },
       { status: 500 }

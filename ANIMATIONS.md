@@ -2,7 +2,7 @@
 
 ## Overview
 
-Professional, intelligence-themed animations have been added to the ShadowNode website using **Framer Motion** for complex animations and **Tailwind CSS** for simple transitions. All animations maintain a 60fps smooth experience while preserving the dark CIA-style aesthetic.
+Professional, intelligence-themed animations have been added to the ShadowNode website using **Framer Motion** for complex animations and **Tailwind CSS** for simple transitions.
 
 ---
 
@@ -320,5 +320,3 @@ To extend animations further:
 3. Add micro-interactions to form inputs
 4. Animate loading states with spinners
 5. Add success/error animations for API responses
-
-All animations follow the same professional, subtle CIA-style aesthetic while maintaining performance and accessibility standards.
