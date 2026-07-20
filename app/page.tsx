@@ -207,8 +207,7 @@ export default function Home() {
               </h1>
 
               <p className="mt-8 max-w-2xl text-lg leading-8 text-white/72">
-                 Institutional-grade digital investigations, threat intelligence, ethical hacking, and court-admissible forensics 
-                 designed to mitigate enterprise risk and secure legal outcomes.
+                 Institutional-grade digital intelligence, OSINT, digital forensics, ethical hacking, government consulting, and court-admissible investigations — designed to support law enforcement, protect corporations, and deliver justice in critical situations.
               </p>
 
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -256,11 +255,14 @@ export default function Home() {
                   <div>
                     <p className="text-primary">$ cat services.txt</p>
                     <div className="mt-3 space-y-3 rounded border border-primary/20 bg-background/35 p-4">
-                      <p className="text-white/58"><span className="text-primary">OSINT:</span> Advanced open-source intelligence and data correlation.</p>
-                      <p className="text-white/58"><span className="text-primary">FORENSICS:</span> Cryptographically verified tracking. [Jan 2027]</p>
-                      <p className="text-white/58"><span className="text-primary">RED-TEAMING:</span> Authorized security testing & pentesting. [Apr 2027]</p>
-                      <p className="text-white/58"><span className="text-primary">RESEARCH:</span> Corporate threat hunting and syndicate intelligence mapping.</p>
-                      <p className="text-white/58"><span className="text-primary">CONSULTING:</span> Strategic OPSEC architecture and risk advisory.</p>
+                      <p className="text-white/58"><span className="text-primary">OSINT</span> </p>
+                      <p className="text-white/58"><span className="text-primary">DIGITAL FORENSICS</span> </p>
+                      <p className="text-white/58"><span className="text-primary">ETHICAL HACKING</span> </p>
+                      <p className="text-white/58"><span className="text-primary">GOVERNMENT CONSULTING</span> </p>
+                      <p className="text-white/58"><span className="text-primary">CORRECTIONAL INTELLIGENCE</span></p>
+                      <p className="text-white/58"><span className="text-primary">LEGAL ADVISORY</span> </p>
+                      <p className="text-white/58"><span className="text-primary">RESEARCH</span> </p>
+                      <p className="text-white/58"><span className="text-primary">OPSEC CONSULTING</span></p>
                     </div>
                   </div>
 
@@ -285,7 +287,7 @@ export default function Home() {
           
             
       
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 px-4 md:px-0 w-100%">
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 px-4 md:px-0 w-full">
 
   {/* 1. OSINT */}
   <motion.article
@@ -805,77 +807,57 @@ export default function Home() {
           </AnimatePresence>
         </section>
 
-        {/* Integrated Intelligence Packages Segment */}
-<section className="relative z-10 mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16">
-  <div className="bg-[#05090a]/50 border border-primary/10 rounded-md p-6 sm:p-8 space-y-8 relative overflow-hidden">
+       {/* INTEGRATED INTELLIGENCE PACKAGES */}
+<section className="relative z-10 mx-auto max-w-[1480px] px-5 py-16 sm:px-8 lg:px-16">
+  <div className="bg-[#05090a]/70 border border-primary/20 rounded-md p-6 sm:p-8">
     
-    {/* LOCKOUT STATUS BANNER WITH EMAIL CAPTURE */}
-    <div className="bg-primary/[0.02] border-b border-primary/20 -mx-6 -mt-6 sm:-mx-8 sm:-mt-8 px-6 py-4 sm:px-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4 font-mono text-[10px] tracking-wider">
-      <div className="space-y-1">
-        <div className="flex items-center gap-2 text-primary font-bold uppercase text-xs">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-          Vector Status: Locked / Pending Deployment
-        </div>
-        <div className="text-white/40 text-[10px]">
-          [ Available once all core operations channels are verified fully operational ]
-        </div>
-      </div>
-
-      <div className="w-full lg:max-w-md shrink-0">
-        {notifySuccess === 'packages' ? (
-          <p className="text-primary font-bold text-xs py-2">You will be alerted immediately when Integrated Intelligence Packages are available.</p>
-        ) : (
-          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'packages')} className="flex flex-col sm:flex-row gap-2">
-            <Input 
-              type="email" 
-              required 
-              value={notifyEmail} 
-              onChange={(e) => setNotifyEmail(e.target.value)} 
-              placeholder="Your Email:" 
-              className="bg-background border-primary/20 text-xs h-9 text-white placeholder:text-white/30 rounded-sm focus-visible:border-primary/50" 
-            />
-            <Button type="submit" className="bg-primary text-background text-xs font-bold px-5 h-9 rounded-sm hover:bg-primary/80 uppercase tracking-widest shrink-0">
-              NOTIFY ME
-            </Button>
-          </form>
-        )}
-      </div>
-    </div>
-
-    <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-primary/10 pb-4 gap-4 pt-2">
-      <div className="space-y-1">
+    {/* Header */}
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-primary/10 pb-6 gap-4">
+      <div className="space-y-2">
         <div className="flex items-center gap-3">
-          <h2 className="font-mono text-xs font-bold tracking-[0.2em] text-primary uppercase">Integrated Intelligence Packages</h2>
+          <h2 className="font-mono text-sm font-bold tracking-[0.2em] text-primary uppercase">Integrated Intelligence Packages</h2>
           <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
             Coming Soon
           </span>
         </div>
-        <p className="font-mono text-[11px] text-white/40">Synthesized multi-vector bundles combining core fields for complex corporate and judicial operations.</p>
+        <p className="text-white/50 text-sm">
+          Multi-service bundles combining our core capabilities for complex corporate, law enforcement, and judicial operations.
+        </p>
       </div>
     </div>
 
-    {/* Locked State grid - opacity styled to display pending status */}
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono opacity-60 selection:bg-transparent">
-      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
-        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Fraud Investigation Complete</h4>
-        <p className="text-[11px] text-white/100 leading-5">Merges cross-platform open source mapping, storage diagnostic extractions, and network mapping to compile fully court-admissible action reports.</p>
+    {/* Packages Grid */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
+      <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
+        <h4 className="font-mono text-white text-sm mb-3">FRAUD INVESTIGATION COMPLETE</h4>
+        <p className="text-white/60 text-sm leading-relaxed">
+          Combines OSINT, Digital Forensics, and Research to deliver comprehensive fraud tracing, asset recovery, and court-admissible reports.
+        </p>
       </div>
-      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
-        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Corporate Due Diligence Complete</h4>
-        <p className="text-[11px] text-white/100 leading-5">Deploys deep-vector corporate asset hunting, structural vulnerability profiling, and background mapping on organization principals prior to M&A ventures.</p>
+
+      <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
+        <h4 className="font-mono text-white text-sm mb-3">CORPORATE DUE DILIGENCE COMPLETE</h4>
+        <p className="text-white/60 text-sm leading-relaxed">
+          Merges OSINT, Ethical Hacking, and Research for deep corporate risk assessment, executive profiling, and pre-M&A intelligence.
+        </p>
       </div>
-      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
-        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Security Threat Assessment Complete</h4>
-        <p className="text-[11px] text-white/100 leading-5">Uncovers and catalogues total public enterprise footprint exposures, tracks active external actors, and deploys high-grade OPSEC defenses.</p>
+
+      <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
+        <h4 className="font-mono text-white text-sm mb-3">SECURITY THREAT ASSESSMENT COMPLETE</h4>
+        <p className="text-white/60 text-sm leading-relaxed">
+          Integrates OSINT, Ethical Hacking, and OPSEC Consulting to map enterprise threat landscapes and recommend defensive strategies.
+        </p>
       </div>
-      <div className="border border-primary/5 bg-[#030607]/90 rounded p-5 space-y-3 relative group">
-        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Litigation Support Complete</h4>
-        <p className="text-[11px] text-white/100 leading-5">Pairs advanced target intelligence gathering with verified cryptographic evidence parameters to prepare robust, expert-witness legal filings.</p>
+
+      <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
+        <h4 className="font-mono text-white text-sm mb-3">LITIGATION SUPPORT COMPLETE</h4>
+        <p className="text-white/60 text-sm leading-relaxed">
+          Combines Digital Forensics, Legal Advisory, and OSINT to build robust, court-ready intelligence packages and expert witness support.
+        </p>
       </div>
     </div>
   </div>
 </section>
-
         {/* About & Operational Principles Segment */}
         <section id="about" className="relative z-10 border-t border-primary/10 bg-[#070b0c]/70 pt-20 pb-12">
           <div className="mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16 mb-12">
