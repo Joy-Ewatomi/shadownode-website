@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
 const principles = [
   {
@@ -91,6 +91,25 @@ export default function Home() {
       setNotifyEmail('')
     }
   }
+
+  const handleTrackToggle = (track: string) => {
+    setActiveTrack((current) => (current === track ? null : track))
+  }
+
+  useEffect(() => {
+    if (!activeTrack) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveTrack(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeTrack])
+
+  const currentYear = new Date().getFullYear()
 
   return (
     <PageTransition>
@@ -210,15 +229,20 @@ export default function Home() {
                  Institutional-grade digital intelligence, OSINT, digital forensics, ethical hacking, government consulting, and court-admissible investigations — designed to support law enforcement, protect corporations, and deliver justice in critical situations.
               </p>
 
+              <div className="mt-5 inline-flex items-center gap-3 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm text-white/70">
+                <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(39,213,110,0.8)]" />
+                Founder-led. Mission-driven. Built for lawful, discreet, high-stakes investigations.
+              </div>
+
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link href="/request">
-                  <Button className="h-14 w-full rounded-md border border-primary/70 bg-primary/10 px-9 font-mono text-base tracking-[0.06em] text-primary shadow-[0_0_28px_rgba(39,213,110,0.08)] hover:bg-primary hover:text-background sm:w-auto">
+                  <Button className="h-16 w-full rounded-lg border border-primary/70 bg-gradient-to-r from-primary/95 via-primary to-primary/80 px-10 font-mono text-base font-bold tracking-[0.08em] text-background shadow-[0_0_30px_rgba(39,213,110,0.22)] transition hover:scale-[1.01] hover:bg-primary sm:w-auto">
                     INITIALIZE SECURE PORTAL
                   </Button>
                 </Link>
                 <Link
                   href="#services"
-                  className="inline-flex h-14 items-center gap-4 px-2 font-mono text-base tracking-[0.06em] text-white/88 transition hover:text-primary"
+                  className="inline-flex h-16 items-center gap-4 rounded-lg border border-white/10 bg-white/5 px-5 font-mono text-base tracking-[0.06em] text-white/88 transition hover:border-primary/40 hover:text-primary"
                 >
                   LEARN MORE <ArrowRight className="h-5 w-5" />
                 </Link>
@@ -294,7 +318,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('osint')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -304,7 +329,11 @@ export default function Home() {
       Advanced open-source intelligence, digital footprint mapping, and threat intelligence gathering.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'osint' ? null : 'osint')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('osint')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'osint' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -316,7 +345,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('forensics')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -329,7 +359,11 @@ export default function Home() {
       Device forensics, data recovery, crypto tracing, and court-admissible evidence handling.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'forensics' ? null : 'forensics')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('forensics')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'forensics' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -341,7 +375,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('hacking')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -354,7 +389,11 @@ export default function Home() {
       Authorized penetration testing, red team operations, and vulnerability assessments.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'hacking' ? null : 'hacking')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('hacking')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'hacking' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -366,7 +405,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('gov')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -377,7 +417,11 @@ export default function Home() {
       Intelligence training, lawful surveillance support, and advisory for law enforcement agencies.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'gov' ? null : 'gov')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('gov')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'gov' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -389,7 +433,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('correctional')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -400,7 +445,11 @@ export default function Home() {
       Inmate monitoring, risk assessment, and intelligence support for correctional facilities.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'correctional' ? null : 'correctional')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('correctional')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'correctional' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -412,7 +461,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('legal')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -423,7 +473,11 @@ export default function Home() {
       Litigation support, AML investigations, compliance consulting, and court-ready evidence preparation.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'legal' ? null : 'legal')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('legal')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'legal' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -435,7 +489,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('research')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -446,7 +501,11 @@ export default function Home() {
       Proactive threat hunting, syndicate mapping, and deep strategic intelligence research.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'research' ? null : 'research')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('research')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'research' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -458,7 +517,8 @@ export default function Home() {
     initial={{ opacity: 0, y: 24 }}
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true }}
-    className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+    onClick={() => handleTrackToggle('opsec')}
+    className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
   >
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
@@ -469,7 +529,11 @@ export default function Home() {
       Strategic security architecture, executive protection, and operational security (OPSEC) advisory.
     </p>
     <button
-      onClick={() => setActiveTrack(activeTrack === 'opsec' ? null : 'opsec')}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        handleTrackToggle('opsec')
+      }}
       className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
     >
       {activeTrack === 'opsec' ? 'CLOSE MODULE —' : 'LEARN MORE →'}
@@ -478,191 +542,104 @@ export default function Home() {
 
 </div>
 
-          {/* Expandable Module Sub-Drawer Content Panel */}
           <AnimatePresence mode="wait">
             {activeTrack && (
               <motion.div
                 key={activeTrack}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="border border-primary/20 bg-[#040809]/95 rounded p-6 sm:p-8 font-mono text-xs space-y-6 shadow-2xl relative"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 px-4 py-8 backdrop-blur-sm sm:px-6"
+                onClick={() => setActiveTrack(null)}
               >
-                {activeTrack === 'osint' && (
-                  <>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
-                      <div>
-                        <h4 className="text-primary font-bold text-base uppercase">Open Source Intelligence Framework</h4>
-                        <p className="text-white/40 mt-1">Direct unearthing of public networks, digital footprints, and cross-platform correlation parameters.</p>
-                      </div>
-                      <Link href="/request">
-                        <Button className="bg-primary text-background font-bold tracking-wider uppercase rounded-sm h-10 px-5 text-xs hover:bg-primary/85">Request Consultation</Button>
-                      </Link>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// KEY SERVICES</span>
-                        <ul className="space-y-1">
-                          <li>• Mobile & Digital Device OSINT Identification</li>
-                          <li>• Target Communication History Reconstruction</li>
-                          <li>• Browser Cache & Historical Target Discovery</li>
-                          <li>• Global Geolocation Metadata Extractions</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// TARGET LOGICS</span>
-                        <ul className="space-y-1">
-                          <li>• Platform Cross-Correlation Schemes</li>
-                          <li>• Documented Background Profile Verification</li>
-                          <li>• Deep-Web Domain Infrastructure Audits</li>
-                          <li>• Litigation Evidence Package Accumulation</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {activeTrack === 'forensics' && (
-                  <>
-                    <div className="border-b border-primary/10 pb-4">
-                      <h4 className="text-primary font-bold text-base uppercase">Cryptographically Verified Digital Forensics</h4>
-                      <p className="text-white/40 mt-1">Court-admissible file structure capture, drive imaging, and strict chain-of-custody protocols.</p>
-                      <p className="text-primary/90 text-[11px] font-bold mt-2">Get Notified When Forensics Launches (Jan 2027)</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white/70">
-                      <div>
-                        <span className="text-primary font-bold block mb-1">// HARDWARE DATA</span>
-                        <ul className="space-y-1">
-                          <li>• Mobile Device (iOS, Android) Extraction</li>
-                          <li>• Hard Drive Analysis & Master Imaging</li>
-                          <li>• Hard Core Deleted Data Recovery</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1">// SYSTEM MATRICES</span>
-                        <ul className="space-y-1">
-                          <li>• Cloud Storage Architecture Auditing</li>
-                          <li>• Email Account Communication Forensics</li>
-                          <li>• Cryptocurrency Wallet Node Metrics</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1">// EVIDENCE POSTURE</span>
-                        <ul className="space-y-1">
-                          <li>• Strict Chain-of-custody Logging</li>
-                          <li>• System Compromise Timeline Layouts</li>
-                          <li>• Expert Courtroom Witness Report Generation</li>
-                        </ul>
-                      </div>
-                    </div>
-                    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl">
-                      {notifySuccess === 'forensics' ? (
-                        <p className="text-primary font-bold">We'll email you Jan, 2027 when forensics opens</p>
-                      ) : (
-                        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'forensics')} className="space-y-2">
-                          <label className="text-white/60 font-bold block">FORENSICS EMAIL NOTIFICATION</label>
-                          <div className="flex gap-2">
-                            <Input 
-                              type="email" 
-                              required 
-                              value={notifyEmail} 
-                              onChange={(e) => setNotifyEmail(e.target.value)} 
-                              placeholder="Your Email:" 
-                              className="bg-background border-primary/10 text-xs h-9 text-white" 
-                            />
-                            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">NOTIFY ME</Button>
-                          </div>
-                        </form>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {activeTrack === 'hacking' && (
-                  <>
-                    <div className="border-b border-primary/10 pb-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <motion.div
+                  initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                  transition={{ duration: 0.18 }}
+                  className="relative w-full max-w-5xl max-h-[85vh] overflow-y-auto rounded-lg border border-primary/20 bg-[#040809]/95 p-6 sm:p-8 font-mono text-xs space-y-6 shadow-2xl"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveTrack(null)}
+                    className="absolute right-4 top-4 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-primary transition hover:border-primary/50 hover:bg-primary/20"
+                  >
+                    Close
+                  </button>
+                  {activeTrack === 'osint' && (
+                    <>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4 pr-20">
                         <div>
-                          <h4 className="text-primary font-bold text-base uppercase">Ethical Hacking & Penetration Testing</h4>
-                          <p className="text-white/40 mt-1">Authorized security testing, defensive mapping, and simulated environment campaigns targeting corporate architecture.</p>
+                          <h4 className="text-primary font-bold text-base uppercase">Open Source Intelligence Framework</h4>
+                          <p className="text-white/40 mt-1">Direct unearthing of public networks, digital footprints, and cross-platform correlation parameters.</p>
                         </div>
-                        <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">LAUNCHING APRIL 2027</span>
+                        <Link href="/request">
+                          <Button className="bg-primary text-background font-bold tracking-wider uppercase rounded-sm h-10 px-5 text-xs hover:bg-primary/85">Request Consultation</Button>
+                        </Link>
                       </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 text-white/70">
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// PENETRATION TESTING</span>
-                        <ul className="space-y-1 text-white/50">
-                          <li>• Network Infrastructure Testing</li>
-                          <li>• Application Security Assessments</li>
-                          <li>• Social Engineering Audits</li>
-                          <li>• Physical Security Evaluations</li>
-                        </ul>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// KEY SERVICES</span>
+                          <ul className="space-y-1">
+                            <li>• Mobile & Digital Device OSINT Identification</li>
+                            <li>• Target Communication History Reconstruction</li>
+                            <li>• Browser Cache & Historical Target Discovery</li>
+                            <li>• Global Geolocation Metadata Extractions</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// TARGET LOGICS</span>
+                          <ul className="space-y-1">
+                            <li>• Platform Cross-Correlation Schemes</li>
+                            <li>• Documented Background Profile Verification</li>
+                            <li>• Deep-Web Domain Infrastructure Audits</li>
+                            <li>• Litigation Evidence Package Accumulation</li>
+                          </ul>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// VULNERABILITY ASSESSMENT</span>
-                        <ul className="space-y-1 text-white/50">
-                          <li>• System Exploitation Profiling</li>
-                          <li>• Flaw Categorization Matrix</li>
-                          <li>• Exploitability Risk Verification</li>
-                          <li>• Strategic Remediation Roadmaps</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// RED TEAM OPERATIONS</span>
-                        <ul className="space-y-1 text-white/50">
-                          <li>• Simulated Attack Exercises</li>
-                          <li>• Multi-Vector Attack Campaigns</li>
-                          <li>• Long-Duration Footprint Probing</li>
-                          <li>• Evasion Capability Appraisals</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// INFRASTRUCTURE REVIEW</span>
-                        <ul className="space-y-1 text-white/50">
-                          <li>• Architecture Security Diagnostics</li>
-                          <li>• Segmentation Architecture Verification</li>
-                          <li>• Complete Access Control Auditing</li>
-                          <li>• Threat Vector Validation Models</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// SECURE CODE REVIEW</span>
-                        <ul className="space-y-1 text-white/50">
-                          <li>• Source Code Analysis Schematics</li>
-                          <li>• Vulnerability Detection Audits</li>
-                          <li>• OWASP Compliance Checklists</li>
-                          <li>• Secure Pipeline Integration Guides</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="text-primary font-bold block mb-1.5">// AWARENESS TRAINING</span>
-                        <ul className="space-y-1 text-white/50">
-                          <li>• Controlled Phishing Campaigns</li>
-                          <li>• Dynamic Employee Attack Readiness</li>
-                          <li>• Password Security Operations</li>
-                          <li>• Social Engineering Countermeasures</li>
-                        </ul>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <span className="text-primary font-bold block mb-1.5">// INCIDENT RESPONSE SIMULATION</span>
-                        <ul className="space-y-1 text-white/50">
-                          <li>• Data Breach Scenario Tabletop Deployments</li>
-                          <li>• Response Workflow Validation Runs</li>
-                          <li>• Operational Team Readiness Assessment</li>
-                          <li>• Continuity Plan Strategic Validation</li>
-                        </ul>
-                      </div>
-                    </div>
+                    </>
+                  )}
 
-                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center pt-4 border-t border-primary/10">
-                      <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl w-full">
-                        {notifySuccess === 'hacking' ? (
-                          <p className="text-primary font-bold">We'll email you April, 2027 when Ethical Hacking opens</p>
+                  {activeTrack === 'forensics' && (
+                    <>
+                      <div className="border-b border-primary/10 pb-4 pr-20">
+                        <h4 className="text-primary font-bold text-base uppercase">Cryptographically Verified Digital Forensics</h4>
+                        <p className="text-white/40 mt-1">Court-admissible file structure capture, drive imaging, and strict chain-of-custody protocols.</p>
+                        <p className="text-primary/90 text-[11px] font-bold mt-2">Get Notified When Forensics Launches (Jan 2027)</p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white/70">
+                        <div>
+                          <span className="text-primary font-bold block mb-1">// HARDWARE DATA</span>
+                          <ul className="space-y-1">
+                            <li>• Mobile Device (iOS, Android) Extraction</li>
+                            <li>• Hard Drive Analysis & Master Imaging</li>
+                            <li>• Hard Core Deleted Data Recovery</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1">// SYSTEM MATRICES</span>
+                          <ul className="space-y-1">
+                            <li>• Cloud Storage Architecture Auditing</li>
+                            <li>• Email Account Communication Forensics</li>
+                            <li>• Cryptocurrency Wallet Node Metrics</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1">// EVIDENCE POSTURE</span>
+                          <ul className="space-y-1">
+                            <li>• Strict Chain-of-custody Logging</li>
+                            <li>• System Compromise Timeline Layouts</li>
+                            <li>• Expert Courtroom Witness Report Generation</li>
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl">
+                        {notifySuccess === 'forensics' ? (
+                          <p className="text-primary font-bold">We'll email you Jan, 2027 when forensics opens</p>
                         ) : (
-                          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'hacking')} className="space-y-2">
-                            <label className="text-white/60 font-bold block text-[11px]">ETHICAL HACKING NOTIFICATION EMAIIL</label>
+                          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'forensics')} className="space-y-2">
+                            <label className="text-white/60 font-bold block">FORENSICS EMAIL NOTIFICATION</label>
                             <div className="flex gap-2">
                               <Input 
                                 type="email" 
@@ -672,136 +649,237 @@ export default function Home() {
                                 placeholder="Your Email:" 
                                 className="bg-background border-primary/10 text-xs h-9 text-white" 
                               />
-                              <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+                              <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">NOTIFY ME</Button>
                             </div>
                           </form>
                         )}
                       </div>
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
 
-               {activeTrack === 'research' && (
-  <>
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
-      <div>
-        <div className="flex items-center gap-3">
-          <h4 className="text-primary font-bold text-base uppercase">Research & Threat Intelligence</h4>
-          <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
-            Coming Soon
-          </span>
-        </div>
-        <p className="text-white/40 mt-1">Proactive threat tracking, organized group profiling, and strategic foresight reports.</p>
-      </div>
-    </div>
+                  {activeTrack === 'hacking' && (
+                    <>
+                      <div className="border-b border-primary/10 pb-4 pr-20">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <h4 className="text-primary font-bold text-base uppercase">Ethical Hacking & Penetration Testing</h4>
+                            <p className="text-white/40 mt-1">Authorized security testing, defensive mapping, and simulated environment campaigns targeting corporate architecture.</p>
+                          </div>
+                          <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">LAUNCHING APRIL 2027</span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 text-white/70">
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// PENETRATION TESTING</span>
+                          <ul className="space-y-1 text-white/50">
+                            <li>• Network Infrastructure Testing</li>
+                            <li>• Application Security Assessments</li>
+                            <li>• Social Engineering Audits</li>
+                            <li>• Physical Security Evaluations</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// VULNERABILITY ASSESSMENT</span>
+                          <ul className="space-y-1 text-white/50">
+                            <li>• System Exploitation Profiling</li>
+                            <li>• Flaw Categorization Matrix</li>
+                            <li>• Exploitability Risk Verification</li>
+                            <li>• Strategic Remediation Roadmaps</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// RED TEAM OPERATIONS</span>
+                          <ul className="space-y-1 text-white/50">
+                            <li>• Simulated Attack Exercises</li>
+                            <li>• Multi-Vector Attack Campaigns</li>
+                            <li>• Long-Duration Footprint Probing</li>
+                            <li>• Evasion Capability Appraisals</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// INFRASTRUCTURE REVIEW</span>
+                          <ul className="space-y-1 text-white/50">
+                            <li>• Architecture Security Diagnostics</li>
+                            <li>• Segmentation Architecture Verification</li>
+                            <li>• Complete Access Control Auditing</li>
+                            <li>• Threat Vector Validation Models</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// SECURE CODE REVIEW</span>
+                          <ul className="space-y-1 text-white/50">
+                            <li>• Source Code Analysis Schematics</li>
+                            <li>• Vulnerability Detection Audits</li>
+                            <li>• OWASP Compliance Checklists</li>
+                            <li>• Secure Pipeline Integration Guides</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// AWARENESS TRAINING</span>
+                          <ul className="space-y-1 text-white/50">
+                            <li>• Controlled Phishing Campaigns</li>
+                            <li>• Dynamic Employee Attack Readiness</li>
+                            <li>• Password Security Operations</li>
+                            <li>• Social Engineering Countermeasures</li>
+                          </ul>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="text-primary font-bold block mb-1.5">// INCIDENT RESPONSE SIMULATION</span>
+                          <ul className="space-y-1 text-white/50">
+                            <li>• Data Breach Scenario Tabletop Deployments</li>
+                            <li>• Response Workflow Validation Runs</li>
+                            <li>• Operational Team Readiness Assessment</li>
+                            <li>• Continuity Plan Strategic Validation</li>
+                          </ul>
+                        </div>
+                      </div>
 
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
-      <div>
-        <span className="text-primary font-bold block mb-1.5">// COMBAT ENVIRONMENTS</span>
-        <ul className="space-y-1">
-          <li>• Corporate Threat Hunting Operations</li>
-          <li>• Criminal Syndicate Map Layouts</li>
-          <li>• Asset Theft/Fraud Group Identification</li>
-        </ul>
-      </div>
-      <div>
-        <span className="text-primary font-bold block mb-1.5">// STRATEGIC COMPLIANCE</span>
-        <ul className="space-y-1">
-          <li>• Sanction List Verification Records</li>
-          <li>• Supply Chain Vulnerability Mapping</li>
-          <li>• High-Value Competitor Threat Assessment</li>
-        </ul>
-      </div>
-    </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center pt-4 border-t border-primary/10">
+                        <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl w-full">
+                          {notifySuccess === 'hacking' ? (
+                            <p className="text-primary font-bold">We'll email you April, 2027 when Ethical Hacking opens</p>
+                          ) : (
+                            <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'hacking')} className="space-y-2">
+                              <label className="text-white/60 font-bold block text-[11px]">ETHICAL HACKING NOTIFICATION EMAIIL</label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="email" 
+                                  required 
+                                  value={notifyEmail} 
+                                  onChange={(e) => setNotifyEmail(e.target.value)} 
+                                  placeholder="Your Email:" 
+                                  className="bg-background border-primary/10 text-xs h-9 text-white" 
+                                />
+                                <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+                              </div>
+                            </form>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
-    {/* Email Capture Interface Layer */}
-    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-4">
-      {notifySuccess === 'research' ? (
-        <p className="text-primary font-bold">Your email will be alerted immediately when this research & threat intelligence channel is operational.</p>
-      ) : (
-        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'research')} className="space-y-2">
-          <label className="text-white/60 font-bold block text-[11px] uppercase tracking-wider">
-            RESEARCH & THREAT INTELLIGENCE NOTIFICATION EMAIL
-          </label>
-          <div className="flex gap-2">
-            <Input 
-              type="email" 
-              required 
-              value={notifyEmail} 
-              onChange={(e) => setNotifyEmail(e.target.value)} 
-              placeholder="Your Email:" 
-              className="bg-background border-primary/10 text-xs h-9 text-white" 
-            />
-            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">
-              NOTIFY ME
-            </Button>
-          </div>
-        </form>
-      )}
-    </div>
-  </>
-)}
+                  {activeTrack === 'research' && (
+                    <>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4 pr-20">
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-primary font-bold text-base uppercase">Research & Threat Intelligence</h4>
+                            <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
+                              Coming Soon
+                            </span>
+                          </div>
+                          <p className="text-white/40 mt-1">Proactive threat tracking, organized group profiling, and strategic foresight reports.</p>
+                        </div>
+                      </div>
 
-                {activeTrack === 'consulting' && (
-  <>
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
-      <div>
-        <div className="flex items-center gap-3">
-          <h4 className="text-primary font-bold text-base uppercase">Operational Security & Strategic Advisory</h4>
-          <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
-            Coming Soon
-          </span>
-        </div>
-        <p className="text-white/40 mt-1">C-level threat mitigation blueprints, personal digital footprint scaling, and evidentiary guidance.</p>
-      </div>
-    </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// COMBAT ENVIRONMENTS</span>
+                          <ul className="space-y-1">
+                            <li>• Corporate Threat Hunting Operations</li>
+                            <li>• Criminal Syndicate Map Layouts</li>
+                            <li>• Asset Theft/Fraud Group Identification</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// STRATEGIC COMPLIANCE</span>
+                          <ul className="space-y-1">
+                            <li>• Sanction List Verification Records</li>
+                            <li>• Supply Chain Vulnerability Mapping</li>
+                            <li>• High-Value Competitor Threat Assessment</li>
+                          </ul>
+                        </div>
+                      </div>
 
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
-      <div>
-        <span className="text-primary font-bold block mb-1.5">// DEFENSIVE OPSEC</span>
-        <ul className="space-y-1">
-          <li>• Tailored Information Security Design</li>
-          <li>• Active Threat Model Architectures</li>
-          <li>• Executive Footprint Reduction Auditing</li>
-        </ul>
-      </div>
-      <div>
-        <span className="text-primary font-bold block mb-1.5">// ENTERPRISE RISK</span>
-        <ul className="space-y-1">
-          <li>• Organization-wide Security Gap Analysis</li>
-          <li>• Legal Evidence Admissibility Consultation</li>
-          <li>• Operational Intelligence Capability Vetting</li>
-        </ul>
-      </div>
-    </div>
+                      <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-4">
+                        {notifySuccess === 'research' ? (
+                          <p className="text-primary font-bold">Your email will be alerted immediately when this research & threat intelligence channel is operational.</p>
+                        ) : (
+                          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'research')} className="space-y-2">
+                            <label className="text-white/60 font-bold block text-[11px] uppercase tracking-wider">
+                              RESEARCH & THREAT INTELLIGENCE NOTIFICATION EMAIL
+                            </label>
+                            <div className="flex gap-2">
+                              <Input 
+                                type="email" 
+                                required 
+                                value={notifyEmail} 
+                                onChange={(e) => setNotifyEmail(e.target.value)} 
+                                placeholder="Your Email:" 
+                                className="bg-background border-primary/10 text-xs h-9 text-white" 
+                              />
+                              <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">
+                                NOTIFY ME
+                              </Button>
+                            </div>
+                          </form>
+                        )}
+                      </div>
+                    </>
+                  )}
 
-    {/* Email Capture Interface Layer */}
-    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-4">
-      {notifySuccess === 'consulting' ? (
-        <p className="text-primary font-bold">Your email will be alerted immediately when this advisory channel is operational.</p>
-      ) : (
-        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'consulting')} className="space-y-2">
-          <label className="text-white/60 font-bold block text-[11px] uppercase tracking-wider">
-            consulting & advisory notification email
-          </label>
-          <div className="flex gap-2">
-            <Input 
-              type="email" 
-              required 
-              value={notifyEmail} 
-              onChange={(e) => setNotifyEmail(e.target.value)} 
-              placeholder="Your Email:" 
-              className="bg-background border-primary/10 text-xs h-9 text-white" 
-            />
-            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">
-              NOTIFY ME
-            </Button>
-          </div>
-        </form>
-      )}
-    </div>
-  </>
-)}
+                  {activeTrack === 'consulting' && (
+                    <>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4 pr-20">
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-primary font-bold text-base uppercase">Operational Security & Strategic Advisory</h4>
+                            <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
+                              Coming Soon
+                            </span>
+                          </div>
+                          <p className="text-white/40 mt-1">C-level threat mitigation blueprints, personal digital footprint scaling, and evidentiary guidance.</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// DEFENSIVE OPSEC</span>
+                          <ul className="space-y-1">
+                            <li>• Tailored Information Security Design</li>
+                            <li>• Active Threat Model Architectures</li>
+                            <li>• Executive Footprint Reduction Auditing</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-primary font-bold block mb-1.5">// ENTERPRISE RISK</span>
+                          <ul className="space-y-1">
+                            <li>• Organization-wide Security Gap Analysis</li>
+                            <li>• Legal Evidence Admissibility Consultation</li>
+                            <li>• Operational Intelligence Capability Vetting</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-4">
+                        {notifySuccess === 'consulting' ? (
+                          <p className="text-primary font-bold">Your email will be alerted immediately when this advisory channel is operational.</p>
+                        ) : (
+                          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'consulting')} className="space-y-2">
+                            <label className="text-white/60 font-bold block text-[11px] uppercase tracking-wider">
+                              consulting & advisory notification email
+                            </label>
+                            <div className="flex gap-2">
+                              <Input 
+                                type="email" 
+                                required 
+                                value={notifyEmail} 
+                                onChange={(e) => setNotifyEmail(e.target.value)} 
+                                placeholder="Your Email:" 
+                                className="bg-background border-primary/10 text-xs h-9 text-white" 
+                              />
+                              <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">
+                                NOTIFY ME
+                              </Button>
+                            </div>
+                          </form>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -829,30 +907,42 @@ export default function Home() {
     {/* Packages Grid */}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
       <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
-        <h4 className="font-mono text-white text-sm mb-3">FRAUD INVESTIGATION COMPLETE</h4>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h4 className="font-mono text-white text-sm">FRAUD INVESTIGATION COMPLETE</h4>
+          <span className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.18em] text-primary">OSINT + FORENSICS</span>
+        </div>
         <p className="text-white/60 text-sm leading-relaxed">
-          Combines OSINT, Digital Forensics, and Research to deliver comprehensive fraud tracing, asset recovery, and court-admissible reports.
+          Pairs open-source discovery, digital trace reconstruction, and strategic research to expose fraud networks, identify linked entities, and support recovery workflows.
         </p>
       </div>
 
       <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
-        <h4 className="font-mono text-white text-sm mb-3">CORPORATE DUE DILIGENCE COMPLETE</h4>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h4 className="font-mono text-white text-sm">CORPORATE DUE DILIGENCE COMPLETE</h4>
+          <span className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.18em] text-primary">OSINT + HACKING</span>
+        </div>
         <p className="text-white/60 text-sm leading-relaxed">
-          Merges OSINT, Ethical Hacking, and Research for deep corporate risk assessment, executive profiling, and pre-M&A intelligence.
+          Merges reputational profiling, technical exposure mapping, and threat analysis for pre-deal investigations, executive vetting, and insider-risk reviews.
         </p>
       </div>
 
       <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
-        <h4 className="font-mono text-white text-sm mb-3">SECURITY THREAT ASSESSMENT COMPLETE</h4>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h4 className="font-mono text-white text-sm">SECURITY THREAT ASSESSMENT COMPLETE</h4>
+          <span className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.18em] text-primary">OSINT + OPSEC</span>
+        </div>
         <p className="text-white/60 text-sm leading-relaxed">
-          Integrates OSINT, Ethical Hacking, and OPSEC Consulting to map enterprise threat landscapes and recommend defensive strategies.
+          Integrates threat intelligence, defensive architecture review, and operational security advisory to reveal enterprise exposure and prioritize mitigation.
         </p>
       </div>
 
       <div className="border border-primary/10 bg-black/30 p-6 rounded hover:border-primary/40 transition-all group">
-        <h4 className="font-mono text-white text-sm mb-3">LITIGATION SUPPORT COMPLETE</h4>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h4 className="font-mono text-white text-sm">LITIGATION SUPPORT COMPLETE</h4>
+          <span className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.18em] text-primary">FORENSICS + LEGAL</span>
+        </div>
         <p className="text-white/60 text-sm leading-relaxed">
-          Combines Digital Forensics, Legal Advisory, and OSINT to build robust, court-ready intelligence packages and expert witness support.
+          Combines digital evidence handling, legal advisory, and OSINT to assemble court-ready case packages with defensible narrative structure and witness support.
         </p>
       </div>
     </div>
@@ -861,7 +951,12 @@ export default function Home() {
         {/* About & Operational Principles Segment */}
         <section id="about" className="relative z-10 border-t border-primary/10 bg-[#070b0c]/70 pt-20 pb-12">
           <div className="mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16 mb-12">
-            <p className="font-mono text-sm tracking-[0.12em] text-primary">OPERATIONAL POSTURE</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="font-mono text-sm tracking-[0.12em] text-primary">OPERATIONAL POSTURE</p>
+              <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[9px] font-mono uppercase tracking-[0.2em] text-primary">
+                In Development
+              </span>
+            </div>
             <h2 className="mt-4 font-mono text-3xl font-bold uppercase text-white sm:text-4xl">
               Core Directives & Compliance
             </h2>
@@ -932,7 +1027,10 @@ export default function Home() {
         {/* Global Terminal Footer with Social Media Connect Grid */}
         <footer className="relative z-10 border-t border-primary/10 bg-background/50 px-5 py-12 text-center font-mono text-xs tracking-[0.08em] text-white/42 sm:px-8 backdrop-blur-sm">
           <div className="mx-auto max-w-[1480px] flex flex-col items-center gap-6">
-            <p>© 2026 SHADOWNODE INTELLIGENCE BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
+            <p>© {currentYear} SHADOWNODE INTELLIGENCE BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
+            <p className="max-w-2xl text-center text-[11px] leading-6 text-white/48">
+              Confidentiality notice: all engagement records, communications, and case materials are handled with strict discretion and protected in accordance with applicable legal and contractual standards.
+            </p>
             
             <p className="text-xs">
               STATUS: <span className="text-primary animate-pulse font-bold">OPERATIONAL</span>
