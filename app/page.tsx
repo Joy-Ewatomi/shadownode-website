@@ -411,7 +411,7 @@ export default function Home() {
     <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
     <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
     <Users className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
-    <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">currently locked</span>
+    <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold">in progress</span>
     <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">GOVERNMENT CONSULTING</h2>
     <p className="mt-4 leading-6 text-white/70 text-sm">
       Intelligence training, lawful surveillance support, and advisory for law enforcement agencies.
@@ -657,228 +657,405 @@ export default function Home() {
                     </>
                   )}
 
-                  {activeTrack === 'hacking' && (
-                    <>
-                      <div className="border-b border-primary/10 pb-4 pr-20">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div>
-                            <h4 className="text-primary font-bold text-base uppercase">Ethical Hacking & Penetration Testing</h4>
-                            <p className="text-white/40 mt-1">Authorized security testing, defensive mapping, and simulated environment campaigns targeting corporate architecture.</p>
-                          </div>
-                          <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">LAUNCHING APRIL 2027</span>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 text-white/70">
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// PENETRATION TESTING</span>
-                          <ul className="space-y-1 text-white/50">
-                            <li>• Network Infrastructure Testing</li>
-                            <li>• Application Security Assessments</li>
-                            <li>• Social Engineering Audits</li>
-                            <li>• Physical Security Evaluations</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// VULNERABILITY ASSESSMENT</span>
-                          <ul className="space-y-1 text-white/50">
-                            <li>• System Exploitation Profiling</li>
-                            <li>• Flaw Categorization Matrix</li>
-                            <li>• Exploitability Risk Verification</li>
-                            <li>• Strategic Remediation Roadmaps</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// RED TEAM OPERATIONS</span>
-                          <ul className="space-y-1 text-white/50">
-                            <li>• Simulated Attack Exercises</li>
-                            <li>• Multi-Vector Attack Campaigns</li>
-                            <li>• Long-Duration Footprint Probing</li>
-                            <li>• Evasion Capability Appraisals</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// INFRASTRUCTURE REVIEW</span>
-                          <ul className="space-y-1 text-white/50">
-                            <li>• Architecture Security Diagnostics</li>
-                            <li>• Segmentation Architecture Verification</li>
-                            <li>• Complete Access Control Auditing</li>
-                            <li>• Threat Vector Validation Models</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// SECURE CODE REVIEW</span>
-                          <ul className="space-y-1 text-white/50">
-                            <li>• Source Code Analysis Schematics</li>
-                            <li>• Vulnerability Detection Audits</li>
-                            <li>• OWASP Compliance Checklists</li>
-                            <li>• Secure Pipeline Integration Guides</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// AWARENESS TRAINING</span>
-                          <ul className="space-y-1 text-white/50">
-                            <li>• Controlled Phishing Campaigns</li>
-                            <li>• Dynamic Employee Attack Readiness</li>
-                            <li>• Password Security Operations</li>
-                            <li>• Social Engineering Countermeasures</li>
-                          </ul>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <span className="text-primary font-bold block mb-1.5">// INCIDENT RESPONSE SIMULATION</span>
-                          <ul className="space-y-1 text-white/50">
-                            <li>• Data Breach Scenario Tabletop Deployments</li>
-                            <li>• Response Workflow Validation Runs</li>
-                            <li>• Operational Team Readiness Assessment</li>
-                            <li>• Continuity Plan Strategic Validation</li>
-                          </ul>
-                        </div>
-                      </div>
+                 {activeTrack === 'hacking' && (
+  <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
+      <div>
+        <h4 className="text-primary font-bold text-base uppercase">Ethical Hacking & Penetration Testing</h4>
+        <p className="text-white/40 mt-1">Authorized security testing, defensive mapping, and simulated environment campaigns targeting corporate architecture.</p>
+      </div>
+      <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">LAUNCHING APRIL 2027</span>
+    </div>
 
-                      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center pt-4 border-t border-primary/10">
-                        <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl w-full">
-                          {notifySuccess === 'hacking' ? (
-                            <p className="text-primary font-bold">We'll email you April, 2027 when Ethical Hacking opens</p>
-                          ) : (
-                            <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'hacking')} className="space-y-2">
-                              <label className="text-white/60 font-bold block text-[11px]">ETHICAL HACKING NOTIFICATION EMAIIL</label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="email" 
-                                  required 
-                                  value={notifyEmail} 
-                                  onChange={(e) => setNotifyEmail(e.target.value)} 
-                                  placeholder="Your Email:" 
-                                  className="bg-background border-primary/10 text-xs h-9 text-white" 
-                                />
-                                <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
-                              </div>
-                            </form>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-6 text-white/70">
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// PENETRATION TESTING</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Network Infrastructure Testing</li>
+          <li>• Application Security Assessments</li>
+          <li>• Social Engineering Audits</li>
+          <li>• Physical Security Evaluations</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// VULNERABILITY ASSESSMENT</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• System Exploitation Profiling</li>
+          <li>• Flaw Categorization Matrix</li>
+          <li>• Exploitability Risk Verification</li>
+          <li>• Strategic Remediation Roadmaps</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// RED TEAM OPERATIONS</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Simulated Attack Exercises</li>
+          <li>• Multi-Vector Attack Campaigns</li>
+          <li>• Long-Duration Footprint Probing</li>
+          <li>• Evasion Capability Appraisals</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// INFRASTRUCTURE REVIEW</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Architecture Security Diagnostics</li>
+          <li>• Segmentation Architecture Verification</li>
+          <li>• Complete Access Control Auditing</li>
+          <li>• Threat Vector Validation Models</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// SECURE CODE REVIEW</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Source Code Analysis Schematics</li>
+          <li>• Vulnerability Detection Audits</li>
+          <li>• OWASP Compliance Checklists</li>
+          <li>• Secure Pipeline Integration Guides</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// AWARENESS TRAINING</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Controlled Phishing Campaigns</li>
+          <li>• Dynamic Employee Attack Readiness</li>
+          <li>• Password Security Operations</li>
+          <li>• Social Engineering Countermeasures</li>
+        </ul>
+      </div>
+      <div className="sm:col-span-2">
+        <span className="text-primary font-bold block mb-1.5">// INCIDENT RESPONSE SIMULATION</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Data Breach Scenario Tabletop Deployments</li>
+          <li>• Response Workflow Validation Runs</li>
+          <li>• Operational Team Readiness Assessment</li>
+          <li>• Continuity Plan Strategic Validation</li>
+        </ul>
+      </div>
+    </div>
 
+    {/* Notification Form */}
+    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-8">
+      {notifySuccess === 'hacking' ? (
+        <p className="text-primary font-bold">We'll email you in April 2027 when Ethical Hacking launches.</p>
+      ) : (
+        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'hacking')} className="space-y-2">
+          <label className="text-white/60 font-bold block text-xs">ETHICAL HACKING NOTIFICATION EMAIL</label>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              required
+              value={notifyEmail}
+              onChange={(e) => setNotifyEmail(e.target.value)}
+              placeholder="Your Email"
+              className="bg-background border-primary/10 text-xs h-9 text-white"
+            />
+            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+          </div>
+        </form>
+      )}
+    </div>
+  </>
+)}
+
+{activeTrack === 'gov' && (
+  <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
+      <div>
+        <h4 className="text-primary font-bold text-base uppercase">Government Consulting</h4>
+        <p className="text-white/40 mt-1">Intelligence training, lawful surveillance support, and advisory for law enforcement agencies.</p>
+      </div>
+      <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">IN PROGRESS</span>
+    </div>
+
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 text-white/70">
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// INTELLIGENCE TRAINING</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• OSINT & Digital Forensics Workshops</li>
+          <li>• Cyber Security Training for Students & Professionals <span className="text-primary font-bold mb-1.5">(AVAILABLE)</span></li>
+          <li>• Threat Intelligence Capacity Building</li>
+          <li>• Ethical Hacking Awareness Programs</li>
+          <li>• Law Enforcement Investigation Techniques</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// LAWFUL SURVEILLANCE SUPPORT</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Legal Framework Advisory</li>
+          <li>• Surveillance Strategy Development</li>
+          <li>• Evidence Collection Protocols</li>
+          <li>• Compliance & Court Admissibility Guidance</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// STRATEGIC ADVISORY</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Agency Process Optimization</li>
+          <li>• Inter-Agency Coordination Support</li>
+          <li>• Risk Assessment for Public Safety</li>
+          <li>• Policy & Operational Intelligence Briefings</li>
+        </ul>
+      </div>
+    </div>
+
+    {/* Notification Form */}
+    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-8">
+      {notifySuccess === 'gov' ? (
+        <p className="text-primary font-bold">We'll notify you when each Government Consulting service becomes available.</p>
+      ) : (
+        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'gov')} className="space-y-2">
+          <label className="text-white/60 font-bold block text-xs">GOVERNMENT CONSULTING NOTIFICATION EMAIL</label>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              required
+              value={notifyEmail}
+              onChange={(e) => setNotifyEmail(e.target.value)}
+              placeholder="Your Email"
+              className="bg-background border-primary/10 text-xs h-9 text-white"
+            />
+            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+          </div>
+        </form>
+      )}
+    </div>
+  </>
+)}
+
+{activeTrack === 'correctional' && (
+  <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
+      <div>
+        <h4 className="text-primary font-bold text-base uppercase">Correctional Intelligence</h4>
+        <p className="text-white/40 mt-1">Inmate monitoring, risk assessment, and intelligence support for correctional facilities.</p>
+      </div>
+      <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">CURRENTLY LOCKED</span>
+    </div>
+
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 text-white/70">
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// INMATE MONITORING</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Communication Pattern Analysis</li>
+          <li>• Visitor & Contact Intelligence</li>
+          <li>• Contraband & Gang Activity Tracking</li>
+          <li>• Behavioral Risk Profiling</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// RISK ASSESSMENT</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Recidivism Prediction Models</li>
+          <li>• Threat Level Evaluation</li>
+          <li>• Facility Vulnerability Audits</li>
+          <li>• Staff Safety Intelligence Briefs</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// INTELLIGENCE SUPPORT</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Internal Security Audits</li>
+          <li>• External Threat Monitoring</li>
+          <li>• Rehabilitation Progress Tracking</li>
+          <li>• Correctional Policy Advisory</li>
+        </ul>
+      </div>
+    </div>
+
+    {/* Notification Form */}
+    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-8">
+      {notifySuccess === 'correctional' ? (
+        <p className="text-primary font-bold">We'll notify you when Correctional Intelligence becomes available.</p>
+      ) : (
+        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'correctional')} className="space-y-2">
+          <label className="text-white/60 font-bold block text-xs">CORRECTIONAL INTELLIGENCE NOTIFICATION EMAIL</label>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              required
+              value={notifyEmail}
+              onChange={(e) => setNotifyEmail(e.target.value)}
+              placeholder="Your Email"
+              className="bg-background border-primary/10 text-xs h-9 text-white"
+            />
+            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+          </div>
+        </form>
+      )}
+    </div>
+  </>
+)}
+
+{activeTrack === 'legal' && (
+  <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
+      <div>
+        <h4 className="text-primary font-bold text-base uppercase">Legal Advisory</h4>
+        <p className="text-white/40 mt-1">Litigation support, AML investigations, compliance consulting, and court-ready evidence preparation.</p>
+      </div>
+      <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">CURRENTLY LOCKED</span>
+    </div>
+
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 text-white/70">
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// LITIGATION SUPPORT</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Digital Evidence Authentication</li>
+          <li>• Expert Witness Report Preparation</li>
+          <li>• Chain-of-Custody Documentation</li>
+          <li>• Courtroom Presentation Materials</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// AML & COMPLIANCE</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Anti-Money Laundering Investigations</li>
+          <li>• Sanctions & PEP Screening</li>
+          <li>• Regulatory Compliance Audits</li>
+          <li>• Financial Crime Intelligence Reports</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// EVIDENCE PREPARATION</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Forensic Data Recovery & Analysis</li>
+          <li>• Metadata & Timeline Reconstruction</li>
+          <li>• Admissibility Assessment</li>
+          <li>• Legal Brief & Affidavit Support</li>
+        </ul>
+      </div>
+    </div>
+
+    {/* Notification Form */}
+    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-8">
+      {notifySuccess === 'legal' ? (
+        <p className="text-primary font-bold">We'll notify you when Legal Advisory becomes available.</p>
+      ) : (
+        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'legal')} className="space-y-2">
+          <label className="text-white/60 font-bold block text-xs">LEGAL ADVISORY NOTIFICATION EMAIL</label>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              required
+              value={notifyEmail}
+              onChange={(e) => setNotifyEmail(e.target.value)}
+              placeholder="Your Email"
+              className="bg-background border-primary/10 text-xs h-9 text-white"
+            />
+            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+          </div>
+        </form>
+      )}
+    </div>
+  </>
+)}
                   {activeTrack === 'research' && (
-                    <>
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4 pr-20">
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <h4 className="text-primary font-bold text-base uppercase">Research & Threat Intelligence</h4>
-                            <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
-                              Coming Soon
-                            </span>
-                          </div>
-                          <p className="text-white/40 mt-1">Proactive threat tracking, organized group profiling, and strategic foresight reports.</p>
-                        </div>
-                      </div>
+  <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
+      <div>
+        <h4 className="text-primary font-bold text-base uppercase">Research & Threat Intelligence</h4>
+        <p className="text-white/40 mt-1">Proactive threat tracking, organized group profiling, and strategic foresight reports.</p>
+      </div>
+      <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">COMING SOON</span>
+    </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// COMBAT ENVIRONMENTS</span>
-                          <ul className="space-y-1">
-                            <li>• Corporate Threat Hunting Operations</li>
-                            <li>• Criminal Syndicate Map Layouts</li>
-                            <li>• Asset Theft/Fraud Group Identification</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// STRATEGIC COMPLIANCE</span>
-                          <ul className="space-y-1">
-                            <li>• Sanction List Verification Records</li>
-                            <li>• Supply Chain Vulnerability Mapping</li>
-                            <li>• High-Value Competitor Threat Assessment</li>
-                          </ul>
-                        </div>
-                      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 text-white/70">
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// COMBAT ENVIRONMENTS</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Corporate Threat Hunting Operations</li>
+          <li>• Criminal Syndicate Map Layouts</li>
+          <li>• Asset Theft/Fraud Group Identification</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// STRATEGIC COMPLIANCE</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Sanction List Verification Records</li>
+          <li>• Supply Chain Vulnerability Mapping</li>
+          <li>• High-Value Competitor Threat Assessment</li>
+        </ul>
+      </div>
+    </div>
 
-                      <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-4">
-                        {notifySuccess === 'research' ? (
-                          <p className="text-primary font-bold">Your email will be alerted immediately when this research & threat intelligence channel is operational.</p>
-                        ) : (
-                          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'research')} className="space-y-2">
-                            <label className="text-white/60 font-bold block text-[11px] uppercase tracking-wider">
-                              RESEARCH & THREAT INTELLIGENCE NOTIFICATION EMAIL
-                            </label>
-                            <div className="flex gap-2">
-                              <Input 
-                                type="email" 
-                                required 
-                                value={notifyEmail} 
-                                onChange={(e) => setNotifyEmail(e.target.value)} 
-                                placeholder="Your Email:" 
-                                className="bg-background border-primary/10 text-xs h-9 text-white" 
-                              />
-                              <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">
-                                NOTIFY ME
-                              </Button>
-                            </div>
-                          </form>
-                        )}
-                      </div>
-                    </>
-                  )}
+    {/* Notification Form */}
+    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-8">
+      {notifySuccess === 'research' ? (
+        <p className="text-primary font-bold">We'll notify you when Research & Threat Intelligence becomes available.</p>
+      ) : (
+        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'research')} className="space-y-2">
+          <label className="text-white/60 font-bold block text-xs">RESEARCH & THREAT INTELLIGENCE NOTIFICATION EMAIL</label>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              required
+              value={notifyEmail}
+              onChange={(e) => setNotifyEmail(e.target.value)}
+              placeholder="Your Email"
+              className="bg-background border-primary/10 text-xs h-9 text-white"
+            />
+            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+          </div>
+        </form>
+      )}
+    </div>
+  </>
+)}
 
-                  {activeTrack === 'consulting' && (
-                    <>
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4 pr-20">
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <h4 className="text-primary font-bold text-base uppercase">Operational Security & Strategic Advisory</h4>
-                            <span className="text-[9px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
-                              Coming Soon
-                            </span>
-                          </div>
-                          <p className="text-white/40 mt-1">C-level threat mitigation blueprints, personal digital footprint scaling, and evidentiary guidance.</p>
-                        </div>
-                      </div>
+         {activeTrack === 'opsec' && (
+  <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/10 pb-4">
+      <div>
+        <h4 className="text-primary font-bold text-base uppercase">OPSEC Consulting</h4>
+        <p className="text-white/40 mt-1">Strategic security architecture, executive protection, and operational security advisory.</p>
+      </div>
+      <span className="text-[10px] font-mono text-primary border border-primary/30 bg-primary/5 px-2 py-1 rounded uppercase font-bold self-start sm:self-center">CURRENTLY LOCKED</span>
+    </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-white/70">
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// DEFENSIVE OPSEC</span>
-                          <ul className="space-y-1">
-                            <li>• Tailored Information Security Design</li>
-                            <li>• Active Threat Model Architectures</li>
-                            <li>• Executive Footprint Reduction Auditing</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-primary font-bold block mb-1.5">// ENTERPRISE RISK</span>
-                          <ul className="space-y-1">
-                            <li>• Organization-wide Security Gap Analysis</li>
-                            <li>• Legal Evidence Admissibility Consultation</li>
-                            <li>• Operational Intelligence Capability Vetting</li>
-                          </ul>
-                        </div>
-                      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 text-white/70">
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// DEFENSIVE OPSEC</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Tailored Information Security Design</li>
+          <li>• Active Threat Model Architectures</li>
+          <li>• Executive Footprint Reduction Auditing</li>
+          <li>• Digital Privacy Hardening</li>
+        </ul>
+      </div>
+      <div>
+        <span className="text-primary font-bold block mb-1.5">// ENTERPRISE RISK</span>
+        <ul className="space-y-1 text-white/50">
+          <li>• Organization-wide Security Gap Analysis</li>
+          <li>• Legal Evidence Admissibility Consultation</li>
+          <li>• Operational Intelligence Capability Vetting</li>
+          <li>• Crisis Response Planning</li>
+        </ul>
+      </div>
+    </div>
 
-                      <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-4">
-                        {notifySuccess === 'consulting' ? (
-                          <p className="text-primary font-bold">Your email will be alerted immediately when this advisory channel is operational.</p>
-                        ) : (
-                          <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'consulting')} className="space-y-2">
-                            <label className="text-white/60 font-bold block text-[11px] uppercase tracking-wider">
-                              consulting & advisory notification email
-                            </label>
-                            <div className="flex gap-2">
-                              <Input 
-                                type="email" 
-                                required 
-                                value={notifyEmail} 
-                                onChange={(e) => setNotifyEmail(e.target.value)} 
-                                placeholder="Your Email:" 
-                                className="bg-background border-primary/10 text-xs h-9 text-white" 
-                              />
-                              <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80">
-                                NOTIFY ME
-                              </Button>
-                            </div>
-                          </form>
-                        )}
-                      </div>
-                    </>
-                  )}
+    {/* Notification Form */}
+    <div className="bg-primary/[0.03] border border-primary/20 p-4 rounded max-w-xl mt-8">
+      {notifySuccess === 'opsec' ? (
+        <p className="text-primary font-bold">We'll notify you when OPSEC Consulting becomes available.</p>
+      ) : (
+        <form onSubmit={(e: FormEvent) => handleNotifySubmit(e, 'opsec')} className="space-y-2">
+          <label className="text-white/60 font-bold block text-xs">OPSEC CONSULTING NOTIFICATION EMAIL</label>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              required
+              value={notifyEmail}
+              onChange={(e) => setNotifyEmail(e.target.value)}
+              placeholder="Your Email"
+              className="bg-background border-primary/10 text-xs h-9 text-white"
+            />
+            <Button type="submit" className="bg-primary text-background text-xs font-bold px-4 h-9 hover:bg-primary/80 shrink-0">GET NOTIFIED</Button>
+          </div>
+        </form>
+      )}
+    </div>
+  </>
+)}
                 </motion.div>
               </motion.div>
             )}
@@ -953,9 +1130,6 @@ export default function Home() {
           <div className="mx-auto max-w-[1480px] px-5 sm:px-8 lg:px-16 mb-12">
             <div className="flex flex-wrap items-center gap-3">
               <p className="font-mono text-sm tracking-[0.12em] text-primary">OPERATIONAL POSTURE</p>
-              <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[9px] font-mono uppercase tracking-[0.2em] text-primary">
-                In Development
-              </span>
             </div>
             <h2 className="mt-4 font-mono text-3xl font-bold uppercase text-white sm:text-4xl">
               Core Directives & Compliance
@@ -1034,6 +1208,10 @@ export default function Home() {
             
             <p className="text-xs">
               STATUS: <span className="text-primary animate-pulse font-bold">OPERATIONAL</span>
+            </p>
+
+             <p className="text-white/40 text-xs mt-4">
+             All activities conducted within legal and ethical boundaries, in compliance with NDPA and relevant laws.
             </p>
 
             {/* Social Media Platform Grid Placeholder Layout */}
