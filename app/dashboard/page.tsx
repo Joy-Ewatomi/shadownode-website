@@ -13,35 +13,33 @@ import { AnimatedGradient } from "../../components/animations/AnimatedGradient"
 
 
 
-export type CaseStatus =
-  | "submitted"
-  | "active"
-  | "completed"
-  | "cancelled"
-
-
-
 export interface CaseData {
 
-  id:string
+  id: string
 
-  title:string
+  case_number: string
 
-  description:string | null
+  title: string
 
-  service_type:string | null
+  description?: string
 
-  status:CaseStatus
+  service_type: string
 
-  estimated_price:number | null
+  status:
+    | "submitted"
+    | "active"
+    | "completed"
+    | "cancelled"
 
-  final_price:number | null
+  priority: string
 
-  price_notes:string | null
+  progress: number
 
-  created_at:string
+  payment_status: string
 
-  updated_at:string
+  created_at: string
+
+  estimated_completion?: string | null
 
 }
 
@@ -115,7 +113,7 @@ error
 =
 await supabase
 
-.from("requests")
+.from("cases")
 
 .select("*")
 

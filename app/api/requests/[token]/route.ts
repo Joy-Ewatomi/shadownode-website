@@ -1,5 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
-import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from "@supabase/supabase-js"
+import { NextRequest, NextResponse } from "next/server"
+
 
 
 const supabaseUrl =
@@ -19,11 +20,14 @@ supabaseKey
 
 
 
+
 export async function GET(
 
 _request:NextRequest,
 
-{params}:
+{
+params
+}:
 {
 params:Promise<{token:string}>
 }
@@ -58,12 +62,13 @@ await supabase
 `
 id,
 case_number,
+title,
 service_type,
 status,
-progress,
-timeline,
 created_at,
-final_price
+final_price,
+currency,
+is_anonymous
 `
 )
 
@@ -73,7 +78,6 @@ token
 )
 
 .single()
-
 
 
 
@@ -106,8 +110,17 @@ return NextResponse.json(
 
 {
 
+
+request_id:
+data.id,
+
+
 case_number:
 data.case_number,
+
+
+title:
+data.title,
 
 
 service_type:
@@ -118,20 +131,21 @@ status:
 data.status,
 
 
-progress:
-data.progress,
-
-
-timeline:
-data.timeline,
-
-
 created_at:
 data.created_at,
 
 
 final_price:
-data.final_price
+data.final_price,
+
+
+currency:
+data.currency,
+
+
+is_anonymous:
+data.is_anonymous
+
 
 }
 
@@ -147,7 +161,7 @@ catch(error){
 
 
 console.error(
-"Error fetching request:",
+"Tracking error:",
 error
 )
 

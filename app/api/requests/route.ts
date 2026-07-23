@@ -38,6 +38,7 @@ export async function POST(
 
 
 
+
     // VALIDATION
 
     if(
@@ -60,11 +61,14 @@ export async function POST(
 
 
 
+
+
     if(description.trim().length < 20){
 
       return NextResponse.json(
         {
-          error:"Description must be at least 20 characters"
+          error:
+          "Description must be at least 20 characters"
         },
         {
           status:400
@@ -78,7 +82,8 @@ export async function POST(
 
 
 
-    // CREATE ANONYMOUS TRACKING TOKEN
+
+    // GENERATE ANONYMOUS TRACKING TOKEN
 
     const token = nanoid(32)
 
@@ -87,8 +92,9 @@ export async function POST(
 
 
 
+
     // PRICE ESTIMATION
-    // Later replaced/enhanced with AI analyzer
+    // Later replace with AI case analyzer
 
     const priceEstimate = estimatePrice({
 
@@ -107,7 +113,7 @@ export async function POST(
 
 
 
-    // SAVE REQUEST
+    // CREATE ANONYMOUS REQUEST
 
 
     const {
@@ -121,14 +127,22 @@ export async function POST(
 
       {
 
+
         token,
+
+
+        title:
+        `${serviceType} Request`,
+
 
 
         service_type:
         serviceType,
 
 
+
         description,
+
 
 
         timeline,
@@ -136,7 +150,7 @@ export async function POST(
 
 
         contact_method:
-        contact,
+        contact || null,
 
 
 
@@ -150,6 +164,16 @@ export async function POST(
 
 
 
+        ai_price_estimate:
+        priceEstimate.estimatedPrice,
+
+
+
+        currency:
+        "NGN",
+
+
+
         status:
         "submitted",
 
@@ -160,8 +184,14 @@ export async function POST(
 
 
 
+        priority:
+        "normal",
+
+
+
         created_at:
         new Date().toISOString()
+
 
       }
 
@@ -189,7 +219,8 @@ export async function POST(
       return NextResponse.json(
 
         {
-          error:"Failed to submit request"
+          error:
+          "Failed to submit request"
         },
 
         {
@@ -206,9 +237,8 @@ export async function POST(
 
 
 
-    // RETURN ONLY TRACKING DATA
-    // NO PRICE EXPOSED
 
+    // RETURN TRACKING INFORMATION ONLY
 
     return NextResponse.json(
 
@@ -216,9 +246,13 @@ export async function POST(
 
         success:true,
 
+
         token,
 
-        request_id:data.id,
+
+        request_id:
+        data.id,
+
 
         message:
         "Request submitted successfully. Your case is under review."
@@ -235,7 +269,10 @@ export async function POST(
 
 
 
+
+
   }
+
 
   catch(error){
 
@@ -246,10 +283,12 @@ export async function POST(
     )
 
 
+
     return NextResponse.json(
 
       {
-        error:"Invalid request"
+        error:
+        "Invalid request"
       },
 
       {
