@@ -49,7 +49,7 @@ const principles = [
 ]
 
 const navItems = [
-  { label: 'SERVICES', href: '#services' },
+  { label: 'OPERATIONAL CAPABILITIES', href: '#services' },
   { label: 'ABOUT', href: '#about' },
   { label: 'METHODOLOGY', href: '#methodology' },
   { label: 'REQUEST', href: '/request', active: true },
@@ -127,14 +127,14 @@ export default function Home() {
               <div className="relative grid h-14 w-14 shrink-0 place-items-center">
                 <div className="absolute inset-0 bg-primary/20 [clip-path:polygon(50%_0,95%_25%,95%_75%,50%_100%,5%_75%,5%_25%)]" />
                 <div className="absolute inset-[3px] bg-background [clip-path:polygon(50%_0,95%_25%,95%_75%,50%_100%,5%_75%,5%_25%)]" />
-                <span className="relative font-mono text-base tracking-wider text-white">SIB</span>
+                <span className="relative font-mono text-base tracking-wider text-white">SOB</span>
               </div>
               <div className="leading-none">
                 <div className="font-mono text-xl font-bold tracking-[0.08em] text-white sm:text-2xl">
                   SHADOWNODE
                 </div>
                 <div className="mt-2 font-mono text-xs tracking-[0.22em] text-primary">
-                  INTELLIGENCE BUREAU
+                  OPERATIONS BUREAU
                 </div>
               </div>
             </Link>
@@ -261,7 +261,7 @@ export default function Home() {
                 <div className="flex items-center justify-between border-b border-white/10 px-6 py-5 font-mono text-sm">
                   <div className="flex items-center gap-3">
                     <span className="h-3 w-3 rounded-full bg-primary shadow-[0_0_14px_rgba(39,213,110,0.9)]" />
-                    <span className="text-primary">SIB</span>
+                    <span className="text-primary">SOB</span>
                     <span className="text-white/45">//</span>
                     <span className="text-white/76">OPERATIONS CONSOLE</span>
                   </div>
@@ -273,7 +273,7 @@ export default function Home() {
                 <div className="space-y-8 p-6 font-mono text-sm sm:p-8">
                   <div>
                     <p className="text-primary">$ whoami</p>
-                    <p className="mt-2 text-white/58">shadownode-intelligence-bureau</p>
+                    <p className="mt-2 text-white/58">shadownode-operations-bureau</p>
                   </div>
 
                   <div>
@@ -1201,7 +1201,7 @@ export default function Home() {
         {/* Global Terminal Footer with Social Media Connect Grid */}
         <footer className="relative z-10 border-t border-primary/10 bg-background/50 px-5 py-12 text-center font-mono text-xs tracking-[0.08em] text-white/42 sm:px-8 backdrop-blur-sm">
           <div className="mx-auto max-w-[1480px] flex flex-col items-center gap-6">
-            <p>© {currentYear} SHADOWNODE INTELLIGENCE BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
+            <p>© {currentYear} SHADOWNODE OPERATIONS BUREAU. ALL INQUIRIES CONFIDENTIAL.</p>
             <p className="max-w-2xl text-center text-[11px] leading-6 text-white/48">
               Confidentiality notice: all engagement records, communications, and case materials are handled with strict discretion and protected in accordance with applicable legal and contractual standards.
             </p>

@@ -1,67 +1,44 @@
 'use client'
-
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { useState } from 'react'
 
-export default function LoginPage() {
+export default function AuthPage() {
+  const [tab, setTab] = useState<'login' | 'signup'>('signup') // Default is signup
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<'login' | 'signup'>('signup')
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
+    const endpoint = tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
+    const bodyData = tab === 'login' 
+      ? { username, password } 
+      : { email, username, password }
+
     try {
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(bodyData)
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        setError('Invalid email or password')
+        setError(data.error || (tab === 'login' ? 'Invalid username or password' : 'Signup failed'))
         return
       }
 
-      // Redirect to dashboard
       window.location.href = '/dashboard'
     } catch (err) {
-      setError('signup failed. Please try again.')
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        setError(data.error || 'login failed')
-        return
-      }
-
-      // Redirect to dashboard
-      window.location.href = '/dashboard'
-    } catch (err) {
-      setError('Signup failed. Please try again.')
-      console.error(err)
+      setError('Network error. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -79,9 +56,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md mx-auto px-6 relative z-10">
         <Link href="/" className="flex items-center gap-2 mb-12 justify-center">
           <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">SIB</span>
+            <span className="text-primary-foreground font-bold text-sm">SOB</span>
           </div>
-          <span className="text-sm font-bold text-primary">SHADOWNODE INTELLIGENCE BUREAU</span>
+          <span className="text-sm font-bold text-primary">SHADOWNODE OPERATIONS BUREAU</span>
         </Link>
 
         <div className="bg-card border border-border/30 rounded-lg p-8">
@@ -90,9 +67,7 @@ export default function LoginPage() {
             <button
               onClick={() => setTab('login')}
               className={`flex-1 py-3 text-center font-medium transition border-b-2 ${
-                tab === 'login'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-foreground/50 hover:text-foreground'
+                tab === 'login' ? 'border-primary text-primary' : 'border-transparent text-foreground/50 hover:text-foreground'
               }`}
             >
               Sign In
@@ -100,24 +75,34 @@ export default function LoginPage() {
             <button
               onClick={() => setTab('signup')}
               className={`flex-1 py-3 text-center font-medium transition border-b-2 ${
-                tab === 'signup'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-foreground/50 hover:text-foreground'
+                tab === 'signup' ? 'border-primary text-primary' : 'border-transparent text-foreground/50 hover:text-foreground'
               }`}
             >
               Create Account
             </button>
           </div>
 
-          <form onSubmit={tab === 'login' ? handleLogin : handleSignup} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {tab === 'signup' && (
+              <div>
+                <label className="block text-sm font-medium mb-2">Email Address</label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  required
+                />
+              </div>
+            )}
+
             <div>
-              <label className="block text-sm font-medium mb-2">Email Address</label>
+              <label className="block text-sm font-medium mb-2">Username</label>
               <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="bg-background border border-border/50"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="yourusername"
                 required
               />
             </div>
@@ -129,7 +114,6 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="bg-background border border-border/50"
                 required
                 minLength={8}
               />
@@ -141,13 +125,13 @@ export default function LoginPage() {
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
               disabled={loading}
               className="w-full bg-primary text-primary-foreground py-3 rounded font-medium hover:bg-primary/90 disabled:opacity-50 transition"
             >
               {loading ? 'Please wait...' : tab === 'login' ? 'Sign In' : 'Create Account'}
-            </button>
+            </Button>
           </form>
 
           {tab === 'login' && (

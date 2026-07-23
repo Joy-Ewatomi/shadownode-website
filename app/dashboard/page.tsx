@@ -62,9 +62,9 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 bg-primary rounded flex items-center justify-center flex-shrink-0">
-              <span className="text-primary-foreground font-bold text-sm">SIB</span>
+              <span className="text-primary-foreground font-bold text-sm">SOB</span>
             </div>
-            <span className="text-lg sm:text-xl font-bold text-primary truncate">SHADOWNODE INTELLIGENCE BUREAU</span>
+            <span className="text-lg sm:text-xl font-bold text-primary truncate">SHADOWNODE OPERATIONS BUREAU</span>
           </Link>
           <button
             onClick={handleLogout}

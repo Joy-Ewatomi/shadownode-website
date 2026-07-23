@@ -119,9 +119,9 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">SIB</span>
+              <span className="text-primary-foreground font-bold text-sm">SOB</span>
             </div>
-            <span className="text-xl font-bold text-primary">SHADOWNODE INTELLIGENCE BUREAU</span>
+            <span className="text-xl font-bold text-primary">SHADOWNODE OPERATIONS BUREAU</span>
           </Link>
           <div className="flex items-center gap-4">
             <span className="text-sm text-foreground/60">Admin Portal</span>
