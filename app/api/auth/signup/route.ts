@@ -1,174 +1,37 @@
-import { supabaseAdmin } from "@/lib/supabase-admin"
-import { NextRequest, NextResponse } from "next/server"
-
-
-export async function POST(
-request: NextRequest
-){
-
-try{
-
-
-const {
-email,
-username,
-password
-}
-=
-await request.json()
-
-
-
-if(
-!email ||
-!username ||
-!password ||
-password.length < 8
-){
-
-return NextResponse.json(
-{
-error:"Username, email and password required"
-},
-{
-status:400
-}
-)
-
-}
-
-
-
-
-// CREATE SUPABASE AUTH USER
-
-const {
-data:authData,
-error:authError
-}
-=
-await supabaseAdmin.auth.admin.createUser({
-
-email,
-
-password,
-
-email_confirm:true
-
-})
-
-
-
-
-if(authError){
-
-return NextResponse.json(
-{
-error:authError.message
-},
-{
-status:400
-}
-)
-
-}
-
-
-
-if(!authData.user){
-
-return NextResponse.json(
-{
-error:"User creation failed"
-},
-{
-status:500
-}
-)
-
-}
-
-
-
-
-// CREATE PROFILE
-
-
-const {
-error:profileError
-}
-=
-await supabaseAdmin
-.from("profiles")
-.insert({
-
-id:authData.user.id,
-
-email,
-
-username,
-
-full_name:username,
-
-role:"client"
-
-})
-
-
-
-
-if(profileError){
-
-
-console.error(
-profileError
-)
-
-
-return NextResponse.json(
-{
-error:profileError.message
-},
-{
-status:500
-}
-)
-
-}
-
-
-
-
-
-return NextResponse.json(
-{
-success:true,
-user:authData.user
-},
-{
-status:201
-}
-)
-
-
-
-}
-
-catch(error){
-
-console.error(error)
-
-
-return NextResponse.json(
-{
-error:"Signup failed"
-},
-{
-status:500
-}
-)
-
-}
-
-
+import { NextResponse } from "next/server";
+import { auditLog, hashPassword, hashToken, newToken, validatePassword, validateUsername } from "@/lib/auth";
+import { sendVerificationEmail } from "@/lib/email";
+import { query } from "@/lib/db";
+
+export async function POST(req: Request) {
+  try {
+    const { username: rawUsername, email: rawEmail, password, confirmPassword } = await req.json();
+    const username = typeof rawUsername === "string" ? rawUsername.trim() : "";
+    const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+    if (!validateUsername(username) || !/^\S+@\S+\.\S+$/.test(email) || typeof password !== "string" || !validatePassword(password)) {
+      return NextResponse.json({ error: "Use a valid email, a 4-30 character username, and a 12+ character password with uppercase, lowercase, number, and symbol." }, { status: 400 });
+    }
+    if (confirmPassword !== undefined && password !== confirmPassword) return NextResponse.json({ error: "Passwords do not match" }, { status: 400 });
+    const password_hash = await hashPassword(password);
+    const { rows } = await query<{ id: string; username: string; email: string }>(
+      `INSERT INTO app_users (username, email, password_hash, status, role)
+       VALUES ($1, $2, $3, 'pending', 'client')
+       RETURNING id, username, email`,
+      [username, email, password_hash],
+    ).catch((error) => {
+      if (error?.code === "23505") return { rows: [] };
+      throw error;
+    });
+    const user = rows[0];
+    if (!user) return NextResponse.json({ error: "An account with those details already exists" }, { status: 409 });
+    const verificationToken = newToken();
+    await query("INSERT INTO email_verifications (user_id, token_hash, expires_at) VALUES ($1, $2, $3)", [user.id, hashToken(verificationToken), new Date(Date.now() + 86400_000).toISOString()]);
+    await query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE name = 'client' ON CONFLICT DO NOTHING", [user.id]).catch(() => undefined);
+    await auditLog(user.id, "registration", req, { email });
+    const emailSent = await sendVerificationEmail(email, verificationToken);
+    return NextResponse.json({ message: emailSent ? "Account created. Check your email to verify it." : "Account created. Configure Resend to enable email verification.", requiresEmailVerification: true }, { status: 201 });
+  } catch (error) {
+    console.error("SIGNUP ERROR:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
 }

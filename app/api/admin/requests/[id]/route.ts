@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
+import { getCurrentUser } from "@/lib/auth"
 import { NextRequest, NextResponse } from "next/server"
 
 
@@ -25,8 +26,7 @@ const {id}=await params
 const body = await request.json()
 
 
-const supabase =
-await createClient()
+const supabase = supabaseAdmin
 
 
 
@@ -36,14 +36,7 @@ await createClient()
 // CHECK AUTH
 
 
-const {
-data:{
-user
-}
-
-}
-=
-await supabase.auth.getUser()
+const user = await getCurrentUser()
 
 
 
@@ -69,33 +62,7 @@ status:401
 
 
 
-// CHECK ADMIN
-
-
-const {
-data:profile
-}
-
-=
-await supabase
-
-.from("profiles")
-
-.select("role")
-
-.eq(
-"id",
-user.id
-)
-
-.single()
-
-
-
-
-
-
-if(profile?.role !== "admin"){
+if (user.role !== "admin") {
 
 
 return NextResponse.json(

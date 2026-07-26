@@ -1,14 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
+import { clearSession, deleteCurrentSession } from "@/lib/auth";
 
 export async function POST() {
-  const response = NextResponse.json(
-    { success: true },
-    { status: 200 }
-  )
-
-  // Clear auth cookies
-  response.cookies.delete('sb-auth-token')
-  response.cookies.delete('sb-user-id')
-
-  return response
+  await deleteCurrentSession();
+  return clearSession(NextResponse.json({ success: true, message: "Logged out successfully" }));
 }

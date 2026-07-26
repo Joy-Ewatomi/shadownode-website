@@ -1,0 +1,196 @@
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
+import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
+import { query } from "@/lib/db";
+
+const SESSION_COOKIE = "shadownode_session";
+const TWO_FACTOR_COOKIE = "shadownode_2fa";
+const SESSION_DAYS = 7;
+const TWO_FACTOR_MINUTES = 10;
+
+export type AppUser = {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  email_verified_at: string | null;
+  totp_enabled: boolean;
+};
+
+export type AuthRole = "client" | "investigator" | "analyst" | "administrator" | "super_administrator";
+
+export function hashToken(value: string) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+export function newToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("base64url");
+}
+
+export async function hashPassword(password: string) {
+  return bcrypt.hash(password, 12);
+}
+
+export async function verifyPassword(password: string, passwordHash: string) {
+  return bcrypt.compare(password, passwordHash);
+}
+
+export function sessionCookieOptions(maxAge = SESSION_DAYS * 24 * 60 * 60) {
+  return { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge };
+}
+
+export async function createSession(user: AppUser, request?: NextRequest) {
+  const token = newToken();
+  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
+  await query(
+    `INSERT INTO sessions (user_id, token, ip, user_agent, expires_at, last_activity)
+     VALUES ($1, $2, $3, $4, $5, NOW())`,
+    [user.id, hashToken(token), getIp(request), request?.headers.get("user-agent") ?? null, expiresAt],
+  );
+  await auditLog(user.id, "login", request, { success: true });
+  return token;
+}
+
+export function attachSession(response: NextResponse, token: string) {
+  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
+  return response;
+}
+
+export async function getCurrentUser(): Promise<AppUser | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  const { rows } = await query<AppUser & { expires_at: string }>(
+    `SELECT u.id, u.username, u.email, u.role, u.email_verified_at, u.totp_enabled, s.expires_at
+     FROM sessions s
+     JOIN app_users u ON u.id = s.user_id
+     WHERE s.token = $1
+     LIMIT 1`,
+    [hashToken(token)],
+  );
+  const user = rows[0];
+  if (!user || new Date(user.expires_at) <= new Date()) return null;
+  void query("UPDATE sessions SET last_activity = NOW() WHERE token = $1", [hashToken(token)]);
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    email_verified_at: user.email_verified_at,
+    totp_enabled: user.totp_enabled,
+  };
+}
+
+export async function requireUser() {
+  const user = await getCurrentUser();
+  if (!user) return { user: null, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  return { user, response: null };
+}
+
+export async function deleteCurrentSession() {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (token) await query("DELETE FROM sessions WHERE token = $1", [hashToken(token)]);
+}
+
+export async function deleteAllSessions(userId: string) {
+  await query("DELETE FROM sessions WHERE user_id = $1", [userId]);
+}
+
+export function clearSession(response: NextResponse) {
+  response.cookies.set(SESSION_COOKIE, "", { ...sessionCookieOptions(0), maxAge: 0 });
+  clearTwoFactorChallenge(response);
+  return response;
+}
+
+export function clearTwoFactorChallenge(response: NextResponse) {
+  response.cookies.set(TWO_FACTOR_COOKIE, "", { ...sessionCookieOptions(0), maxAge: 0 });
+  return response;
+}
+
+export function attachTwoFactorChallenge(response: NextResponse, userId: string) {
+  const payload = Buffer.from(JSON.stringify({ userId, expiresAt: Date.now() + TWO_FACTOR_MINUTES * 60_000 })).toString("base64url");
+  response.cookies.set(TWO_FACTOR_COOKIE, payload, { ...sessionCookieOptions(TWO_FACTOR_MINUTES * 60), sameSite: "strict" });
+  return response;
+}
+
+export async function getTwoFactorChallenge() {
+  const raw = (await cookies()).get(TWO_FACTOR_COOKIE)?.value;
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(Buffer.from(raw, "base64url").toString()) as { userId: string; expiresAt: number };
+    return value.expiresAt > Date.now() ? value : null;
+  } catch { return null; }
+}
+
+function encryptionKey() {
+  const secret = process.env.AUTH_ENCRYPTION_KEY;
+  if (!secret || secret.length < 32) throw new Error("AUTH_ENCRYPTION_KEY must be at least 32 characters");
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+export function encryptSecret(value: string) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return `${iv.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}.${encrypted.toString("base64url")}`;
+}
+
+export function decryptSecret(value: string) {
+  const [iv, tag, encrypted] = value.split(".").map((part) => Buffer.from(part, "base64url"));
+  const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+}
+
+const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+export function generateTotpSecret() { return Array.from(crypto.randomBytes(20)).map((byte) => BASE32[byte & 31]).join(""); }
+function base32Decode(value: string) {
+  let bits = "";
+  for (const char of value.replace(/=|\s/g, "").toUpperCase()) {
+    const index = BASE32.indexOf(char);
+    if (index < 0) throw new Error("Invalid TOTP secret");
+    bits += index.toString(2).padStart(5, "0");
+  }
+  const bytes: number[] = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  return Buffer.from(bytes);
+}
+function totpAt(secret: string, timestamp: number) {
+  const counter = Math.floor(timestamp / 30_000);
+  const buffer = Buffer.alloc(8); buffer.writeBigUInt64BE(BigInt(counter));
+  const digest = crypto.createHmac("sha1", base32Decode(secret)).update(buffer).digest();
+  const offset = digest[digest.length - 1] & 15;
+  return ((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, "0");
+}
+export function verifyTotp(secret: string, code: string) {
+  if (!/^\d{6}$/.test(code.trim())) return false;
+  return [-1, 0, 1].some((step) => crypto.timingSafeEqual(Buffer.from(totpAt(secret, Date.now() + step * 30_000)), Buffer.from(code.trim())));
+}
+
+export function totpUri(email: string, secret: string) {
+  return `otpauth://totp/${encodeURIComponent(`ShadowNode:${email}`)}?secret=${secret}&issuer=${encodeURIComponent("ShadowNode")}&algorithm=SHA1&digits=6&period=30`;
+}
+
+export function validateUsername(username: string) {
+  return /^[a-zA-Z0-9_-]{4,30}$/.test(username);
+}
+
+export function validatePassword(password: string) {
+  return password.length >= 12 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+}
+
+export function getIp(request?: NextRequest | Request) {
+  return request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request?.headers.get("x-real-ip") || null;
+}
+
+export async function auditLog(userId: string | null, action: string, request?: NextRequest | Request, metadata: Record<string, unknown> = {}) {
+  await query(
+    `INSERT INTO audit_logs (user_id, action, ip, user_agent, metadata)
+     VALUES ($1, $2, $3, $4, $5::jsonb)`,
+    [userId, action, getIp(request), request?.headers.get("user-agent") ?? null, JSON.stringify(metadata)],
+  );
+}
+
+export function isAdminRole(role?: string | null) {
+  return role === "administrator" || role === "super_administrator";
+}

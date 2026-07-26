@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
+import { getCurrentUser } from "@/lib/auth"
 import { NextRequest, NextResponse } from "next/server"
 
 
@@ -20,7 +21,7 @@ await params
 
 
 
-const supabase = await createClient()
+const supabase = supabaseAdmin
 
 
 
@@ -28,13 +29,7 @@ const supabase = await createClient()
 
 // Get logged in user
 
-const {
-data:{
-user
-}
-}
-=
-await supabase.auth.getUser()
+const user = await getCurrentUser()
 
 
 

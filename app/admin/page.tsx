@@ -39,6 +39,16 @@ export default function AdminDashboard() {
   useEffect(() => {
     const loadRequests = async () => {
       try {
+        const auth = await fetch('/api/auth/me', { credentials: 'include' })
+        if (!auth.ok) {
+          window.location.href = '/login'
+          return
+        }
+        const authData = await auth.json()
+        if (!['administrator', 'super_administrator'].includes(authData.user?.role)) {
+          window.location.href = '/403'
+          return
+        }
         const response = await fetch('/api/admin/requests')
         if (response.ok) {
           const data = await response.json()
