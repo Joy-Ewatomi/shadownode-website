@@ -1,10 +1,14 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { EnhancedAuthModal } from '@/components/auth/EnhancedAuthModal'
 import type { LoginData, SignupData } from '@/components/auth/EnhancedAuthModal'
 
 export default function AuthPage() {
+  const searchParams = useSearchParams()
+  const defaultTab = (searchParams.get('tab') as 'login' | 'signup') || 'login'
+  
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -49,6 +53,7 @@ export default function AuthPage() {
           onSubmit={handleSubmit}
           loading={loading}
           error={error}
+          defaultTab={defaultTab}
         />
 
         <div className="space-y-3">
