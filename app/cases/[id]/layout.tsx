@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 
-export default function CaseLayout({
+export default async function CaseLayout({
 children,
 params
 }:{
@@ -10,9 +10,18 @@ params:{id:string}
 }){
 
 
+const {id}=params
+
+
+
 return (
 
-<div className="min-h-screen bg-[#020604] text-white p-6">
+<div className="
+min-h-screen
+bg-[#020604]
+text-white
+p-6
+">
 
 
 <div className="
@@ -24,10 +33,17 @@ p-5
 ">
 
 
-<div className="flex justify-between items-center">
+
+<div className="
+flex
+justify-between
+items-center
+">
+
 
 
 <div>
+
 
 <h1 className="
 text-xl
@@ -40,17 +56,22 @@ Case Workspace
 </h1>
 
 
+
 <p className="
 text-sm
 text-white/50
 ">
 
-Case ID: {params.id}
+Case ID: {id}
 
 </p>
 
 
+
 </div>
+
+
+
 
 
 <div className="
@@ -63,7 +84,11 @@ ACTIVE
 </div>
 
 
+
 </div>
+
+
+
 
 
 
@@ -76,35 +101,41 @@ text-white/60
 ">
 
 
-<Link href={`/cases/${params.id}`}>
+<Link href={`/cases/${id}`}>
 Overview
 </Link>
 
 
-<Link href={`/cases/${params.id}/graph`}>
+<Link href={`/cases/${id}/graph`}>
 Graph
 </Link>
 
 
-<Link href={`/cases/${params.id}/timeline`}>
+<Link href={`/cases/${id}/timeline`}>
 Timeline
 </Link>
 
 
-<Link href={`/cases/${params.id}/evidence`}>
+<Link href={`/cases/${id}/evidence`}>
 Evidence
 </Link>
 
 
-<Link href={`/cases/${params.id}/reports`}>
+<Link href={`/cases/${id}/reports`}>
 Reports
 </Link>
 
+<Link href={`/cases/${params.id}/updates`}>
+Updates
+</Link>
 
 </nav>
 
 
+
 </div>
+
+
 
 
 
@@ -115,8 +146,8 @@ Reports
 </div>
 
 
-</div>
 
+</div>
 
 )
 

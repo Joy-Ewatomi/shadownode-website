@@ -1,85 +1,65 @@
-export default function Dashboard(){
+import {redirect} from "next/navigation"
 
 
-return (
+async function getUser(){
 
-<div>
-
-
-<h1 className="
-text-3xl
-font-bold
-text-[#20dc73]
-">
-
-Command Dashboard
-
-</h1>
-
-
-<p className="
-mt-3
-text-white/60
-">
-
-ShadowNode Operations Bureau Intelligence Platform
-
-</p>
-
-
-<div className="
-grid
-md:grid-cols-3
-gap-5
-mt-8
-">
-
-
-<div className="
-border
-border-[#143b28]
-bg-[#06100c]
-p-5
-rounded
-">
-
-Active Cases
-
-</div>
-
-
-<div className="
-border
-border-[#143b28]
-bg-[#06100c]
-p-5
-rounded
-">
-
-Pending Tasks
-
-</div>
-
-
-
-<div className="
-border
-border-[#143b28]
-bg-[#06100c]
-p-5
-rounded
-">
-
-Team Activity
-
-</div>
-
-
-</div>
-
-
-</div>
-
+const res =
+await fetch(
+"http://localhost:3000/api/auth/me",
+{
+cache:"no-store"
+}
 )
+
+
+return res.json()
+
+}
+
+
+
+export default async function Dashboard(){
+
+
+const user = await getUser()
+
+
+
+switch(user.role){
+
+
+case "client":
+
+redirect("/dashboards/client")
+
+
+case "investigator":
+
+redirect("/dashboards/investigator")
+
+
+case "analyst":
+
+redirect("/dashboards/analyst")
+
+
+case "administrator":
+
+redirect("/dashboards/administrator")
+
+
+case "super_administrator":
+
+redirect("/dashboards/super-admin")
+
+
+default:
+
+redirect("/login")
+
+
+}
+
+
 
 }

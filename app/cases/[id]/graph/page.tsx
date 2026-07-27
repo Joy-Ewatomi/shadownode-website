@@ -1,6 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useState
+} from "react"
 
 import ReactFlow, {
   Background,
@@ -9,7 +13,7 @@ import ReactFlow, {
   addEdge,
   Connection,
   Edge,
-  Node,
+  Node
 } from "reactflow"
 
 import { X } from "lucide-react"
@@ -17,6 +21,17 @@ import { X } from "lucide-react"
 import "reactflow/dist/style.css"
 
 import { useParams } from "next/navigation"
+
+
+
+const nodeStyle = {
+  background:"#06110f",
+  color:"#20dc73",
+  border:"1px solid #20dc73",
+  padding:"15px",
+  borderRadius:"8px",
+  whiteSpace:"pre-line"
+}
 
 
 
@@ -33,7 +48,6 @@ const [nodes,setNodes] = useState<Node[]>([])
 
 const [edges,setEdges] = useState<Edge[]>([])
 
-
 const [loading,setLoading] = useState(true)
 
 
@@ -44,53 +58,62 @@ const [showRelationshipPanel,setShowRelationshipPanel] = useState(false)
 
 
 
-// ENTITY FORM
+// ENTITY
 
-const [entityName,setEntityName] = useState("")
-
-const [entityType,setEntityType] = useState("PERSON")
-
-const [description,setDescription] = useState("")
-
-const [confidence,setConfidence] = useState(50)
+const [
+entityName,
+setEntityName
+]=useState("")
 
 
-
-// RELATIONSHIP FORM
-
-const [source,setSource] = useState("")
-
-const [target,setTarget] = useState("")
-
-const [relationshipType,setRelationshipType] = useState("")
-
-const [relationshipDescription,setRelationshipDescription] = useState("")
+const [
+entityType,
+setEntityType
+]=useState("PERSON")
 
 
+const [
+description,
+setDescription
+]=useState("")
 
 
-
-const nodeStyle = {
-
-background:"#06110f",
-
-color:"#20dc73",
-
-border:"1px solid #20dc73",
-
-padding:"15px",
-
-borderRadius:"8px",
-
-whiteSpace:"pre-line"
-
-}
+const [
+confidence,
+setConfidence
+]=useState(50)
 
 
 
+// RELATIONSHIP
+
+const [
+source,
+setSource
+]=useState("")
 
 
-useEffect(()=>{
+const [
+target,
+setTarget
+]=useState("")
+
+
+const [
+relationshipType,
+setRelationshipType
+]=useState("")
+
+
+const [
+relationshipDescription,
+setRelationshipDescription
+]=useState("")
+
+
+
+
+
 
 
 async function loadGraph(){
@@ -99,53 +122,64 @@ async function loadGraph(){
 try{
 
 
-const entityRes =
-await fetch(
+const [
+entityRes,
+relationRes
+]=await Promise.all([
+
+fetch(
 `/api/cases/${caseId}/graph/entities`
-)
+),
 
-
-const relationRes =
-await fetch(
+fetch(
 `/api/cases/${caseId}/graph/relationships`
 )
 
+])
 
 
-const entities =
+
+const entityPayload =
 await entityRes.json()
 
 
-const relationships =
+const relationPayload =
 await relationRes.json()
 
 
 
+const entities = Array.isArray(entityPayload)
+? entityPayload
+: []
 
-setNodes(
 
-entities.map(
+
+const relationships = Array.isArray(relationPayload)
+? relationPayload
+: []
+
+
+
+
+
+const graphNodes:Node[] = entities.map(
 (entity:any,index:number)=>(
 
 {
 
-id:entity.id,
-
+id:String(entity.id),
 
 position:{
-x:150+(index*180),
+x:150+(index*200),
 y:150+(index%3)*150
 },
-
 
 data:{
 label:
 `${entity.name}\n${entity.entity_type}`
 },
 
-
 style:nodeStyle
-
 
 }
 
@@ -153,24 +187,30 @@ style:nodeStyle
 
 )
 
-)
 
 
 
-setEdges(
 
+const graphEdges:Edge[] =
 relationships.map(
-(rel:any)=>(
+(rel:any,index:number)=>(
 
 {
 
-id:rel.id,
+id:String(
+rel.id ?? `edge-${index}`
+),
 
-source:rel.source_entity_id,
+source:String(
+rel.source_entity_id
+),
 
-target:rel.target_entity_id,
+target:String(
+rel.target_entity_id
+),
 
-label:rel.relationship_type
+label:
+rel.relationship_type
 
 }
 
@@ -178,7 +218,12 @@ label:rel.relationship_type
 
 )
 
-)
+
+
+
+setNodes(graphNodes)
+
+setEdges(graphEdges)
 
 
 
@@ -186,9 +231,17 @@ label:rel.relationship_type
 
 catch(error){
 
-console.log(error)
+console.error(
+"GRAPH ERROR",
+error
+)
+
+setNodes([])
+
+setEdges([])
 
 }
+
 
 finally{
 
@@ -198,6 +251,13 @@ setLoading(false)
 
 
 }
+
+
+
+
+
+
+useEffect(()=>{
 
 
 if(caseId){
@@ -215,15 +275,24 @@ loadGraph()
 
 
 
+
 const onConnect = useCallback(
 
 (connection:Connection)=>{
 
 
-setEdges(
-(current)=>
-addEdge(connection,current)
+setEdges(current=>
+
+addEdge(
+{
+...connection,
+id:`edge-${Date.now()}`
+},
+current
 )
+
+)
+
 
 },
 
@@ -243,10 +312,11 @@ addEdge(connection,current)
 async function createEntity(){
 
 
-
 if(!entityName){
 
-alert("Entity name required")
+alert(
+"Entity name required"
+)
 
 return
 
@@ -254,9 +324,11 @@ return
 
 
 
-const res =
+const response =
 await fetch(
+
 `/api/cases/${caseId}/graph/entities`,
+
 {
 
 method:"POST",
@@ -275,7 +347,8 @@ description,
 
 confidence_score:Number(confidence),
 
-verification_status:"unverified"
+verification_status:
+"unverified"
 
 })
 
@@ -285,42 +358,19 @@ verification_status:"unverified"
 
 
 
+if(!response.ok){
 
-const entity =
-await res.json()
+alert(
+"Entity creation failed"
+)
 
-
-
-
-setNodes(current=>[
-
-...current,
-
-
-{
-
-id:entity.id,
-
-
-position:{
-x:Math.random()*600,
-y:Math.random()*400
-},
-
-
-data:{
-label:
-`${entity.name}\n${entity.entity_type}`
-},
-
-
-style:nodeStyle
-
+return
 
 }
 
 
-])
+
+await loadGraph()
 
 
 
@@ -343,14 +393,19 @@ setShowEntityPanel(false)
 
 
 
-
 async function createRelationship(){
 
 
 
-if(!source || !target || !relationshipType){
+if(
+!source ||
+!target ||
+!relationshipType
+){
 
-alert("Complete relationship information")
+alert(
+"Complete relationship information"
+)
 
 return
 
@@ -358,8 +413,7 @@ return
 
 
 
-
-const res =
+const response =
 await fetch(
 
 `/api/cases/${caseId}/graph/relationships`,
@@ -371,7 +425,6 @@ method:"POST",
 headers:{
 "Content-Type":"application/json"
 },
-
 
 body:JSON.stringify({
 
@@ -385,10 +438,10 @@ description:relationshipDescription,
 
 confidence_score:50,
 
-verification_status:"unverified"
+verification_status:
+"unverified"
 
 })
-
 
 }
 
@@ -397,31 +450,20 @@ verification_status:"unverified"
 
 
 
-const relationship =
-await res.json()
+if(!response.ok){
 
+alert(
+"Relationship creation failed"
+)
 
-
-
-setEdges(current=>[
-
-...current,
-
-
-{
-
-id:relationship.id,
-
-source:relationship.source_entity_id,
-
-target:relationship.target_entity_id,
-
-label:relationship.relationship_type
+return
 
 }
 
 
-])
+
+
+await loadGraph()
 
 
 
@@ -432,7 +474,6 @@ setTarget("")
 setRelationshipType("")
 
 setRelationshipDescription("")
-
 
 setShowRelationshipPanel(false)
 
@@ -446,7 +487,6 @@ setShowRelationshipPanel(false)
 
 
 if(loading){
-
 
 return (
 
@@ -465,8 +505,8 @@ Loading Investigation Graph...
 
 )
 
-
 }
+
 
 
 
@@ -486,7 +526,7 @@ text-white
 
 
 
-<div className="
+<header className="
 flex
 justify-between
 items-center
@@ -494,7 +534,6 @@ border-b
 border-[#123a2d]
 p-4
 ">
-
 
 
 <div>
@@ -511,8 +550,8 @@ Investigation Graph
 
 
 <p className="
-text-sm
 text-white/50
+text-sm
 ">
 
 Entity Relationship Intelligence
@@ -524,8 +563,10 @@ Entity Relationship Intelligence
 
 
 
-
-<div className="flex gap-3">
+<div className="
+flex
+gap-3
+">
 
 
 <button
@@ -533,12 +574,12 @@ Entity Relationship Intelligence
 onClick={()=>setShowEntityPanel(true)}
 
 className="
-rounded
 bg-[#20dc73]
+text-black
 px-4
 py-2
+rounded
 font-bold
-text-black
 "
 
 >
@@ -555,12 +596,12 @@ text-black
 onClick={()=>setShowRelationshipPanel(true)}
 
 className="
-rounded
 border
 border-[#20dc73]
+text-[#20dc73]
 px-4
 py-2
-text-[#20dc73]
+rounded
 "
 
 >
@@ -570,12 +611,11 @@ text-[#20dc73]
 </button>
 
 
-
 </div>
 
 
+</header>
 
-</div>
 
 
 
@@ -620,19 +660,17 @@ fitView
 
 
 
-{
-showEntityPanel &&
-
+{showEntityPanel && (
 
 <div className="
 absolute
 right-5
 top-20
 w-96
-rounded-lg
+bg-[#06110f]
 border
 border-[#123a2d]
-bg-[#06110f]
+rounded-lg
 p-5
 ">
 
@@ -669,10 +707,7 @@ onClick={()=>setShowEntityPanel(false)}
 
 
 
-
 <input
-
-placeholder="Entity name"
 
 className="
 w-full
@@ -684,6 +719,8 @@ p-2
 rounded
 "
 
+placeholder="Entity name"
+
 value={entityName}
 
 onChange={
@@ -691,7 +728,6 @@ e=>setEntityName(e.target.value)
 }
 
 />
-
 
 
 
@@ -717,7 +753,6 @@ e=>setEntityType(e.target.value)
 
 >
 
-
 <option>PERSON</option>
 
 <option>ORGANIZATION</option>
@@ -739,11 +774,7 @@ e=>setEntityType(e.target.value)
 
 
 
-
-
 <textarea
-
-placeholder="Description"
 
 className="
 w-full
@@ -754,6 +785,8 @@ border-[#123a2d]
 p-2
 rounded
 "
+
+placeholder="Description"
 
 value={description}
 
@@ -766,8 +799,6 @@ e=>setDescription(e.target.value)
 
 
 
-
-
 <button
 
 onClick={createEntity}
@@ -776,9 +807,9 @@ className="
 w-full
 bg-[#20dc73]
 text-black
-font-bold
 py-2
 rounded
+font-bold
 "
 
 >
@@ -790,9 +821,7 @@ Save Entity
 
 </div>
 
-
-}
-
+)}
 
 
 
@@ -801,22 +830,20 @@ Save Entity
 
 
 
-{
-showRelationshipPanel &&
 
+{showRelationshipPanel && (
 
 <div className="
 absolute
 right-5
 top-20
 w-96
-rounded-lg
+bg-[#06110f]
 border
 border-[#123a2d]
-bg-[#06110f]
+rounded-lg
 p-5
 ">
-
 
 
 <div className="
@@ -824,7 +851,6 @@ flex
 justify-between
 mb-4
 ">
-
 
 <h2 className="
 text-[#20dc73]
@@ -854,18 +880,9 @@ onClick={()=>setShowRelationshipPanel(false)}
 
 
 
-
-
 <select
 
-className="
-w-full
-mb-3
-bg-black
-border
-border-[#123a2d]
-p-2
-"
+className="w-full mb-3 bg-black p-2"
 
 value={source}
 
@@ -876,10 +893,8 @@ e=>setSource(e.target.value)
 >
 
 
-<option>
-
+<option value="">
 Source Entity
-
 </option>
 
 
@@ -888,17 +903,13 @@ Source Entity
 nodes.map(node=>(
 
 <option
-
 key={node.id}
-
 value={node.id}
-
 >
 
-{node.data.label}
+{String(node.data.label)}
 
 </option>
-
 
 ))
 
@@ -913,17 +924,9 @@ value={node.id}
 
 
 
-
 <select
 
-className="
-w-full
-mb-3
-bg-black
-border
-border-[#123a2d]
-p-2
-"
+className="w-full mb-3 bg-black p-2"
 
 value={target}
 
@@ -934,12 +937,9 @@ e=>setTarget(e.target.value)
 >
 
 
-<option>
-
+<option value="">
 Target Entity
-
 </option>
-
 
 
 {
@@ -947,17 +947,13 @@ Target Entity
 nodes.map(node=>(
 
 <option
-
 key={node.id}
-
 value={node.id}
-
 >
 
-{node.data.label}
+{String(node.data.label)}
 
 </option>
-
 
 ))
 
@@ -975,14 +971,7 @@ value={node.id}
 
 <select
 
-className="
-w-full
-mb-3
-bg-black
-border
-border-[#123a2d]
-p-2
-"
+className="w-full mb-3 bg-black p-2"
 
 value={relationshipType}
 
@@ -994,58 +983,35 @@ e=>setRelationshipType(e.target.value)
 
 
 <option value="">
-
 Relationship
-
 </option>
 
-
 <option>
-
-associated_with
-
-</option>
-
-
-<option>
-
-owns
-
-</option>
-
-
-<option>
-
 works_for
-
 </option>
 
+<option>
+owns
+</option>
 
 <option>
+associated_with
+</option>
 
+<option>
 communicated_with
-
 </option>
 
-
 <option>
-
-located_at
-
-</option>
-
-
-<option>
-
 financial_connection
-
 </option>
 
+<option>
+located_at
+</option>
 
 <option>
-
 alias_of
-
 </option>
 
 
@@ -1055,21 +1021,11 @@ alias_of
 
 
 
-
-
-
 <textarea
 
-placeholder="Analyst notes"
+className="w-full mb-3 bg-black p-2"
 
-className="
-w-full
-mb-3
-bg-black
-border
-border-[#123a2d]
-p-2
-"
+placeholder="Analyst notes"
 
 value={relationshipDescription}
 
@@ -1077,9 +1033,7 @@ onChange={
 e=>setRelationshipDescription(e.target.value)
 }
 
-
 />
-
 
 
 
@@ -1093,9 +1047,9 @@ className="
 w-full
 bg-[#20dc73]
 text-black
-font-bold
 py-2
 rounded
+font-bold
 "
 
 >
@@ -1105,21 +1059,16 @@ Save Relationship
 </button>
 
 
-
-
 </div>
 
-
-}
+)}
 
 
 
 
 
 </div>
-
 
 )
-
 
 }
