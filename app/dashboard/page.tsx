@@ -1,27 +1,18 @@
-import {redirect} from "next/navigation"
-
-
-async function getUser(){
-
-const res =
-await fetch(
-"http://localhost:3000/api/auth/me",
-{
-cache:"no-store"
-}
-)
-
-
-return res.json()
-
-}
+import { getCurrentUser } from "@/lib/auth"
+import { redirect } from "next/navigation"
 
 
 
 export default async function Dashboard(){
 
 
-const user = await getUser()
+const user = await getCurrentUser()
+
+if (!user) {
+
+redirect("/login")
+
+}
 
 
 

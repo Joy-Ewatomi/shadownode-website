@@ -25,14 +25,14 @@ async function resolveCaseId(caseId: string) {
 export async function GET(
 req:Request,
 context:{
-params:{id:string}
+params:Promise<{id:string}>
 }
 ){
 
 try {
 
 
-const caseId=context.params.id;
+const { id: caseId } = await context.params;
 const resolvedCaseId = await resolveCaseId(caseId);
 
 if (!resolvedCaseId) {
