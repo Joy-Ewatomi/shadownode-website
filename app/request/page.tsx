@@ -4,11 +4,6 @@ import { PageTransition } from '@/components/animations/PageTransition'
 import { motion } from 'framer-motion'
 import { Shield, UserPlus, KeyRound, ChevronRight, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
-import AuthModal from '@/components/security/AuthModal'
-
-
-type AuthMode = "login" | "signup"
 
 
 const intakeOptions = [
@@ -26,7 +21,7 @@ const intakeOptions = [
     description:
       'Register for a secure client portal. Access case updates, encrypted messaging, and document vault.',
     icon: UserPlus,
-    mode:"signup",
+    href: '/signup',
   },
   {
     id: 'login',
@@ -34,29 +29,12 @@ const intakeOptions = [
     description:
       'Already have a ShadowNode account? Log in to your client portal.',
     icon: KeyRound,
-    mode:"login",
+    href: '/login',
   },
 ]
 
 
 export default function RequestPage() {
-
-
-const [authOpen,setAuthOpen] = useState(false)
-
-const [authMode,setAuthMode] = useState<AuthMode>("login")
-
-
-
-function openAuth(mode:AuthMode){
-
-setAuthMode(mode)
-
-setAuthOpen(true)
-
-}
-
-
 
 return (
 
@@ -250,9 +228,9 @@ hover:bg-primary/[0.02]
 :
 
 
-<button
+<Link
 
-onClick={()=>openAuth(option.mode as AuthMode)}
+href={option.href!}
 
 className="
 w-full
@@ -278,7 +256,7 @@ text-left
 <CardContent option={option} Icon={Icon}/>
 
 
-</button>
+</Link>
 
 
 }
@@ -318,18 +296,6 @@ SECURE SHA-256 END-TO-END DATA MANAGEMENT PROXIES LAYERED BY DEFAULT
 
 </div>
 
-
-
-
-<AuthModal
-
-isOpen={authOpen}
-
-onClose={()=>setAuthOpen(false)}
-
-initialMode={authMode}
-
-/>
 
 
 

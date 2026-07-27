@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auditLog, hashPassword, hashToken, newToken, validatePassword, validateUsername } from "@/lib/auth";
 import { sendVerificationEmail } from "@/lib/email";
-import { query } from "@/lib/db";
+import { isDatabaseConfigurationError, isDatabaseNetworkError, query } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -32,6 +32,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: emailSent ? "Account created. Check your email to verify it." : "Account created. Configure Resend to enable email verification.", requiresEmailVerification: true }, { status: 201 });
   } catch (error) {
     console.error("SIGNUP ERROR:", error);
+    if (isDatabaseConfigurationError(error)) {
+      return NextResponse.json({ error: "PostgreSQL is not configured. Set DATABASE_URL, POSTGRES_URL, or SUPABASE_DB_URL to your database connection string." }, { status: 503 });
+    }
+    if (isDatabaseNetworkError(error)) {
+      return NextResponse.json({ error: "Could not reach PostgreSQL from this machine. If you use Supabase, use the Transaction Pooler connection string, which is IPv4-compatible, or connect from a network with IPv6 support." }, { status: 503 });
+    }
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

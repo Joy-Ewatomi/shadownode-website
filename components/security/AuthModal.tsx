@@ -382,6 +382,15 @@ onClick={onClose}
 
 
 >
+<div className="pointer-events-none absolute inset-0">
+  <div className="absolute inset-0 bg-[linear-gradient(rgba(12,255,104,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(12,255,104,0.055)_1px,transparent_1px)] bg-[size:50px_50px]" />
+  <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(74,255,122,0.18),transparent_20%),radial-gradient(circle_at_82%_28%,rgba(74,255,122,0.14),transparent_24%),radial-gradient(circle_at_72%_74%,rgba(74,255,122,0.14),transparent_21%)]" />
+  <div className="absolute left-[8%] top-[13%] h-56 w-72 rounded-full border border-[#32ff78]/15 opacity-60 blur-[1px]" />
+  <div className="absolute right-[7%] top-[18%] h-64 w-80 rounded-full border border-[#32ff78]/15 opacity-60 blur-[1px]" />
+  <div className="absolute bottom-[18%] left-[18%] h-52 w-72 rounded-full border border-[#32ff78]/10 opacity-60 blur-[1px]" />
+</div>
+
+
 
 
 
@@ -419,18 +428,22 @@ y:0
 className="
 relative
 w-full
-max-w-md
+max-w-[min(100%,_28rem)]
 rounded-3xl
 border
 border-emerald-400/20
 bg-[#071010]
-p-6
+p-4
+sm:p-6
 shadow-[0_0_80px_rgba(34,197,94,.15)]
+max-h-[calc(100vh-3rem)]
+overflow-hidden
 "
 
 
 >
 
+<div className="flex flex-col gap-6 overflow-y-auto max-h-[calc(100vh-7rem)] pr-1">
 
 
 
@@ -1127,6 +1140,7 @@ TLS 1.3 • ZERO TRUST • MFA READY
 
 
 </div>
+  </div>
 
 
 

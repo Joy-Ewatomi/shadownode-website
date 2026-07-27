@@ -1,8 +1,12 @@
 'use client'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Check, Eye, Github, Lock, Mail, Shield, Zap } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { PageTransition } from '@/components/animations/PageTransition'
+import { motion } from 'framer-motion'
 
 export default function AuthPage() {
   const [tab, setTab] = useState<'login' | 'signup'>('login')
@@ -10,15 +14,33 @@ export default function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [rememberDevice, setRememberDevice] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [twoFactorCode, setTwoFactorCode] = useState('')
 
+  const passwordChecks = useMemo(() => [
+    { label: '12+ characters', valid: password.length >= 12 },
+    { label: 'Uppercase', valid: /[A-Z]/.test(password) },
+    { label: 'Lowercase', valid: /[a-z]/.test(password) },
+    { label: 'Number', valid: /\d/.test(password) },
+    { label: 'Special char', valid: /[^A-Za-z0-9]/.test(password) },
+  ], [password])
+
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('twoFactorRequired') === '1') {
-      setTwoFactorRequired(true)
-      setError('Enter the code from your authenticator app.')
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const pathname = window.location.pathname
+
+      if (pathname.endsWith('/signup') || params.get('tab') === 'signup') {
+        setTab('signup')
+      }
+
+      if (params.get('twoFactorRequired') === '1') {
+        setTwoFactorRequired(true)
+        setError('Enter the code from your authenticator app.')
+      }
     }
   }, [])
 
@@ -28,28 +50,22 @@ export default function AuthPage() {
     setError('')
 
     const endpoint = twoFactorRequired ? '/api/auth/2fa/verify' : tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
-    const bodyData = tab === 'login' 
-      ? twoFactorRequired ? { code: twoFactorCode } : { username, password }
+    const bodyData = tab === 'login'
+      ? twoFactorRequired ? { code: twoFactorCode } : { username, password, rememberDevice }
       : { email, username, password, confirmPassword }
 
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyData)
+        body: JSON.stringify(bodyData),
       })
 
       const data = await response.json()
-
       if (!response.ok) {
-
-    setError(
-   data.error || "Authentication failed"
-)
-
-    return
-
-}
+        setError(data.error || 'Authentication failed')
+        return
+      }
 
       if (data.requiresTwoFactor) {
         setTwoFactorRequired(true)
@@ -57,181 +73,193 @@ export default function AuthPage() {
         return
       }
 
-
-if(tab==="signup"){
-
-setTab("login")
-
-setError("Account created. Please sign in.")
-
-setPassword("")
-
-}
-else{
-
-window.location.href="/dashboard"
-
-}
-    } catch (err) {
+      if (tab === 'signup') {
+        setTab('login')
+        setError('Account created. Check your email to verify it, then sign in.')
+        setPassword('')
+        setConfirmPassword('')
+      } else {
+        window.location.href = '/dashboard'
+      }
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
+  const isSignup = tab === 'signup' && !twoFactorRequired
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-transparent text-foreground flex items-center justify-center">
-      <div className="pointer-events-none fixed inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(39,255,118,0.18),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(33,255,143,0.1),transparent_22%)] opacity-80" />
-        <div className="absolute inset-0 opacity-40" style={{
-          backgroundImage: 'linear-gradient(90deg, rgba(0,255,65,0.12) 1px, transparent 1px), linear-gradient(rgba(0,255,65,0.12) 1px, transparent 1px)',
-          backgroundSize: '56px 56px'
-        }} />
-      </div>
 
-      <div className="w-full max-w-md mx-auto px-6 relative z-10">
-        <Link href="/" className="flex items-center gap-2 mb-12 justify-center">
-          <div className="w-10 h-10 bg-[#0b2d12] border border-[#14fd7f]/15 rounded flex items-center justify-center shadow-[0_0_20px_rgba(0,255,110,0.15)]">
-            <span className="text-[#8cffac] font-bold text-sm">SOB</span>
-          </div>
-          <span className="text-sm font-bold text-[#8cffac] tracking-[0.18em]">SHADOWNODE OPERATIONS BUREAU</span>
-        </Link>
+    <PageTransition>
 
-        <div className="relative overflow-hidden rounded-[2rem] border border-[#3cff8d]/20 bg-[#08110c]/95 p-8 shadow-[0_0_80px_rgba(24,255,100,0.18)] backdrop-blur-xl">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(31,255,117,0.16),transparent_25%),radial-gradient(circle_at_bottom_right,rgba(21,255,130,0.08),transparent_20%)]" />
-          <div className="relative z-10">
-          {/* Tabs */}
-          <div className="mb-8 flex items-center justify-center rounded-full border border-white/10 bg-white/5 p-1 shadow-[0_0_30px_rgba(0,255,95,0.12)]">
-            <button
-              onClick={() => setTab('login')}
-              className={`min-w-[140px] rounded-full px-5 py-2 text-sm font-semibold transition ${
-                tab === 'login'
-                  ? 'bg-[#05110c] text-[#7bf69f] shadow-[0_0_24px_rgba(0,255,90,0.22)]'
-                  : 'text-foreground/60 hover:text-foreground'
-              }`}
-            >
-              Login
-            </button>
-            <button
-              onClick={() => setTab('signup')}
-              className={`min-w-[140px] rounded-full px-5 py-2 text-sm font-semibold transition ${
-                tab === 'signup'
-                  ? 'bg-[#05110c] text-[#7bf69f] shadow-[0_0_24px_rgba(0,255,90,0.22)]'
-                  : 'text-foreground/60 hover:text-foreground'
-              }`}
-            >
-              Sign up
-            </button>
+    <main className="relative min-h-svh px-4 py-5 text-white sm:px-6 lg:px-8">
+    
+
+      <div className="relative z-10 mx-auto flex min-h-[calc(100svh-2.5rem)] w-full max-w-5xl flex-col items-center justify-center gap-5">
+        <section className={`w-full overflow-hidden rounded-lg border border-[#123a2d] bg-[#06110f]/95 shadow-[0_0_70px_rgba(0,255,120,0.12)] backdrop-blur-xl ${isSignup ? 'max-w-3xl' : 'max-w-xl'}`}>
+          <div className="border-b border-white/5 px-6 py-5 text-center sm:px-8">
+            <h1 className="font-serif text-3xl font-bold text-[#20dc73]">ShadowNode</h1>
+            <p className="mt-1 font-serif text-sm text-white/55">Enterprise Security Portal</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {twoFactorRequired ? (
-              <div>
-                <label className="block text-sm font-medium mb-2">Authentication code</label>
-                <Input type="text" inputMode="numeric" autoComplete="one-time-code" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} placeholder="123456" required minLength={6} maxLength={6} />
-              </div>
-            ) : <>
-            {tab === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium mb-2">Email Address</label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  required
-                />
+          <div className="px-5 py-5 sm:px-8 sm:py-6">
+            {!twoFactorRequired && (
+              <div className="mb-5 grid grid-cols-2 rounded-md border border-white/8 bg-[#091714] p-1">
+                {(['login', 'signup'] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setTab(item)}
+                    className={`h-9 rounded font-serif text-sm transition ${tab === item ? 'bg-[#0d1d19] text-white shadow-inner' : 'text-white/55 hover:text-white'}`}
+                  >
+                    {item === 'login' ? 'Login' : 'Sign up'}
+                  </button>
+                ))}
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Username</label>
-              <Input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="yourusername"
-                required
-              />
-            </div>
-            </>}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className={isSignup ? 'grid gap-4 md:grid-cols-2' : 'space-y-4'}>
+                {twoFactorRequired ? (
+                  <Field label="Authentication code" required>
+                    <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black" inputMode="numeric" autoComplete="one-time-code" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} placeholder="123456" required minLength={6} maxLength={6} />
+                  </Field>
+                ) : (
+                  <>
+                    <Field label="Username" required>
+                      <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black placeholder:text-black/35" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your-username" required />
+                    </Field>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Password</label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={12}
-              />
-            </div>
+                    {isSignup && (
+                      <Field label="Email" required>
+                        <InputShell icon={<Mail className="h-4 w-4" />}>
+                          <Input className="h-10 border-0 bg-transparent pl-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" required />
+                        </InputShell>
+                      </Field>
+                    )}
+                  </>
+                )}
 
-            {!twoFactorRequired && tab === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium mb-2">Confirm Password</label>
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={12}
-                />
+                <Field label="Password" required>
+                  <InputShell icon={<Lock className="h-4 w-4" />} trailing={<Eye className="h-4 w-4" />}>
+                    <Input className="h-10 border-0 bg-transparent px-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••••" required minLength={12} />
+                  </InputShell>
+                </Field>
+
+                {isSignup && (
+                  <Field label="Confirm Password" required>
+                    <InputShell icon={<Lock className="h-4 w-4" />} trailing={<Eye className="h-4 w-4" />}>
+                      <Input className="h-10 border-0 bg-transparent px-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••••••" required minLength={12} />
+                    </InputShell>
+                  </Field>
+                )}
               </div>
+
+              {isSignup && (
+                <div className="grid gap-x-6 gap-y-1 border-t border-[#20dc73] pt-2 text-xs text-white/75 sm:grid-cols-3">
+                  {passwordChecks.map((check) => (
+                    <span key={check.label} className={check.valid ? 'text-[#7dffb0]' : 'text-white/45'}>
+                      <Check className="mr-1 inline h-3 w-3" />{check.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {tab === 'login' && !twoFactorRequired && (
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <label className="flex items-center gap-2 text-white/60">
+                    <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} className="h-4 w-4 rounded border-white/20 accent-[#29d96f]" />
+                    Remember device
+                  </label>
+                  <Link href="/forgot-password" className="text-[#20e978] hover:underline">Forgot password?</Link>
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded border border-[#ff6b6b]/30 bg-[#ff6b6b]/10 px-3 py-2 text-sm text-[#ffd1d1]">
+                  {error}
+                </div>
+              )}
+
+              <Button type="submit" disabled={loading} className="h-11 w-full rounded-md bg-[#2dd873] font-serif text-base text-black hover:bg-[#37f082] disabled:opacity-60">
+                {loading ? 'Authenticating...' : twoFactorRequired ? 'Verify code' : tab === 'login' ? 'Sign in' : 'Create account'}
+              </Button>
+            </form>
+
+            {!twoFactorRequired && (
+              <>
+                <Divider label={tab === 'login' ? 'OR CONTINUE WITH' : 'OR SIGN UP WITH'} />
+                <div className="grid grid-cols-2 gap-3">
+                  <OAuthButton provider="google" label="Google" icon={<span className="text-base">◎</span>} />
+                  <OAuthButton provider="github" label="GitHub" icon={<Github className="h-4 w-4" />} />
+                </div>
+              </>
             )}
 
-            {error && (
-              <div className="bg-destructive/10 border border-destructive/30 rounded p-3">
-                <p className="text-sm text-destructive">{error}</p>
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-full border border-[#00ff75]/40 bg-gradient-to-r from-[#00e65a] via-[#24ff84] to-[#1bd58f] px-6 py-3 text-sm font-semibold tracking-[0.04em] text-black shadow-[0_0_30px_rgba(0,255,135,0.25)] transition duration-300 hover:scale-[1.005] hover:shadow-[0_0_38px_rgba(0,255,135,0.33)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading
-                ? 'AUTHENTICATING...'
-                : twoFactorRequired
-                ? 'VERIFY CODE'
-                : tab === 'login'
-                ? 'ENTER SECURE PORTAL'
-                : 'CREATE CLIENT PROFILE'
-              }
-            </Button>
-          </form>
-
-          {!twoFactorRequired && tab === 'login' && (
-            <div className="mt-5 grid grid-cols-3 gap-2">
-              {['google', 'microsoft', 'github'].map((provider) => (
-                <a key={provider} href={`/api/auth/oauth/${provider}`} className="rounded border border-border/40 px-2 py-2 text-center text-xs capitalize hover:border-primary">{provider}</a>
-              ))}
+            <div className="mt-5 flex flex-wrap gap-2 border-t border-white/5 pt-4 text-xs">
+              <TrustChip icon={<Lock className="h-3 w-3" />} label="TLS 1.3" />
+              <TrustChip icon={<Shield className="h-3 w-3" />} label="AES-256" />
+              <TrustChip icon={<Zap className="h-3 w-3" />} label="Zero Trust" />
+              <TrustChip icon={<Eye className="h-3 w-3" />} label="Secure Session" />
             </div>
-          )}
-
-          {tab === 'login' && (
-            <p className="text-center text-sm text-foreground/60 mt-4">
-              <Link href="/forgot-password" className="text-[#7bf69f] hover:underline">Forgot password?</Link>
-            </p>
-          )}
-
-          <div className="mt-6 pt-6 border-t border-[#00ff75]/15">
-            <Link href="/request">
-              <p className="text-center text-sm text-foreground/60 hover:text-foreground transition cursor-pointer">
-                Prefer anonymous submission? <span className="text-[#7bf69f]">Submit a request</span>
-              </p>
-            </Link>
           </div>
+        </section>
+
+        <div className="text-center font-serif text-sm text-white/45">
+          <p>Prefer anonymous submission? <Link href="/request" className="text-[#20e978] hover:underline">Submit a request</Link></p>
+          <p className="mt-2 text-xs text-white/30">Your credentials are encrypted in transit and at rest.</p>
         </div>
-        </div>
-
-        <p className="text-center text-xs text-foreground/40 mt-8">
-          Your credentials are encrypted in transit and at rest.
-        </p>
       </div>
+    </main>
+    </PageTransition>
+  )
+}
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <label className="block font-serif text-sm text-white/60">
+      {label} {required ? <span className="text-[#ff5f66]">*</span> : null}
+      <div className="mt-2">{children}</div>
+    </label>
+  )
+}
+
+function InputShell({ icon, trailing, children }: { icon: React.ReactNode; trailing?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="relative rounded-md border border-[#19352d] bg-[#091714] text-white/58">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">{icon}</span>
+      {children}
+      {trailing ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">{trailing}</span> : null}
     </div>
+  )
+}
+
+function Divider({ label }: { label: string }) {
+  return (
+    <div className="my-5 flex items-center gap-3">
+      <span className="h-px flex-1 bg-white/6" />
+      <span className="font-serif text-xs text-white/45">{label}</span>
+      <span className="h-px flex-1 bg-white/6" />
+    </div>
+  )
+}
+
+function OAuthButton({ provider, label, icon }: { provider: string; label: string; icon: React.ReactNode }) {
+  return (
+    <a href={`/api/auth/oauth/${provider}`} className="flex h-10 items-center justify-center gap-2 rounded-md border border-white/7 bg-[#091714] font-serif text-sm text-white/80 transition hover:border-[#20dc73]/45">
+      {icon}
+      {label}
+    </a>
+  )
+}
+
+function TrustChip({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded border border-[#2cd877]/35 px-2 py-1 font-serif text-white/85">
+      {icon}
+      {label}
+    </span>
   )
 }
