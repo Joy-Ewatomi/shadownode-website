@@ -95,7 +95,13 @@ export default function AuthPage() {
     <PageTransition>
 
     <main className="relative min-h-svh px-4 py-5 text-white sm:px-6 lg:px-8">
-    
+      <div className="pointer-events-none fixed inset-0">
+        <div className="absolute inset-0"/>
+        <div className="absolute inset-0"/>
+        <div className="absolute"/>
+        <div className="absolute"/>
+        <div className="absolute"/>
+      </div>
 
       <div className="relative z-10 mx-auto flex min-h-[calc(100svh-2.5rem)] w-full max-w-5xl flex-col items-center justify-center gap-5">
         <section className={`w-full overflow-hidden rounded-lg border border-[#123a2d] bg-[#06110f]/95 shadow-[0_0_70px_rgba(0,255,120,0.12)] backdrop-blur-xl ${isSignup ? 'max-w-3xl' : 'max-w-xl'}`}>
