@@ -5,6 +5,7 @@ import EvidencePanel from "@/components/evidence/EvidencePanel"
 import EntityPanel from "@/components/intelligence/EntityPanel"
 import FindingPanel from "@/components/intelligence/FindingPanel"
 import SourcePanel from "@/components/intelligence/SourcePanel"
+import ReportBuilder from "@/components/reports/ReportBuilder"
 import { FileText, MessageSquare, Network, Search, ShieldCheck, Upload } from "lucide-react"
 import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -330,6 +331,8 @@ export default function InvestigatorCaseWorkspace() {
           </div>
         ) : null}
       </section>
+
+      <ReportBuilder caseId={caseId} />
 
       <section className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
         <h2 className="font-semibold text-white">Team Chat</h2>

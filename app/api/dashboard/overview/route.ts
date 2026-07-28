@@ -26,11 +26,41 @@ export async function GET() {
 
     if (user.role === "client") {
       return NextResponse.json({
-        active_cases: await count("SELECT COUNT(*) AS total FROM cases WHERE case_user_id=$1 AND status NOT IN ('closed','archived','completed')", [profile]),
-        completed_cases: await count("SELECT COUNT(*) AS total FROM cases WHERE case_user_id=$1 AND status IN ('closed','completed','delivered')", [profile]),
-        unread_messages: await count("SELECT COUNT(*) AS total FROM messages WHERE read_at IS NULL AND sender_id <> $1", [user.id]),
-        reports_available: await count("SELECT COUNT(*) AS total FROM case_reports r JOIN cases c ON c.id=r.case_id WHERE c.case_user_id=$1", [profile]),
-        latest_updates: await count("SELECT COUNT(*) AS total FROM case_updates cu JOIN cases c ON c.id=cu.case_id WHERE c.case_user_id=$1 AND cu.created_at > NOW() - INTERVAL '7 days'", [profile]),
+        active_cases: await count(
+          "SELECT COUNT(*) AS total FROM cases WHERE client_id=$1 AND status <> 'archived'",
+          [user.id],
+        ),
+        latest_updates: await count(
+          `
+          SELECT COUNT(*) AS total
+          FROM case_updates cu
+          JOIN cases c ON c.id = cu.case_id
+          WHERE c.client_id = $1
+            AND cu.created_at > NOW() - INTERVAL '7 days'
+          `,
+          [user.id],
+        ),
+        unread_messages: await count(
+          `
+          SELECT COUNT(*) AS total
+          FROM messages m
+          JOIN conversation_members cm ON cm.conversation_id = m.conversation_id
+          WHERE cm.user_id = $1
+            AND m.sender_id <> $1
+            AND m.read_at IS NULL
+          `,
+          [user.id],
+        ),
+        reports_available: await count(
+          `
+          SELECT COUNT(*) AS total
+          FROM case_reports r
+          JOIN cases c ON c.id = r.case_id
+          WHERE c.client_id = $1
+            AND r.status = 'published'
+          `,
+          [user.id],
+        ),
       })
     }
 
