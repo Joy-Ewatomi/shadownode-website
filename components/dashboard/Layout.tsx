@@ -3,7 +3,8 @@ import type { AppUser } from "@/lib/auth";
 
 
 export default function Layout({
-children
+children,
+user
 }:{
 children:React.ReactNode
 user:AppUser
