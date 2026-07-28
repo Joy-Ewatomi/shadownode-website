@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, isAdminRole } from "@/lib/auth"
 import { NextRequest, NextResponse } from "next/server"
 
 
@@ -62,7 +62,7 @@ status:401
 
 
 
-if (user.role !== "admin") {
+if (!isAdminRole(user.role)) {
 
 
 return NextResponse.json(

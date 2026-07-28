@@ -96,7 +96,7 @@ return
 // move to tracking page
 
 router.push(
-`/track/${data.token}`
+`/status/${data.token}`
 )
 
 

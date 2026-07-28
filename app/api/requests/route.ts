@@ -83,9 +83,16 @@ export async function POST(
 
 
 
-    // GENERATE ANONYMOUS TRACKING TOKEN
+    // GENERATE ANONYMOUS TRACKING TOKEN + CLIENT-FACING TRACKING NUMBER
 
     const token = nanoid(32)
+    const year = new Date().getFullYear()
+    const { count } = await supabase
+      .from("requests")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", `${year}-01-01T00:00:00.000Z`)
+      .lt("created_at", `${year + 1}-01-01T00:00:00.000Z`)
+    const trackingNumber = `SN-${year}-${String((count || 0) + 1).padStart(6, "0")}`
 
 
 
@@ -133,6 +140,9 @@ export async function POST(
 
         title:
         `${serviceType} Request`,
+
+        case_number:
+        trackingNumber,
 
 
 
@@ -252,6 +262,9 @@ export async function POST(
 
         request_id:
         data.id,
+
+        tracking_number:
+        data.case_number || trackingNumber,
 
 
         message:

@@ -143,6 +143,7 @@ COUNT(*)::int AS count
 FROM case_assignments
 WHERE case_id=$1
 AND removed_at IS NULL
+AND COALESCE(status, 'assigned') <> 'removed'
 `,
 [caseId]
 )

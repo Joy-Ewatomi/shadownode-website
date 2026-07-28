@@ -1,16 +1,18 @@
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import type { AppUser } from "@/lib/auth";
 
 
 export default function Layout({
 children
 }:{
 children:React.ReactNode
+user:AppUser
 }){
 
 
 return (
 
-<DashboardShell>
+<DashboardShell user={user}>
 
 {children}
 

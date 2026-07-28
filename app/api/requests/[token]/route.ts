@@ -64,6 +64,9 @@ id,
 case_number,
 title,
 service_type,
+description,
+timeline,
+case_manager,
 status,
 created_at,
 final_price,
@@ -129,6 +132,18 @@ data.service_type,
 
 status:
 data.status,
+
+
+description:
+data.description,
+
+
+timeline:
+data.timeline,
+
+
+case_manager:
+data.case_manager,
 
 
 created_at:
