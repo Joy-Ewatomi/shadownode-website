@@ -16,7 +16,7 @@ export async function GET() {
         title,
         message,
         type,
-        read_at IS NOT NULL AS read,
+        is_read AS read,
         created_at,
         case_id
       FROM notifications
@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest) {
     const updated = await query(
       `
       UPDATE notifications
-      SET read_at = COALESCE(read_at, NOW())
+      SET is_read = true
       WHERE id = $1
         AND user_id = $2
       RETURNING
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest) {
         title,
         message,
         type,
-        read_at IS NOT NULL AS read,
+        is_read AS read,
         created_at,
         case_id
       `,
