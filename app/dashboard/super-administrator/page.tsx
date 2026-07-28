@@ -7,10 +7,10 @@ export default function SuperAdministratorDashboard() {
       title="Super Administrator Dashboard"
       description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
       metrics={[
-        { label: "System Health", value: "Stable", helper: "Application, database, and service readiness overview" },
-        { label: "Users", value: "0", helper: "Role-governed personnel and client accounts" },
-        { label: "Audit Logs", value: "0", helper: "Security-relevant actions and administrative events" },
-        { label: "Security Overview", value: "Armed", helper: "Authentication, session, and access-control posture" },
+        { key: "database_health", label: "System Health", value: "unknown", helper: "Application, database, and service readiness overview" },
+        { key: "total_users", label: "Users", value: "0", helper: "Role-governed personnel and client accounts" },
+        { key: "audit_events", label: "Audit Logs", value: "0", helper: "Security-relevant actions and administrative events" },
+        { key: "security_events", label: "Security Overview", value: "0", helper: "Authentication, session, and access-control posture" },
       ]}
       queueTitle="System Governance"
       queueItems={[

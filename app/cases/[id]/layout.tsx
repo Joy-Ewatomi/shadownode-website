@@ -105,6 +105,10 @@ text-white/60
 Overview
 </Link>
 
+<Link href={`/cases/${id}/workspace`}>
+Workspace
+</Link>
+
 
 <Link href={`/cases/${id}/graph`}>
 Graph

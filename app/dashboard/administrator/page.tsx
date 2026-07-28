@@ -7,10 +7,10 @@ export default function AdministratorDashboard() {
       title="Administrator Dashboard"
       description="Review bureau-wide case posture, active investigation load, team workload, and operational approvals."
       metrics={[
-        { label: "Mission Control Summary", value: "Online", helper: "Command surface ready for live operational metrics" },
-        { label: "Active Investigations", value: "0", helper: "Open cases across all teams" },
-        { label: "Team Workload", value: "0", helper: "Assignments distributed across investigators and analysts" },
-        { label: "Pending Approvals", value: "0", helper: "Requests, transitions, and reports awaiting approval" },
+        { key: "total_cases", label: "Mission Control Summary", value: "0", helper: "Total investigations in bureau custody" },
+        { key: "active_investigations", label: "Active Investigations", value: "0", helper: "Open cases across all teams" },
+        { key: "pending_assignments", label: "Team Workload", value: "0", helper: "Assignments waiting for operator acceptance" },
+        { key: "unresolved_alerts", label: "Pending Approvals", value: "0", helper: "Unread operational alerts and approvals" },
       ]}
       queueTitle="Administrator Review Queue"
       queueItems={[

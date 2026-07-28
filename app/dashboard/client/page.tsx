@@ -7,10 +7,10 @@ export default function ClientDashboard() {
       title="Client Dashboard"
       description="Track active investigations, review case movement, monitor secure messages, and prepare final report downloads from one bureau workspace."
       metrics={[
-        { label: "Active Cases", value: "0", helper: "Live investigations visible to your account" },
-        { label: "Case Tracking", value: "Ready", helper: "Status monitoring prepared for connected case data" },
-        { label: "Messages", value: "0", helper: "Secure client-investigator conversations" },
-        { label: "Reports", value: "0", helper: "Final reports and supporting documents" },
+        { key: "active_cases", label: "Active Cases", value: "0", helper: "Live investigations visible to your account" },
+        { key: "latest_updates", label: "Case Tracking", value: "0", helper: "Recent case movements from the last seven days" },
+        { key: "unread_messages", label: "Messages", value: "0", helper: "Unread secure client-investigator conversations" },
+        { key: "reports_available", label: "Reports", value: "0", helper: "Final reports and supporting documents" },
       ]}
       queueTitle="Client Case Activity"
       queueItems={[

@@ -7,10 +7,10 @@ export default function AnalystDashboard() {
       title="Analyst Dashboard"
       description="Prioritize intelligence queues, manage analysis tasks, and prepare report-ready findings for internal review."
       metrics={[
-        { label: "Intelligence Queue", value: "0", helper: "Cases awaiting analytical review" },
-        { label: "Analysis Tasks", value: "0", helper: "Entity, timeline, OSINT, and forensic analysis work" },
-        { label: "Reports Pending", value: "0", helper: "Findings waiting for report compilation" },
-        { label: "Internal Review", value: "0", helper: "Analyst outputs under bureau review" },
+        { key: "intelligence_queue", label: "Intelligence Queue", value: "0", helper: "Cases awaiting analytical review" },
+        { key: "pending_analysis", label: "Analysis Tasks", value: "0", helper: "Entity, timeline, OSINT, and forensic analysis work" },
+        { key: "completed_reports", label: "Reports Pending", value: "0", helper: "Findings waiting for report compilation" },
+        { key: "priority_cases", label: "Priority Cases", value: "0", helper: "High-priority analytical work" },
       ]}
       queueTitle="Analyst Tasking"
       queueItems={[
