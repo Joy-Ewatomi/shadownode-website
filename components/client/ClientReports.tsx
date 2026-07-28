@@ -5,9 +5,9 @@ import { FileText } from "lucide-react"
 type PublishedReport = {
   id: string
   title: string | null
-  report_type: string | null
-  status: string
-  updated_at: string
+  file_url: string | null
+  summary: string | null
+  created_at: string
 }
 
 export default function ClientReports({ reports }: { reports: PublishedReport[] }) {
@@ -27,12 +27,12 @@ export default function ClientReports({ reports }: { reports: PublishedReport[] 
                 {report.title || "Published report"}
               </p>
               <p className="mt-1 text-xs text-white/40">
-                {report.report_type || "intelligence"} · published {new Date(report.updated_at).toLocaleDateString()}
+                Intelligence report · published {new Date(report.created_at).toLocaleDateString()}
               </p>
             </div>
-            <button className="rounded border border-[#20dc73]/40 px-3 py-2 text-sm text-[#20dc73] hover:bg-[#20dc73]/10">
+            <a href={report.file_url || "#"} className="rounded border border-[#20dc73]/40 px-3 py-2 text-sm text-[#20dc73] hover:bg-[#20dc73]/10">
               View
-            </button>
+            </a>
           </article>
         ))}
       </div>

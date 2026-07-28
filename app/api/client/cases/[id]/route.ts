@@ -9,6 +9,7 @@ type ClientCaseRow = {
   description: string | null
   status: string | null
   priority: string | null
+  progress: number | null
   created_at: string
 }
 
@@ -46,16 +47,14 @@ export async function GET(
         description,
         status,
         priority,
+        progress,
         created_at
       FROM cases
       WHERE ${isUuid(id) ? "id = $1" : "case_number = $1"}
-        AND (
-          client_id = $2
-          OR case_user_id = $3
-        )
+        AND client_profile_id = $2
       LIMIT 1
       `,
-      [id, user.id, profileId],
+      [id, profileId],
     )
 
     const caseInfo = caseResult.rows[0]
@@ -73,11 +72,10 @@ export async function GET(
       ),
       query(
         `
-        SELECT id, title, report_type, status, classification, created_at, updated_at
+        SELECT id, title, file_url, summary, created_at
         FROM case_reports
         WHERE case_id = $1
-          AND status = 'published'
-        ORDER BY updated_at DESC
+        ORDER BY created_at DESC
         `,
         [caseInfo.id],
       ),
@@ -124,7 +122,8 @@ export async function GET(
         FROM conversations c
         JOIN conversation_members cm ON cm.conversation_id = c.id
         LEFT JOIN messages m ON m.conversation_id = c.id
-        LEFT JOIN app_users au ON au.id = m.sender_id
+        LEFT JOIN user_profiles sender_profile ON sender_profile.id = m.sender_id
+        LEFT JOIN app_users au ON au.id = sender_profile.user_id
         WHERE c.case_id = $1
           AND cm.user_id = $2
         GROUP BY c.id
@@ -146,7 +145,7 @@ export async function GET(
     return NextResponse.json({
       case: {
         ...caseInfo,
-        progress: progressForStatus(caseInfo.status),
+        progress: caseInfo.progress ?? progressForStatus(caseInfo.status),
       },
       timeline: timeline.rows,
       reports: reports.rows,

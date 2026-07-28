@@ -50,7 +50,7 @@ export async function PATCH(
       const created = await query<{ id: string }>(
         `
         INSERT INTO cases
-          (organization_id, case_number, case_user_id, title, description, service_type, status, priority, estimated_completion)
+          (organization_id, case_number, client_profile_id, case_user_id, title, description, service_type, status, priority, estimated_completion)
         VALUES
           (
             (SELECT id FROM organizations ORDER BY created_at ASC LIMIT 1),
@@ -59,14 +59,16 @@ export async function PATCH(
             $3,
             $4,
             $5,
-            'active',
             $6,
-            $7
+            'active',
+            $7,
+            $8
           )
         RETURNING id
         `,
         [
           caseNumber,
+          profile.rows[0]?.id || null,
           profile.rows[0]?.id || null,
           item.title || `${item.service_type || item.category || "Investigation"} Request`,
           item.description,

@@ -36,9 +36,9 @@ type ClientCasePayload = {
   reports: {
     id: string
     title: string | null
-    report_type: string | null
-    status: string
-    updated_at: string
+    file_url: string | null
+    summary: string | null
+    created_at: string
   }[]
   message_summary: {
     id: string

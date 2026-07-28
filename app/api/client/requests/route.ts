@@ -113,16 +113,13 @@ export async function POST(request: NextRequest) {
 
     await query(
       `
-      INSERT INTO notifications (user_id, type, title, message, metadata)
-      SELECT id, 'client_request', 'New client investigation request', $1, $2::jsonb
+      INSERT INTO notifications (user_id, type, title, message, is_read)
+      SELECT id, 'client_request', 'New client investigation request', $1, false
       FROM app_users
       WHERE role IN ('administrator', 'super_administrator')
         AND status = 'active'
       `,
-      [
-        `${user.username} submitted ${title}`,
-        JSON.stringify({ request_id: inserted.rows[0].id, case_number: trackingNumber }),
-      ],
+      [`${user.username} submitted ${title} (${trackingNumber})`],
     ).catch(() => undefined)
 
     await auditLog(user.id, "client_request_created", request, { request_id: inserted.rows[0].id })

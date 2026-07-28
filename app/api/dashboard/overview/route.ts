@@ -27,18 +27,18 @@ export async function GET() {
     if (user.role === "client") {
       return NextResponse.json({
         active_cases: await count(
-          "SELECT COUNT(*) AS total FROM cases WHERE client_id=$1 AND status <> 'archived'",
-          [user.id],
+          "SELECT COUNT(*) AS total FROM cases WHERE client_profile_id=$1 AND status <> 'archived'",
+          [profile],
         ),
         latest_updates: await count(
           `
           SELECT COUNT(*) AS total
           FROM case_updates cu
           JOIN cases c ON c.id = cu.case_id
-          WHERE c.client_id = $1
+          WHERE c.client_profile_id = $1
             AND cu.created_at > NOW() - INTERVAL '7 days'
           `,
-          [user.id],
+          [profile],
         ),
         unread_messages: await count(
           `
@@ -46,20 +46,19 @@ export async function GET() {
           FROM messages m
           JOIN conversation_members cm ON cm.conversation_id = m.conversation_id
           WHERE cm.user_id = $1
-            AND m.sender_id <> $1
+            AND m.sender_id <> $2
             AND m.read_at IS NULL
           `,
-          [user.id],
+          [user.id, profile],
         ),
         reports_available: await count(
           `
           SELECT COUNT(*) AS total
           FROM case_reports r
           JOIN cases c ON c.id = r.case_id
-          WHERE c.client_id = $1
-            AND r.status = 'published'
+          WHERE c.client_profile_id = $1
           `,
-          [user.id],
+          [profile],
         ),
       })
     }
@@ -101,7 +100,7 @@ export async function GET() {
         investigators: await count("SELECT COUNT(*) AS total FROM app_users WHERE role='investigator' AND status='active'"),
         analysts: await count("SELECT COUNT(*) AS total FROM app_users WHERE role='analyst' AND status='active'"),
         pending_assignments: await count("SELECT COUNT(*) AS total FROM case_assignments WHERE status='assigned' AND removed_at IS NULL"),
-        unresolved_alerts: await count("SELECT COUNT(*) AS total FROM notifications WHERE read_at IS NULL AND type IN ('security','system','case_update')"),
+        unresolved_alerts: await count("SELECT COUNT(*) AS total FROM notifications WHERE is_read = false AND type IN ('security','system','case_update')"),
       })
     }
 
