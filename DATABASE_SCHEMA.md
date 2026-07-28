@@ -363,26 +363,7 @@ updated_at TIMESTAMPTZ
 ```
 
 Request/billing workflow extension columns:
-
-```sql
-client_id UUID REFERENCES app_users(id)
-category VARCHAR
-urgency VARCHAR
-preferred_deadline DATE
-quote_amount NUMERIC
-quote_currency VARCHAR
-quote_notes TEXT
-converted_case_id UUID REFERENCES cases(id)
-reviewed_by UUID REFERENCES app_users(id)
-```
-
-Relationships:
-
-```text
-requests.client_id -> app_users.id
-requests.converted_case_id -> cases.id
-requests.reviewed_by -> app_users.id
-```
+None documented in current production schema.
 
 Request statuses used by the client-to-bureau workflow:
 
@@ -621,43 +602,6 @@ updated_at
 ```
 
 Do not query those fields unless a migration has been applied and this document has been updated.
-
----
-
-# Billing
-
-## invoices
-
-Billing foundation table. No payment provider is integrated yet.
-
-Columns:
-
-```sql
-id UUID PRIMARY KEY
-case_id UUID
-client_id UUID
-amount NUMERIC
-currency VARCHAR
-status VARCHAR
-created_at TIMESTAMPTZ
-paid_at TIMESTAMPTZ
-```
-
-Relationships:
-
-```text
-invoices.case_id -> cases.id
-invoices.client_id -> app_users.id
-```
-
-Invoice statuses:
-
-```text
-draft
-sent
-paid
-cancelled
-```
 
 ---
 
@@ -998,4 +942,37 @@ Correct:
 
 ```text
 intelligence_sources.title
+```
+
+---
+
+# Future Migration Plans
+
+The fields in this section are not part of the current documented Supabase production schema. Do not query them from application code until a migration has been applied and this file has been updated to move them into the production schema sections above.
+
+Potential request workflow fields:
+
+```sql
+requests.client_id UUID REFERENCES app_users(id)
+requests.category VARCHAR
+requests.urgency VARCHAR
+requests.preferred_deadline DATE
+requests.quote_amount NUMERIC
+requests.quote_currency VARCHAR
+requests.quote_notes TEXT
+requests.converted_case_id UUID REFERENCES cases(id)
+requests.reviewed_by UUID REFERENCES app_users(id)
+```
+
+Potential billing table:
+
+```sql
+invoices.id UUID PRIMARY KEY
+invoices.case_id UUID REFERENCES cases(id)
+invoices.client_id UUID REFERENCES app_users(id)
+invoices.amount NUMERIC
+invoices.currency VARCHAR
+invoices.status VARCHAR
+invoices.created_at TIMESTAMPTZ
+invoices.paid_at TIMESTAMPTZ
 ```
