@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { nanoid } from "nanoid"
 import { NextRequest, NextResponse } from "next/server"
 import { estimatePrice } from "@/lib/pricing"
+import { analyzeRequest } from "@/lib/services/request-analysis-service"
 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -112,6 +113,7 @@ export async function POST(
       timeline
 
     })
+    const analysis = analyzeRequest({ serviceType, description, timeline })
 
 
 
@@ -175,7 +177,19 @@ export async function POST(
 
 
         ai_price_estimate:
-        priceEstimate.estimatedPrice,
+        analysis.suggestedPrice,
+        ai_complexity:
+        analysis.complexity,
+        ai_estimated_hours:
+        analysis.estimatedHours,
+        ai_suggested_service:
+        analysis.suggestedService,
+        ai_suggested_priority:
+        analysis.suggestedPriority,
+        ai_confidence:
+        analysis.confidence,
+        ai_reasoning:
+        analysis.reasoning,
 
 
 
@@ -195,7 +209,7 @@ export async function POST(
 
 
         priority:
-        "normal",
+        analysis.suggestedPriority,
 
 
 

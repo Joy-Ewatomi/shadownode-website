@@ -2,8 +2,9 @@ import { nanoid } from "nanoid"
 import { NextRequest, NextResponse } from "next/server"
 import { auditLog, getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
-
-const statuses = new Set(["pending_review", "reviewing", "approved", "quote_sent", "payment_pending", "active", "rejected"])
+import { analyzeRequest } from "@/lib/services/request-analysis-service"
+import { notifyAdmins } from "@/lib/services/notification-service"
+import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
 
 export async function GET() {
   try {
@@ -23,14 +24,23 @@ export async function GET() {
         urgency,
         preferred_deadline,
         status,
-        quote_amount,
-        quote_currency,
         quote_notes,
+        ai_price_estimate,
+        ai_complexity,
+        ai_estimated_hours,
+        ai_suggested_service,
+        ai_suggested_priority,
+        ai_confidence,
+        ai_reasoning,
+        approved_quote_amount,
+        approved_quote_currency,
+        approved_quote_notes,
+        approved_estimated_completion,
         converted_case_id,
         created_at,
         updated_at
       FROM requests
-      WHERE client_id = $1
+      WHERE user_id = $1
       ORDER BY created_at DESC
       `,
       [user.id],
@@ -70,8 +80,9 @@ export async function POST(request: NextRequest) {
       [`${year}-01-01`, `${year + 1}-01-01`],
     )
     const trackingNumber = `SN-${year}-${String(Number(existing.rows[0]?.total || 0) + 1).padStart(6, "0")}`
+    const analysis = analyzeRequest({ serviceType: category, description, urgency, timeline: body.preferred_deadline ? "standard" : urgency })
 
-    const inserted = await query(
+    const inserted = await query<{ id: string }>(
       `
       INSERT INTO requests
         (
@@ -84,17 +95,25 @@ export async function POST(request: NextRequest) {
           urgency,
           preferred_deadline,
           status,
-          client_id,
+          user_id,
           client_email,
           is_anonymous,
           priority,
           timeline,
           currency,
+          estimated_price,
+          ai_price_estimate,
+          ai_complexity,
+          ai_estimated_hours,
+          ai_suggested_service,
+          ai_suggested_priority,
+          ai_confidence,
+          ai_reasoning,
           created_at,
           updated_at
         )
       VALUES
-        ($1, $2, $3, $4, $4, $5, $6, $7, 'pending_review', $8, $9, false, $6, $10, 'NGN', NOW(), NOW())
+        ($1, $2, $3, $4, $4, $5, $6, $7, 'pending_review', $8, $9, false, $11, $10, 'NGN', $12, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
       RETURNING *
       `,
       [
@@ -108,19 +127,27 @@ export async function POST(request: NextRequest) {
         user.id,
         user.email,
         body.preferred_deadline || urgency,
+        analysis.suggestedPriority,
+        analysis.suggestedPrice,
+        analysis.complexity,
+        analysis.estimatedHours,
+        analysis.suggestedService,
+        analysis.suggestedPriority,
+        analysis.confidence,
+        analysis.reasoning,
       ],
     )
 
-    await query(
-      `
-      INSERT INTO notifications (user_id, type, title, message, is_read)
-      SELECT id, 'client_request', 'New client investigation request', $1, false
-      FROM app_users
-      WHERE role IN ('administrator', 'super_administrator')
-        AND status = 'active'
-      `,
-      [`${user.username} submitted ${title} (${trackingNumber})`],
-    ).catch(() => undefined)
+    await notifyAdmins({
+      type: "client_request",
+      title: "New client investigation request",
+      message: `${user.username} submitted ${title} (${trackingNumber})`,
+      metadata: { request_id: inserted.rows[0].id },
+    })
+    await recordRequestAudit(inserted.rows[0].id, user.id, "ai_estimate_generated", {
+      suggested_price: analysis.suggestedPrice,
+      confidence: analysis.confidence,
+    })
 
     await auditLog(user.id, "client_request_created", request, { request_id: inserted.rows[0].id })
 

@@ -6,6 +6,7 @@ import MissionStats from "@/components/mission-control/MissionStats"
 import PendingRequests from "@/components/mission-control/PendingRequests"
 import QuickActions from "@/components/mission-control/QuickActions"
 import RecentActivity from "@/components/mission-control/RecentActivity"
+import QuoteReviews from "@/components/mission-control/QuoteReviews"
 import TeamStatus from "@/components/mission-control/TeamStatus"
 import { useEffect, useState } from "react"
 
@@ -26,6 +27,7 @@ type MissionControlData = {
   investigator_workload: any[]
   notifications: any[]
   alerts: any[]
+  quote_reviews: any[]
 }
 
 const emptyData: MissionControlData = {
@@ -45,6 +47,7 @@ const emptyData: MissionControlData = {
   investigator_workload: [],
   notifications: [],
   alerts: [],
+  quote_reviews: [],
 }
 
 export default function MissionControlPage() {
@@ -67,6 +70,13 @@ export default function MissionControlPage() {
     load()
   }, [])
 
+  async function reload() {
+    setLoading(true)
+    const response = await fetch("/api/admin/mission-control", { credentials: "include" })
+    if (response.ok) setData(await response.json())
+    setLoading(false)
+  }
+
   return (
     <main className="min-h-screen bg-[#020604] p-6 text-white">
       <header className="mb-6 border-b border-[#143b28] pb-6">
@@ -85,6 +95,7 @@ export default function MissionControlPage() {
           <section className="grid gap-6 xl:grid-cols-[1fr_24rem]">
             <div className="space-y-6">
               <RecentActivity items={data.recent_activity} />
+              <QuoteReviews reviews={data.quote_reviews} onUpdated={reload} />
               <ActiveCases cases={data.active_cases} />
               <PendingRequests requests={data.pending_requests} />
             </div>

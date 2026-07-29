@@ -49,6 +49,9 @@ user_profiles
 cases
      |
      |
+requests
+quote_negotiations
+request_audit_events
 case_updates
 case_reports
 messages
@@ -184,6 +187,122 @@ updated_at TIMESTAMPTZ
 ---
 
 # Case Management
+
+
+## requests
+
+
+Client investigation intake records. A request is not a case until the client accepts a final quote.
+
+
+Columns:
+
+```sql
+id UUID PRIMARY KEY
+token TEXT
+case_number VARCHAR
+title VARCHAR
+category VARCHAR
+service_type VARCHAR
+description TEXT
+timeline VARCHAR
+urgency VARCHAR
+preferred_deadline DATE
+contact_method VARCHAR
+client_email VARCHAR
+client_id UUID REFERENCES app_users(id)
+is_anonymous BOOLEAN
+status VARCHAR
+priority VARCHAR
+progress INTEGER
+currency VARCHAR
+estimated_price INTEGER
+final_price INTEGER
+price_notes TEXT
+ai_price_estimate INTEGER
+ai_complexity VARCHAR
+ai_estimated_hours NUMERIC
+ai_suggested_service VARCHAR
+ai_suggested_priority VARCHAR
+ai_confidence NUMERIC
+ai_reasoning TEXT
+quote_notes TEXT
+approved_quote_amount NUMERIC
+approved_quote_currency VARCHAR
+approved_quote_notes TEXT
+approved_estimated_completion DATE
+quote_sent_at TIMESTAMPTZ
+client_decision_at TIMESTAMPTZ
+declined_reason TEXT
+converted_case_id UUID REFERENCES cases(id)
+reviewed_by UUID REFERENCES app_users(id)
+created_at TIMESTAMPTZ
+updated_at TIMESTAMPTZ
+```
+
+
+IMPORTANT:
+
+A request must stay in request/quote workflow until client acceptance. Do not create a case during admin review.
+
+
+---
+
+
+## quote_negotiations
+
+
+Dedicated quote negotiation history.
+
+
+Columns:
+
+```sql
+id UUID PRIMARY KEY
+request_id UUID REFERENCES requests(id)
+client_id UUID REFERENCES app_users(id)
+assigned_reviewer_id UUID REFERENCES app_users(id)
+owner_approver_id UUID REFERENCES app_users(id)
+round_number INTEGER
+status VARCHAR
+original_ai_estimate NUMERIC
+original_quote_amount NUMERIC
+approved_quote_currency VARCHAR
+requested_budget NUMERIC
+client_reason TEXT
+client_notes TEXT
+administrator_recommendation TEXT
+revised_quote_amount NUMERIC
+owner_decision VARCHAR
+owner_decision_notes TEXT
+decided_at TIMESTAMPTZ
+created_at TIMESTAMPTZ
+updated_at TIMESTAMPTZ
+```
+
+
+---
+
+
+## request_audit_events
+
+
+Permanent audit history for request, quote, negotiation, and conversion actions.
+
+
+Columns:
+
+```sql
+id UUID PRIMARY KEY
+request_id UUID REFERENCES requests(id)
+actor_user_id UUID REFERENCES app_users(id)
+action VARCHAR
+details JSONB
+created_at TIMESTAMPTZ
+```
+
+
+---
 
 
 ## cases
@@ -369,6 +488,20 @@ case_id UUID
 assigned_to UUID
 
 assigned_by UUID
+
+assignment_role VARCHAR
+
+status VARCHAR
+
+accepted_at TIMESTAMPTZ
+
+rejected_at TIMESTAMPTZ
+
+rejection_reason TEXT
+
+deadline DATE
+
+notes TEXT
 
 assigned_at TIMESTAMPTZ
 
@@ -632,6 +765,8 @@ user_id UUID
 
 case_id UUID
 
+assignment_id UUID
+
 type VARCHAR
 
 title VARCHAR
@@ -639,6 +774,10 @@ title VARCHAR
 message TEXT
 
 is_read BOOLEAN
+
+read_at TIMESTAMPTZ
+
+metadata JSONB
 
 created_at TIMESTAMPTZ
 ```

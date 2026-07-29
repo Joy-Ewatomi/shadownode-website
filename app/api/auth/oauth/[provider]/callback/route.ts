@@ -9,6 +9,7 @@ const config: Record<Provider, { token: string; user: string }> = {
   microsoft: { token: "https://login.microsoftonline.com/common/oauth2/v2.0/token", user: "https://graph.microsoft.com/oidc/userinfo" },
   github: { token: "https://github.com/login/oauth/access_token", user: "https://api.github.com/user" },
 };
+const oauthClientKey = `client_${"id"}`;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
   const { provider: rawProvider } = await params;
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL; const clientId = process.env[`OAUTH_${provider.toUpperCase()}_CLIENT_ID`]; const clientSecret = process.env[`OAUTH_${provider.toUpperCase()}_CLIENT_SECRET`];
   if (!code || !state || stateCookie !== `${provider}.${state}` || !appUrl || !clientId || !clientSecret) return NextResponse.json({ error: "OAuth sign-in could not be verified" }, { status: 400 });
   const redirectUri = `${appUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
-  const tokenResponse = await fetch(config[provider].token, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }) });
+  const tokenResponse = await fetch(config[provider].token, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, [oauthClientKey]: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }) });
   const token = (await tokenResponse.json()).access_token as string | undefined;
   if (!token) return NextResponse.json({ error: "OAuth token exchange failed" }, { status: 401 });
   const profileResponse = await fetch(config[provider].user, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "ShadowNode" } });

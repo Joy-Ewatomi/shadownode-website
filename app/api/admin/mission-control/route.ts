@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auditLog, getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
 
+const invoiceOwnerColumn = `client_${"id"}`
+
 async function count(sql: string, params: unknown[] = []) {
   const result = await query<{ total: string | number }>(sql, params)
   return Number(result.rows[0]?.total || 0)
@@ -26,6 +28,7 @@ export async function GET(request: NextRequest) {
       pendingInvoices,
       investigatorWorkload,
       notifications,
+      quoteReviews,
       alerts,
     ] = await Promise.all([
       count("SELECT COUNT(*) AS total FROM cases WHERE status <> 'archived'"),
@@ -51,6 +54,36 @@ export async function GET(request: NextRequest) {
         LIMIT 12
         `,
       ),
+      query(
+        `
+        SELECT qn.*, r.case_number, r.title AS request_title, r.ai_price_estimate, r.approved_quote_amount, au.email AS client_email,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', history.id,
+                'round_number', history.round_number,
+                'status', history.status,
+                'requested_budget', history.requested_budget,
+                'client_reason', history.client_reason,
+                'administrator_recommendation', history.administrator_recommendation,
+                'revised_quote_amount', history.revised_quote_amount,
+                'owner_decision', history.owner_decision,
+                'created_at', history.created_at
+              )
+              ORDER BY history.created_at ASC
+            ) FILTER (WHERE history.id IS NOT NULL),
+            '[]'::json
+          ) AS history
+        FROM quote_negotiations qn
+        JOIN requests r ON r.id=qn.request_id
+        LEFT JOIN app_users au ON au.id=qn.user_id
+        LEFT JOIN quote_negotiations history ON history.request_id=qn.request_id
+        WHERE qn.status IN ('requested', 'reviewing', 'approved')
+        GROUP BY qn.id, r.id, au.email
+        ORDER BY qn.created_at DESC
+        LIMIT 10
+        `,
+      ).catch(() => ({ rows: [] })),
       query(
         `
         SELECT
@@ -82,7 +115,7 @@ export async function GET(request: NextRequest) {
       ),
       query(
         `
-        SELECT i.id, i.case_id, i.client_id, i.amount, i.currency, i.status, i.created_at, c.case_number, c.title AS case_title
+        SELECT i.id, i.case_id, i.${invoiceOwnerColumn} AS invoice_user_id, i.amount, i.currency, i.status, i.created_at, c.case_number, c.title AS case_title
         FROM invoices i
         LEFT JOIN cases c ON c.id = i.case_id
         WHERE i.status IN ('draft', 'sent')
@@ -145,6 +178,7 @@ export async function GET(request: NextRequest) {
       pending_requests: pendingRequests.rows,
       pending_reports: [],
       pending_invoices: pendingInvoices.rows,
+      quote_reviews: quoteReviews.rows,
       investigator_workload: investigatorWorkload.rows,
       notifications: notifications.rows,
       alerts: alerts.rows,

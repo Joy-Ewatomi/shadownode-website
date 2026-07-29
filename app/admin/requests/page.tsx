@@ -1,7 +1,8 @@
 "use client"
 
-import { CheckCircle2, FilePlus2, RefreshCcw, Send, XCircle } from "lucide-react"
+import { CheckCircle2, RefreshCcw, Send, XCircle } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import QuoteSummary from "@/components/quote/QuoteSummary"
 
 type AdminRequest = {
   id: string
@@ -13,9 +14,18 @@ type AdminRequest = {
   urgency: string | null
   preferred_deadline: string | null
   status: string
-  quote_amount: string | null
-  quote_currency: string | null
   quote_notes: string | null
+  ai_price_estimate: string | null
+  ai_complexity: string | null
+  ai_estimated_hours: string | null
+  ai_suggested_service: string | null
+  ai_suggested_priority: string | null
+  ai_confidence: string | null
+  ai_reasoning: string | null
+  approved_quote_amount: string | null
+  approved_quote_currency: string | null
+  approved_quote_notes: string | null
+  approved_estimated_completion: string | null
   client_email: string | null
   account_email: string | null
   client_username: string | null
@@ -26,7 +36,7 @@ type AdminRequest = {
 export default function AdminRequestsPage() {
   const [requests, setRequests] = useState<AdminRequest[]>([])
   const [selectedId, setSelectedId] = useState("")
-  const [quote, setQuote] = useState({ quote_amount: "", quote_currency: "NGN", quote_notes: "" })
+  const [quote, setQuote] = useState({ approved_quote_amount: "", approved_quote_currency: "NGN", quote_notes: "", approved_estimated_completion: "" })
   const [loading, setLoading] = useState(true)
 
   const selected = useMemo(() => requests.find((request) => request.id === selectedId) || requests[0], [requests, selectedId])
@@ -97,6 +107,22 @@ export default function AdminRequestsPage() {
                 <p className="mt-3 text-xs text-white/40">Urgency: {selected.urgency || "normal"} · Deadline: {selected.preferred_deadline || "not set"}</p>
               </div>
 
+              <QuoteSummary
+                aiEstimate={selected.ai_price_estimate}
+                aiReasoning={selected.ai_reasoning}
+                quoteAmount={selected.approved_quote_amount}
+                currency={selected.approved_quote_currency || "NGN"}
+                notes={selected.approved_quote_notes || selected.quote_notes}
+                estimatedCompletion={selected.approved_estimated_completion}
+              />
+
+              <div className="rounded-md border border-[#143b28] bg-black/30 p-4 text-sm text-white/60">
+                <p className="font-semibold text-white">AI analysis</p>
+                <p className="mt-2">Complexity: {selected.ai_complexity || "pending"} · Hours: {selected.ai_estimated_hours || "pending"}</p>
+                <p className="mt-1">Service: {selected.ai_suggested_service || selected.service_type || "pending"} · Priority: {selected.ai_suggested_priority || selected.urgency || "normal"}</p>
+                <p className="mt-1">Confidence: {selected.ai_confidence || "pending"}</p>
+              </div>
+
               <div className="grid gap-2">
                 <button onClick={() => update("approve", { status: "approved" })} className="inline-flex h-10 items-center justify-center gap-2 rounded border border-[#20dc73]/40 text-sm text-[#20dc73]"><CheckCircle2 className="h-4 w-4" />Approve</button>
                 <button onClick={() => update("reject", { status: "rejected" })} className="inline-flex h-10 items-center justify-center gap-2 rounded border border-red-400/40 text-sm text-red-200"><XCircle className="h-4 w-4" />Reject</button>
@@ -104,16 +130,12 @@ export default function AdminRequestsPage() {
 
               <div className="space-y-3 border-t border-[#143b28] pt-5">
                 <h3 className="font-semibold">Send Quote</h3>
-                <input value={quote.quote_amount} onChange={(event) => setQuote({ ...quote, quote_amount: event.target.value })} placeholder="Amount" className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
-                <input value={quote.quote_currency} onChange={(event) => setQuote({ ...quote, quote_currency: event.target.value })} placeholder="Currency" className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
+                <input value={quote.approved_quote_amount} onChange={(event) => setQuote({ ...quote, approved_quote_amount: event.target.value })} placeholder="Amount" className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
+                <input value={quote.approved_quote_currency} onChange={(event) => setQuote({ ...quote, approved_quote_currency: event.target.value })} placeholder="Currency" className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
+                <input type="date" value={quote.approved_estimated_completion} onChange={(event) => setQuote({ ...quote, approved_estimated_completion: event.target.value })} className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
                 <textarea value={quote.quote_notes} onChange={(event) => setQuote({ ...quote, quote_notes: event.target.value })} placeholder="Quote notes" className="min-h-24 w-full rounded border border-[#143b28] bg-black px-3 py-2 text-sm outline-none" />
                 <button onClick={() => update("send_quote", { ...quote, status: "quote_sent" })} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded bg-[#20dc73] font-bold text-black"><Send className="h-4 w-4" />Send Quote</button>
               </div>
-
-              <button disabled={Boolean(selected.converted_case_id)} onClick={() => update("convert_to_case", {})} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-[#20dc73]/40 text-sm font-semibold text-[#20dc73] disabled:cursor-not-allowed disabled:opacity-40">
-                <FilePlus2 className="h-4 w-4" />
-                {selected.converted_case_id ? "Converted to Case" : "Convert to Case"}
-              </button>
             </div>
           ) : <p className="text-sm text-white/45">Select a request for review.</p>}
         </aside>

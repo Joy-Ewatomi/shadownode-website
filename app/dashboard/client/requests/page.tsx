@@ -2,6 +2,7 @@
 
 import { FilePlus2, RefreshCcw } from "lucide-react"
 import { useEffect, useState } from "react"
+import QuoteCard from "@/components/quote/QuoteCard"
 
 type ClientRequest = {
   id: string
@@ -12,12 +13,15 @@ type ClientRequest = {
   urgency: string | null
   preferred_deadline: string | null
   status: string
-  quote_amount: string | null
-  quote_currency: string | null
+  quote_notes?: string | null
+  ai_price_estimate?: string | null
+  ai_reasoning?: string | null
+  approved_quote_amount?: string | null
+  approved_quote_currency?: string | null
+  approved_quote_notes?: string | null
+  approved_estimated_completion?: string | null
   created_at: string
 }
-
-const statuses = ["pending_review", "reviewing", "approved", "quote_sent", "payment_pending", "active", "rejected"]
 
 export default function ClientRequestsPage() {
   const [requests, setRequests] = useState<ClientRequest[]>([])
@@ -46,6 +50,16 @@ export default function ClientRequestsPage() {
       setForm({ title: "", category: "osint", description: "", urgency: "normal", preferred_deadline: "" })
       await load()
     }
+  }
+
+  async function decide(id: string, body: Record<string, unknown>) {
+    const res = await fetch(`/api/client/requests/${id}/decision`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) await load()
   }
 
   return (
@@ -88,17 +102,13 @@ export default function ClientRequestsPage() {
             {loading ? <p className="p-5 text-sm text-white/45">Loading requests...</p> : null}
             {!loading && !requests.length ? <p className="p-5 text-sm text-white/45">No requests submitted yet.</p> : null}
             {requests.map((request) => (
-              <article key={request.id} className="px-5 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{request.title}</p>
-                    <p className="mt-1 text-xs text-white/40">{request.case_number} · {request.category} · {new Date(request.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <span className="rounded border border-[#20dc73]/30 bg-[#20dc73]/10 px-2 py-1 text-xs text-[#20dc73]">{statuses.includes(request.status) ? request.status : "pending_review"}</span>
-                </div>
-                <p className="mt-3 text-sm text-white/60">{request.description}</p>
-                {request.quote_amount ? <p className="mt-2 text-sm text-[#20dc73]">Quote: {request.quote_currency || "NGN"} {request.quote_amount}</p> : null}
-              </article>
+              <QuoteCard
+                key={request.id}
+                request={request}
+                onAccept={() => decide(request.id, { action: "accept" })}
+                onReview={(payload) => decide(request.id, { action: "review", ...payload })}
+                onDecline={() => decide(request.id, { action: "decline" })}
+              />
             ))}
           </div>
         </section>

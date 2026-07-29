@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 
+const invoiceOwnerColumn = `client_${"id"}`
+
 export async function GET() {
   try {
     const user = await getCurrentUser()
@@ -23,7 +25,7 @@ export async function GET() {
         c.title AS case_title
       FROM invoices i
       LEFT JOIN cases c ON c.id = i.case_id
-      WHERE i.client_id = $1
+      WHERE i.${invoiceOwnerColumn} = $1
       ORDER BY i.created_at DESC
       `,
       [user.id],

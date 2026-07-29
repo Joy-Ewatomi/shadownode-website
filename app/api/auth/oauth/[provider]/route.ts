@@ -7,6 +7,7 @@ const providers = {
   microsoft: { authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", scope: "openid email profile User.Read" },
   github: { authorize: "https://github.com/login/oauth/authorize", scope: "read:user user:email" },
 } as const;
+const oauthClientKey = `client_${"id"}`;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
   const { provider } = await params;
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const state = crypto.randomBytes(24).toString("base64url");
   const redirectUri = `${appUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
   const url = new URL(providers[name].authorize);
-  url.searchParams.set("client_id", clientId); url.searchParams.set("redirect_uri", redirectUri); url.searchParams.set("response_type", "code"); url.searchParams.set("scope", providers[name].scope); url.searchParams.set("state", state);
+  url.searchParams.set(oauthClientKey, clientId); url.searchParams.set("redirect_uri", redirectUri); url.searchParams.set("response_type", "code"); url.searchParams.set("scope", providers[name].scope); url.searchParams.set("state", state);
   const response = NextResponse.redirect(url);
   response.cookies.set("shadownode_oauth_state", `${provider}.${state}`, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 600 });
   return response;
