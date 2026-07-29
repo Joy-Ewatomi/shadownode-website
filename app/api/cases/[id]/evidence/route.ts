@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auditLog } from "@/lib/auth"
 import { optionalText, recordInvestigationTimeline, requireInvestigationWorkspace } from "@/lib/investigation-workspace"
 import { query } from "@/lib/db"
+import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 
 export async function GET(
   request: NextRequest,
@@ -97,11 +98,58 @@ export async function POST(
     )
 
     await recordInvestigationTimeline(access.caseId, access.user.id, "evidence_uploaded", "Evidence uploaded", file.name)
+    await emitCaseWorkspaceEvent({
+      type: "evidence.uploaded",
+      case_id: access.caseId,
+      actor_id: access.user.id,
+      record_id: inserted.rows[0].id,
+      data: { file_name: file.name, evidence_type: evidenceType },
+    })
     await auditLog(access.user.id, "evidence_uploaded", request, { case_id: access.caseId, forensic_file_id: inserted.rows[0].id, file_hash: fileHash })
 
     return NextResponse.json({ id: inserted.rows[0].id, file_hash: fileHash }, { status: 201 })
   } catch (error) {
     console.error("EVIDENCE POST ERROR", error)
     return NextResponse.json({ error: "Failed to upload evidence" }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const access = await requireInvestigationWorkspace(request, id)
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
+
+    const body = await request.json()
+    const evidenceId = optionalText(body.id)
+    if (!evidenceId) return NextResponse.json({ error: "Evidence id required" }, { status: 400 })
+
+    const deleted = await query<{ id: string; file_name: string | null }>(
+      `
+      DELETE FROM forensic_files
+      WHERE id = $1 AND case_id = $2
+      RETURNING id, file_name
+      `,
+      [evidenceId, access.caseId],
+    )
+
+    if (!deleted.rows.length) return NextResponse.json({ error: "Evidence not found" }, { status: 404 })
+
+    await emitCaseWorkspaceEvent({
+      type: "evidence.deleted",
+      case_id: access.caseId,
+      actor_id: access.user.id,
+      record_id: evidenceId,
+      data: { file_name: deleted.rows[0].file_name },
+    })
+    await auditLog(access.user.id, "evidence_deleted", request, { case_id: access.caseId, forensic_file_id: evidenceId })
+
+    return NextResponse.json({ id: evidenceId })
+  } catch (error) {
+    console.error("EVIDENCE DELETE ERROR", error)
+    return NextResponse.json({ error: "Failed to delete evidence" }, { status: 500 })
   }
 }

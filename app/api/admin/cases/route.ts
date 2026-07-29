@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auditLog, getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 
 async function requireAdmin() {
   const user = await getCurrentUser()
@@ -203,6 +204,20 @@ export async function PATCH(req: NextRequest) {
       priority,
       estimated_completion,
       action: action || "update_case",
+    })
+
+    await emitCaseWorkspaceEvent({
+      type: "case.updated",
+      case_id,
+      actor_id: auth.user?.id || null,
+      record_id: case_id,
+      data: {
+        title,
+        status: nextStatus,
+        priority,
+        estimated_completion,
+        action: action || "update_case",
+      },
     })
 
     await query(

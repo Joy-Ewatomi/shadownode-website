@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server"
 import {query} from "@/lib/db"
+import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 
 
 
@@ -21,7 +22,7 @@ const {id}=await context.params
 
 
 const result =
-await query(
+await query<{ id:string; update_type:string | null; title:string | null }>(
 `
 
 SELECT
@@ -131,7 +132,7 @@ update_type
 
 
 const result =
-await query(
+await query<{ id: string; update_type: string | null; title: string | null }>(
 `
 
 INSERT INTO case_updates
@@ -166,6 +167,17 @@ content
 
 )
 
+
+await emitCaseWorkspaceEvent({
+type:"timeline.created",
+case_id:id,
+actor_id:null,
+record_id:result.rows[0]?.id ?? null,
+data:{
+update_type:result.rows[0]?.update_type,
+title:result.rows[0]?.title
+}
+})
 
 
 

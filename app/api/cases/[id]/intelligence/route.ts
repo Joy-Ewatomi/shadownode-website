@@ -8,6 +8,7 @@ import {
   toScore,
 } from "@/lib/investigation-workspace"
 import { query } from "@/lib/db"
+import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 
 async function entityBelongsToCase(entityId: string, caseId: string) {
   const entity = await query<{ id: string }>(
@@ -149,7 +150,7 @@ export async function POST(
       const name = optionalText(body.name)
       if (!name) return NextResponse.json({ error: "Entity name required" }, { status: 400 })
 
-      const inserted = await query(
+      const inserted = await query<{ id: string }>(
         `
         INSERT INTO investigation_entities
           (case_id, entity_type, name, description, aliases, verification_status, confidence_score, created_by)
@@ -170,6 +171,13 @@ export async function POST(
       )
 
       await recordInvestigationTimeline(access.caseId, access.user.id, "entity_created", "Entity created", name)
+      await emitCaseWorkspaceEvent({
+        type: "entity.created",
+        case_id: access.caseId,
+        actor_id: access.user.id,
+        record_id: inserted.rows[0].id,
+        data: { name },
+      })
       await auditLog(access.user.id, "investigation_entity_created", request, { case_id: access.caseId, entity_id: inserted.rows[0].id })
       return NextResponse.json(inserted.rows[0], { status: 201 })
     }
@@ -184,7 +192,7 @@ export async function POST(
         return NextResponse.json({ error: "Relationship entities must belong to the case" }, { status: 400 })
       }
 
-      const inserted = await query(
+      const inserted = await query<{ id: string }>(
         `
         INSERT INTO entity_relationships
           (case_id, source_entity_id, target_entity_id, relationship_type, description, confidence_score, verification_status, created_by)
@@ -205,6 +213,13 @@ export async function POST(
       )
 
       await recordInvestigationTimeline(access.caseId, access.user.id, "relationship_created", "Relationship created", optionalText(body.relationship_type) ?? "Entity relationship recorded")
+      await emitCaseWorkspaceEvent({
+        type: "relationship.created",
+        case_id: access.caseId,
+        actor_id: access.user.id,
+        record_id: inserted.rows[0].id,
+        data: { relationship_type: optionalText(body.relationship_type) },
+      })
       await auditLog(access.user.id, "entity_relationship_created", request, { case_id: access.caseId, relationship_id: inserted.rows[0].id })
       return NextResponse.json(inserted.rows[0], { status: 201 })
     }
@@ -213,7 +228,7 @@ export async function POST(
       const title = optionalText(body.title)
       if (!title) return NextResponse.json({ error: "Source title required" }, { status: 400 })
 
-      const inserted = await query(
+      const inserted = await query<{ id: string }>(
         `
         INSERT INTO intelligence_sources
           (case_id, source_type, title, url, description, reliability_score, collected_by, collected_at)
@@ -242,7 +257,7 @@ export async function POST(
       const description = optionalText(body.description)
       if (!title || !description) return NextResponse.json({ error: "Observation title and description required" }, { status: 400 })
 
-      const inserted = await query(
+      const inserted = await query<{ id: string }>(
         `
         INSERT INTO intelligence_observations
           (case_id, observation_type, title, description, confidence_score, status)
@@ -261,6 +276,13 @@ export async function POST(
       )
 
       await recordInvestigationTimeline(access.caseId, access.user.id, "observation_added", "Observation added", title)
+      await emitCaseWorkspaceEvent({
+        type: "observation.created",
+        case_id: access.caseId,
+        actor_id: access.user.id,
+        record_id: inserted.rows[0].id,
+        data: { title },
+      })
       await auditLog(access.user.id, "intelligence_observation_created", request, { case_id: access.caseId, observation_id: inserted.rows[0].id })
       return NextResponse.json(inserted.rows[0], { status: 201 })
     }
@@ -315,6 +337,13 @@ export async function PATCH(
       if (!updated.rows.length) return NextResponse.json({ error: "Entity not found" }, { status: 404 })
 
       await recordInvestigationTimeline(access.caseId, access.user.id, "entity_updated", "Entity updated", updated.rows[0].name)
+      await emitCaseWorkspaceEvent({
+        type: "entity.updated",
+        case_id: access.caseId,
+        actor_id: access.user.id,
+        record_id: itemId,
+        data: { name: updated.rows[0].name },
+      })
       await auditLog(access.user.id, "investigation_entity_updated", request, { case_id: access.caseId, entity_id: itemId })
       return NextResponse.json(updated.rows[0])
     }
@@ -419,6 +448,13 @@ export async function PATCH(
       if (!updated.rows.length) return NextResponse.json({ error: "Observation not found" }, { status: 404 })
 
       await auditLog(access.user.id, "intelligence_observation_updated", request, { case_id: access.caseId, observation_id: itemId })
+      await emitCaseWorkspaceEvent({
+        type: "observation.updated",
+        case_id: access.caseId,
+        actor_id: access.user.id,
+        record_id: itemId,
+        data: { status: optionalText(body.status) },
+      })
       return NextResponse.json(updated.rows[0])
     }
 
@@ -454,6 +490,15 @@ export async function DELETE(
 
     const deleted = await query(`DELETE FROM ${table} WHERE id=$1 AND case_id=$2 RETURNING id`, [itemId, access.caseId])
     if (!deleted.rows.length) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+
+    if (type === "entity" || type === "relationship") {
+      await emitCaseWorkspaceEvent({
+        type: type === "entity" ? "entity.deleted" : "relationship.deleted",
+        case_id: access.caseId,
+        actor_id: access.user.id,
+        record_id: itemId,
+      })
+    }
 
     await auditLog(access.user.id, `investigation_${type}_deleted`, request, { case_id: access.caseId, id: itemId })
     return NextResponse.json({ id: itemId })

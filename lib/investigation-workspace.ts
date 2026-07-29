@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { auditLog, getCurrentUser, isAdminRole, type AppUser } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 
 export type WorkspaceUser = AppUser
 
@@ -105,11 +106,20 @@ export async function recordInvestigationTimeline(
 ) {
   const profileId = userId ? await profileIdForUser(userId) : null
 
-  await query(
+  const inserted = await query<{ id: string }>(
     `
     INSERT INTO case_updates (case_id, updated_by, update_type, title, content)
     VALUES ($1, $2, $3, $4, $5)
+    RETURNING id
     `,
     [caseId, profileId, updateType, title, content],
   )
+
+  await emitCaseWorkspaceEvent({
+    type: "timeline.created",
+    case_id: caseId,
+    actor_id: userId,
+    record_id: inserted.rows[0]?.id ?? null,
+    data: { update_type: updateType, title, content },
+  })
 }

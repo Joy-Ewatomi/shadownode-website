@@ -1,7 +1,10 @@
 "use client"
 
 import { Edit3, Link2, Save, Trash2 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCaseWorkspace } from "@/lib/realtime/useCaseWorkspace"
+import WorkspaceActivityFeed from "./WorkspaceActivityFeed"
+import WorkspacePresence from "./WorkspacePresence"
 
 type Entity = {
   id: string
@@ -70,12 +73,19 @@ export default function InvestigationWorkspaceFoundation({ caseId }: { caseId: s
   const [sourceForm, setSourceForm] = useState(emptySource)
   const [observationForm, setObservationForm] = useState(emptyObservation)
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     const res = await fetch(`/api/cases/${caseId}/intelligence`, { credentials: "include" })
     if (res.ok) setData(await res.json())
     setLoading(false)
-  }
+  }, [caseId])
+
+  const realtimeCallbacks = useMemo(() => ({
+    onEvent: () => {
+      load()
+    },
+  }), [load])
+  const realtime = useCaseWorkspace(caseId, realtimeCallbacks)
 
   async function save(type: string, payload: Record<string, unknown>) {
     const method = editing?.type === type ? "PATCH" : "POST"
@@ -104,7 +114,7 @@ export default function InvestigationWorkspaceFoundation({ caseId }: { caseId: s
 
   useEffect(() => {
     if (caseId) load()
-  }, [caseId])
+  }, [caseId, load])
 
   const tabs = useMemo(() => [
     ["entities", `Entities (${data.entities.length})`],
@@ -127,6 +137,11 @@ export default function InvestigationWorkspaceFoundation({ caseId }: { caseId: s
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <WorkspacePresence users={realtime.presence} status={realtime.status} />
+        <WorkspaceActivityFeed events={realtime.events} />
       </div>
 
       {loading ? <p className="mt-5 text-sm text-white/45">Loading investigation data...</p> : null}
