@@ -1,18 +1,32 @@
 "use client"
 
 import type { AppUser } from "@/lib/auth"
-import { BarChart3, Bell, FileText, LayoutDashboard, MessageSquare, Settings, Shield, X } from "lucide-react"
+import { BarChart3, Bell, FileText, LayoutDashboard, MessageSquare, Settings, Shield, FilePlus2, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "My Cases", href: "/cases", icon: Shield },
-  { label: "Messages", href: "/dashboard/messages", icon: MessageSquare },
-  { label: "Notifications", href: "/dashboard/notifications", icon: Bell },
-  { label: "Reports", href: "/dashboard/reports", icon: FileText },
-  { label: "Settings", href: "/security", icon: Settings },
-]
+function getNavItems(role: string) {
+  if (role === "client") {
+    return [
+      { label: "Dashboard", href: "/dashboard/client", icon: LayoutDashboard },
+      { label: "My Cases", href: "/dashboard/client/cases", icon: Shield },
+      { label: "Requests", href: "/dashboard/client/requests", icon: FilePlus2 },
+      { label: "Reports", href: "/dashboard/client/reports", icon: FileText },
+      { label: "Notifications", href: "/dashboard/client/notifications", icon: Bell },
+      { label: "Messages", href: "/dashboard/messages", icon: MessageSquare },
+      { label: "Settings", href: "/security", icon: Settings },
+    ]
+  }
+
+  return [
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "My Cases", href: "/cases", icon: Shield },
+    { label: "Messages", href: "/dashboard/messages", icon: MessageSquare },
+    { label: "Notifications", href: "/dashboard/notifications", icon: Bell },
+    { label: "Reports", href: "/dashboard/reports", icon: FileText },
+    { label: "Settings", href: "/security", icon: Settings },
+  ]
+}
 
 const roleLabels: Record<string, string> = {
   client: "Client",
@@ -32,6 +46,16 @@ export default function Sidebar({
   onClose: () => void
 }) {
   const pathname = usePathname()
+  const navItems = getNavItems(user.role)
+
+  function isActive(href: string) {
+    // Dashboard root links: exact match only
+    if (href === "/dashboard" || href === "/dashboard/client") {
+      return pathname === href
+    }
+    // Everything else: starts with match (but not matching against parent paths)
+    return pathname.startsWith(href)
+  }
 
   return (
     <>
@@ -62,7 +86,7 @@ export default function Sidebar({
 
         <nav className="flex-1 space-y-1 px-3 py-4">
           {navItems.map((item) => {
-            const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href)
+            const active = isActive(item.href)
             const Icon = item.icon
             return (
               <Link
