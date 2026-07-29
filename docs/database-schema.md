@@ -202,11 +202,11 @@ id UUID PRIMARY KEY
 token TEXT
 case_number VARCHAR
 title VARCHAR
-category VARCHAR
-service_type VARCHAR
+category VARCHAR                              -- Division: 'osint' | 'cybersecurity'
+service_type VARCHAR                          -- Specific professional service (e.g. 'Digital Identity Analysis')
 description TEXT
 timeline VARCHAR
-urgency VARCHAR
+urgency VARCHAR                               -- 'low' | 'normal' | 'high' | 'critical'
 preferred_deadline DATE
 contact_method VARCHAR
 client_email VARCHAR
@@ -236,6 +236,63 @@ client_decision_at TIMESTAMPTZ
 declined_reason TEXT
 converted_case_id UUID REFERENCES cases(id)
 reviewed_by UUID REFERENCES app_users(id)
+investigation_objective TEXT                  -- What is the objective (Step 2)
+subject_type VARCHAR                          -- 'person' | 'company' | 'digital_asset'
+subject_full_name VARCHAR(255)               -- Person: full name
+subject_known_usernames TEXT                 -- Person: comma-separated usernames
+subject_emails TEXT                          -- Person: comma-separated emails
+subject_phone_numbers TEXT                    -- Person: comma-separated phone numbers
+subject_location VARCHAR(255)                -- Person: location
+subject_organization VARCHAR(255)            -- Person: org/company
+subject_websites TEXT                        -- Person: known websites/social profiles
+subject_company_name VARCHAR(255)            -- Company: name
+subject_company_website VARCHAR(255)          -- Company: website
+subject_company_country VARCHAR(100)          -- Company: country
+subject_company_industry VARCHAR(100)         -- Company: industry
+subject_domain VARCHAR(255)                  -- Digital Asset: domain
+subject_url VARCHAR(500)                     -- Digital Asset: URL
+subject_ip_address VARCHAR(45)               -- Digital Asset: IP address
+subject_platform VARCHAR(100)                -- Digital Asset: platform
+existing_information TEXT                    -- Supporting Intelligence & Evidence summary
+investigation_depth VARCHAR(30)              -- 'basic' | 'standard' | 'deep' | 'comprehensive'
+confidentiality_level VARCHAR(30)            -- 'standard' | 'confidential' | 'highly_confidential'
+authorization_confirmed BOOLEAN              -- Lawful authorization confirmation
+communication_method VARCHAR(50)             -- 'portal_notification' | 'email' | 'phone' | 'whatsapp' | 'signal'
+communication_email VARCHAR(255)             -- Email address for email comms
+communication_country_code VARCHAR(10)       -- Country code for phone/whatsapp/signal
+communication_phone VARCHAR(50)              -- Phone number
+communication_whatsapp VARCHAR(50)           -- WhatsApp number
+communication_signal VARCHAR(50)             -- Signal number
+client_country VARCHAR(100)                  -- Client's country for currency auto-detection
+preferred_currency VARCHAR(10)               -- Auto-detected quote currency based on country
+additional_notes TEXT                        -- Additional notes (Section D)
+supporting_links JSONB                       -- Array of {type, url} objects
+evidence_uploads JSONB                       -- Array of {id, name, size, type} objects
+subject_approximate_age VARCHAR(20)          -- Physical: age range
+subject_height VARCHAR(50)                   -- Physical: height
+subject_weight VARCHAR(50)                   -- Physical: weight
+subject_hair_color VARCHAR(50)               -- Physical: hair color
+subject_eye_color VARCHAR(50)                -- Physical: eye color
+subject_skin_tone VARCHAR(50)                -- Physical: skin tone
+subject_distinguishing_marks TEXT            -- Physical: tattoos, scars, etc.
+subject_nationality VARCHAR(100)             -- Physical: nationality
+subject_languages_spoken VARCHAR(255)        -- Physical: languages
+subject_last_known_address TEXT              -- Physical: address
+subject_last_known_occupation VARCHAR(255)   -- Physical: occupation
+subject_additional_usernames TEXT            -- Digital: extra usernames
+subject_gaming_ids TEXT                      -- Digital: gaming platform IDs
+subject_cryptocurrency_wallets TEXT          -- Digital: wallet addresses
+subject_domain_names TEXT                    -- Digital: domain names
+subject_ip_addresses TEXT                    -- Digital: IP addresses
+subject_vehicle_registration TEXT            -- Digital: vehicle registration (lawful only)
+training_organization_name VARCHAR(255)      -- Training: org name
+training_client_type VARCHAR(20)             -- Training: 'individual' | 'organization'
+training_participant_count INTEGER          -- Training: number of participants
+training_skill_level VARCHAR(20)             -- Training: 'beginner' | 'intermediate' | 'advanced'
+training_goal TEXT                           -- Training: primary goal
+training_topics TEXT                         -- Training: topics of interest
+training_preferred_dates TEXT                -- Training: preferred dates
+training_additional_requirements TEXT        -- Training: extra requirements
 created_at TIMESTAMPTZ
 updated_at TIMESTAMPTZ
 ```

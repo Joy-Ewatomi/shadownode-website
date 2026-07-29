@@ -56,7 +56,7 @@ export default function ClientDashboard() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Requests" items={data?.requests || []} empty="No requests yet." />
+        <Panel title="Requests" items={data?.requests || []} empty="No active investigations yet. Start an investigation request and ShadowNode analysts will review your requirements." cta={{ label: "Start Investigation", href: "/dashboard/client/requests" }} />
         <Panel title="Cases" items={data?.cases || []} empty="No active cases yet." />
         <Panel title="Reports" items={data?.reports || []} empty="No reports published yet." />
         <Panel title="Notifications" items={data?.notifications || []} empty="No notifications yet." />
@@ -65,14 +65,23 @@ export default function ClientDashboard() {
   )
 }
 
-function Panel({ title, items, empty }: { title: string; items: any[]; empty: string }) {
+function Panel({ title, items, empty, cta }: { title: string; items: any[]; empty: string; cta?: { label: string; href: string } }) {
   return (
     <section className="rounded-md border border-[#143b28] bg-[#06110f]">
       <div className="border-b border-[#143b28] px-5 py-4">
         <h2 className="font-semibold text-white">{title}</h2>
       </div>
       <div className="divide-y divide-[#143b28]">
-        {!items.length ? <p className="p-5 text-sm text-white/45">{empty}</p> : null}
+        {!items.length ? (
+          <div className="p-5">
+            <p className="text-sm text-white/45">{empty}</p>
+            {cta ? (
+              <a href={cta.href} className="mt-4 inline-flex h-9 items-center gap-2 rounded bg-[#20dc73] px-4 text-sm font-bold text-black hover:bg-[#20dc73]/80">
+                {cta.label}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
         {items.map((item) => (
           <article key={item.id} className="px-5 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
