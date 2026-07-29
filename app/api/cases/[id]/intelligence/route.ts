@@ -1,130 +1,54 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auditLog, getCurrentUser, isAdminRole } from "@/lib/auth"
+import { auditLog } from "@/lib/auth"
+import {
+  aliasesJson,
+  optionalText,
+  recordInvestigationTimeline,
+  requireInvestigationWorkspace,
+  toScore,
+} from "@/lib/investigation-workspace"
 import { query } from "@/lib/db"
 
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value)
-}
-
-async function resolveCaseId(caseId: string) {
-  if (isUuid(caseId)) return caseId
-
-  const result = await query<{ id: string }>(
-    "SELECT id FROM cases WHERE case_number=$1 OR id::text=$1 LIMIT 1",
-    [caseId],
+async function entityBelongsToCase(entityId: string, caseId: string) {
+  const entity = await query<{ id: string }>(
+    "SELECT id FROM investigation_entities WHERE id=$1 AND case_id=$2 LIMIT 1",
+    [entityId, caseId],
   )
 
-  return result.rows[0]?.id ?? null
-}
-
-async function profileIdForUser(userId: string) {
-  const profile = await query<{ id: string }>(
-    "SELECT id FROM user_profiles WHERE user_id=$1 LIMIT 1",
-    [userId],
-  ).catch(() => ({ rows: [] }))
-
-  return profile.rows[0]?.id ?? null
-}
-
-async function canUseIntelligence(userId: string, role: string, caseId: string) {
-  if (isAdminRole(role)) return true
-  if (!["investigator", "analyst"].includes(role)) return false
-
-  const profileId = await profileIdForUser(userId)
-  if (!profileId) return false
-
-  const access = await query<{ id: string }>(
-    `
-    SELECT c.id
-    FROM cases c
-    LEFT JOIN case_assignments ca
-      ON ca.case_id = c.id
-      AND ca.assigned_to = $2
-      AND ca.removed_at IS NULL
-      AND COALESCE(ca.status, 'assigned') <> 'removed'
-    WHERE c.id = $1
-      AND (
-        c.assigned_to = $2
-        OR ca.id IS NOT NULL
-      )
-    LIMIT 1
-    `,
-    [caseId, profileId],
-  )
-
-  return Boolean(access.rows.length)
-}
-
-function toScore(value: unknown) {
-  const score = Number(value ?? 0)
-  if (!Number.isFinite(score)) return 0
-  return Math.max(0, Math.min(100, Math.round(score)))
+  return Boolean(entity.rows.length)
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await getCurrentUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
     const { id } = await params
-    const caseId = await resolveCaseId(id)
-    if (!caseId) return NextResponse.json({ error: "Case not found" }, { status: 404 })
-    if (!(await canUseIntelligence(user.id, user.role, caseId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    const access = await requireInvestigationWorkspace(request, id)
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
-    const [entities, relationships, sources, findings, notes] = await Promise.all([
+    const [entities, relationships, sources, observations] = await Promise.all([
       query(
         `
         SELECT
           ie.id,
           ie.case_id,
-          ie.name,
           ie.entity_type,
+          ie.name,
           ie.description,
+          ie.aliases,
           ie.verification_status,
           ie.confidence_score,
+          ie.created_by,
           ie.created_at,
           ie.updated_at,
-          COALESCE(
-            json_agg(
-              DISTINCT jsonb_build_object(
-                'id', ef.id,
-                'file_name', ef.file_name,
-                'status', ef.status,
-                'sha256_hash', ef.sha256_hash
-              )
-            ) FILTER (WHERE ef.id IS NOT NULL),
-            '[]'::json
-          ) AS linked_evidence,
-          COALESCE(
-            json_agg(
-              DISTINCT jsonb_build_object(
-                'id', ins.id,
-                'source_type', ins.source_type,
-                'source_name', ins.source_name,
-                'url', ins.url,
-                'reliability_score', ins.reliability_score
-              )
-            ) FILTER (WHERE ins.id IS NOT NULL),
-            '[]'::json
-          ) AS sources
+          au.username AS created_by_username
         FROM investigation_entities ie
-        LEFT JOIN entity_sources es ON es.entity_id = ie.id
-        LEFT JOIN intelligence_sources ins ON ins.id = es.source_id
-        LEFT JOIN evidence_files ef ON ef.case_id = ie.case_id
-          AND (
-            ef.description ILIKE '%' || ie.name || '%'
-            OR ef.file_name ILIKE '%' || ie.name || '%'
-          )
+        LEFT JOIN app_users au ON au.id = ie.created_by
         WHERE ie.case_id = $1
-        GROUP BY ie.id
         ORDER BY ie.created_at DESC
         `,
-        [caseId],
+        [access.caseId],
       ),
       query(
         `
@@ -137,63 +61,75 @@ export async function GET(
           target_entity.name AS target_entity_name,
           er.relationship_type,
           er.description,
-          er.verification_status,
           er.confidence_score,
-          er.created_at
+          er.verification_status,
+          er.created_by,
+          au.username AS created_by_username
         FROM entity_relationships er
         LEFT JOIN investigation_entities source_entity ON source_entity.id = er.source_entity_id
         LEFT JOIN investigation_entities target_entity ON target_entity.id = er.target_entity_id
+        LEFT JOIN app_users au ON au.id = er.created_by
         WHERE er.case_id = $1
-        ORDER BY er.created_at DESC
+        ORDER BY er.id DESC
         `,
-        [caseId],
+        [access.caseId],
       ),
       query(
         `
-        SELECT ins.*, au.username AS created_by_username
+        SELECT
+          ins.id,
+          ins.case_id,
+          ins.source_type,
+          ins.title,
+          ins.url,
+          ins.description,
+          ins.reliability_score,
+          ins.collected_by,
+          ins.collected_at,
+          ins.created_at,
+          au.username AS collected_by_username
         FROM intelligence_sources ins
-        LEFT JOIN app_users au ON au.id = ins.created_by
+        LEFT JOIN app_users au ON au.id = ins.collected_by
         WHERE ins.case_id = $1
         ORDER BY ins.created_at DESC
         `,
-        [caseId],
+        [access.caseId],
       ),
       query(
         `
-        SELECT inf.*, au.username AS created_by_username
-        FROM investigation_findings inf
-        LEFT JOIN app_users au ON au.id = inf.created_by
-        WHERE inf.case_id = $1
-        ORDER BY inf.created_at DESC
+        SELECT
+          io.id,
+          io.case_id,
+          io.observation_type,
+          io.title,
+          io.description,
+          io.confidence_score,
+          io.status,
+          io.reviewed_by,
+          io.reviewed_at,
+          io.created_at,
+          reviewer.username AS reviewed_by_username
+        FROM intelligence_observations io
+        LEFT JOIN app_users reviewer ON reviewer.id = io.reviewed_by
+        WHERE io.case_id = $1
+        ORDER BY io.created_at DESC
         `,
-        [caseId],
-      ),
-      query(
-        `
-        SELECT en.*, au.username, ie.case_id
-        FROM entity_notes en
-        JOIN investigation_entities ie ON ie.id = en.entity_id
-        LEFT JOIN app_users au ON au.id = en.user_id
-        WHERE ie.case_id = $1
-        ORDER BY en.created_at DESC
-        `,
-        [caseId],
+        [access.caseId],
       ),
     ])
 
-    await auditLog(user.id, "intelligence_viewed", _request, { case_id: caseId })
+    await auditLog(access.user.id, "investigation_workspace_viewed", request, { case_id: access.caseId })
 
     return NextResponse.json({
-      case_id: caseId,
+      case_id: access.caseId,
       entities: entities.rows,
       relationships: relationships.rows,
       sources: sources.rows,
-      findings: findings.rows,
-      notes: notes.rows,
+      observations: observations.rows,
     })
   } catch (error) {
-    console.error("INTELLIGENCE GET ERROR", error)
-    return NextResponse.json({ error: "Failed to load intelligence" }, { status: 500 })
+    console.error("INVESTIGATION WORKSPACE GET ERROR", error)
+    return NextResponse.json({ error: "Failed to load investigation workspace" }, { status: 500 })
   }
 }
 
@@ -202,108 +138,327 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await getCurrentUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
     const { id } = await params
-    const caseId = await resolveCaseId(id)
-    if (!caseId) return NextResponse.json({ error: "Case not found" }, { status: 404 })
-    if (!(await canUseIntelligence(user.id, user.role, caseId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    const access = await requireInvestigationWorkspace(request, id)
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
     const body = await request.json()
     const type = String(body.type || "")
 
-    if (type === "source") {
-      if (!body.source_name) {
-        return NextResponse.json({ error: "Source name required" }, { status: 400 })
+    if (type === "entity") {
+      const name = optionalText(body.name)
+      if (!name) return NextResponse.json({ error: "Entity name required" }, { status: 400 })
+
+      const inserted = await query(
+        `
+        INSERT INTO investigation_entities
+          (case_id, entity_type, name, description, aliases, verification_status, confidence_score, created_by)
+        VALUES
+          ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+        RETURNING *
+        `,
+        [
+          access.caseId,
+          optionalText(body.entity_type),
+          name,
+          optionalText(body.description),
+          aliasesJson(body.aliases),
+          optionalText(body.verification_status) ?? "unverified",
+          toScore(body.confidence_score),
+          access.user.id,
+        ],
+      )
+
+      await recordInvestigationTimeline(access.caseId, access.user.id, "entity_created", "Entity created", name)
+      await auditLog(access.user.id, "investigation_entity_created", request, { case_id: access.caseId, entity_id: inserted.rows[0].id })
+      return NextResponse.json(inserted.rows[0], { status: 201 })
+    }
+
+    if (type === "relationship") {
+      const sourceId = optionalText(body.source_entity_id)
+      const targetId = optionalText(body.target_entity_id)
+      if (!sourceId || !targetId || sourceId === targetId) {
+        return NextResponse.json({ error: "Two different entities are required" }, { status: 400 })
       }
+      if (!(await entityBelongsToCase(sourceId, access.caseId)) || !(await entityBelongsToCase(targetId, access.caseId))) {
+        return NextResponse.json({ error: "Relationship entities must belong to the case" }, { status: 400 })
+      }
+
+      const inserted = await query(
+        `
+        INSERT INTO entity_relationships
+          (case_id, source_entity_id, target_entity_id, relationship_type, description, confidence_score, verification_status, created_by)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *
+        `,
+        [
+          access.caseId,
+          sourceId,
+          targetId,
+          optionalText(body.relationship_type),
+          optionalText(body.description),
+          toScore(body.confidence_score),
+          optionalText(body.verification_status) ?? "unverified",
+          access.user.id,
+        ],
+      )
+
+      await recordInvestigationTimeline(access.caseId, access.user.id, "relationship_created", "Relationship created", optionalText(body.relationship_type) ?? "Entity relationship recorded")
+      await auditLog(access.user.id, "entity_relationship_created", request, { case_id: access.caseId, relationship_id: inserted.rows[0].id })
+      return NextResponse.json(inserted.rows[0], { status: 201 })
+    }
+
+    if (type === "source") {
+      const title = optionalText(body.title)
+      if (!title) return NextResponse.json({ error: "Source title required" }, { status: 400 })
 
       const inserted = await query(
         `
         INSERT INTO intelligence_sources
-          (case_id, created_by, source_type, source_name, url, description, reliability_score)
+          (case_id, source_type, title, url, description, reliability_score, collected_by, collected_at)
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7)
+          ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamp, NOW()))
         RETURNING *
         `,
         [
-          caseId,
-          user.id,
-          body.source_type ?? null,
-          body.source_name,
-          body.url ?? null,
-          body.description ?? null,
+          access.caseId,
+          optionalText(body.source_type),
+          title,
+          optionalText(body.url),
+          optionalText(body.description),
           toScore(body.reliability_score),
+          access.user.id,
+          optionalText(body.collected_at),
         ],
       )
 
-      const source = inserted.rows[0]
-      if (body.entity_id) {
-        await query(
-          `
-          INSERT INTO entity_sources (entity_id, source_id)
-          SELECT id, $2
-          FROM investigation_entities
-          WHERE id = $1 AND case_id = $3
-          ON CONFLICT (entity_id, source_id) DO NOTHING
-          `,
-          [body.entity_id, source.id, caseId],
-        )
-      }
-
-      await auditLog(user.id, "intelligence_source_created", request, { case_id: caseId, source_id: source.id })
-      return NextResponse.json(source, { status: 201 })
+      await auditLog(access.user.id, "intelligence_source_created", request, { case_id: access.caseId, source_id: inserted.rows[0].id })
+      return NextResponse.json(inserted.rows[0], { status: 201 })
     }
 
-    if (type === "finding") {
-      if (!body.title || !body.finding) {
-        return NextResponse.json({ error: "Finding title and body required" }, { status: 400 })
-      }
+    if (type === "observation") {
+      const title = optionalText(body.title)
+      const description = optionalText(body.description)
+      if (!title || !description) return NextResponse.json({ error: "Observation title and description required" }, { status: 400 })
 
       const inserted = await query(
         `
-        INSERT INTO investigation_findings
-          (case_id, created_by, title, finding, confidence_score)
+        INSERT INTO intelligence_observations
+          (case_id, observation_type, title, description, confidence_score, status)
         VALUES
-          ($1, $2, $3, $4, $5)
+          ($1, $2, $3, $4, $5, $6)
         RETURNING *
         `,
-        [caseId, user.id, body.title, body.finding, toScore(body.confidence_score)],
+        [
+          access.caseId,
+          optionalText(body.observation_type),
+          title,
+          description,
+          toScore(body.confidence_score),
+          optionalText(body.status) ?? "draft",
+        ],
       )
 
-      await auditLog(user.id, "investigation_finding_created", request, { case_id: caseId, finding_id: inserted.rows[0].id })
+      await recordInvestigationTimeline(access.caseId, access.user.id, "observation_added", "Observation added", title)
+      await auditLog(access.user.id, "intelligence_observation_created", request, { case_id: access.caseId, observation_id: inserted.rows[0].id })
       return NextResponse.json(inserted.rows[0], { status: 201 })
     }
 
-    if (type === "entity_note") {
-      if (!body.entity_id || !body.note) {
-        return NextResponse.json({ error: "Entity and note required" }, { status: 400 })
-      }
-
-      const entity = await query<{ id: string }>(
-        "SELECT id FROM investigation_entities WHERE id=$1 AND case_id=$2 LIMIT 1",
-        [body.entity_id, caseId],
-      )
-      if (!entity.rows.length) return NextResponse.json({ error: "Entity not found" }, { status: 404 })
-
-      const inserted = await query(
-        `
-        INSERT INTO entity_notes (entity_id, user_id, note)
-        VALUES ($1, $2, $3)
-        RETURNING *
-        `,
-        [body.entity_id, user.id, body.note],
-      )
-
-      await auditLog(user.id, "entity_note_created", request, { case_id: caseId, entity_id: body.entity_id, note_id: inserted.rows[0].id })
-      return NextResponse.json(inserted.rows[0], { status: 201 })
-    }
-
-    return NextResponse.json({ error: "Unsupported intelligence action" }, { status: 400 })
+    return NextResponse.json({ error: "Unsupported investigation action" }, { status: 400 })
   } catch (error) {
-    console.error("INTELLIGENCE POST ERROR", error)
-    return NextResponse.json({ error: "Failed to save intelligence" }, { status: 500 })
+    console.error("INVESTIGATION WORKSPACE POST ERROR", error)
+    return NextResponse.json({ error: "Failed to save investigation workspace item" }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const access = await requireInvestigationWorkspace(request, id)
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
+
+    const body = await request.json()
+    const type = String(body.type || "")
+    const itemId = optionalText(body.id)
+    if (!itemId) return NextResponse.json({ error: "Item id required" }, { status: 400 })
+
+    if (type === "entity") {
+      const updated = await query<{ id: string; name: string }>(
+        `
+        UPDATE investigation_entities
+        SET
+          entity_type = COALESCE($3, entity_type),
+          name = COALESCE($4, name),
+          description = COALESCE($5, description),
+          aliases = COALESCE($6::jsonb, aliases),
+          verification_status = COALESCE($7, verification_status),
+          confidence_score = COALESCE($8, confidence_score),
+          updated_at = NOW()
+        WHERE id = $1 AND case_id = $2
+        RETURNING *
+        `,
+        [
+          itemId,
+          access.caseId,
+          optionalText(body.entity_type),
+          optionalText(body.name),
+          optionalText(body.description),
+          body.aliases === undefined ? null : aliasesJson(body.aliases),
+          optionalText(body.verification_status),
+          toScore(body.confidence_score),
+        ],
+      )
+      if (!updated.rows.length) return NextResponse.json({ error: "Entity not found" }, { status: 404 })
+
+      await recordInvestigationTimeline(access.caseId, access.user.id, "entity_updated", "Entity updated", updated.rows[0].name)
+      await auditLog(access.user.id, "investigation_entity_updated", request, { case_id: access.caseId, entity_id: itemId })
+      return NextResponse.json(updated.rows[0])
+    }
+
+    if (type === "relationship") {
+      const sourceId = optionalText(body.source_entity_id)
+      const targetId = optionalText(body.target_entity_id)
+      if (sourceId && !(await entityBelongsToCase(sourceId, access.caseId))) return NextResponse.json({ error: "Source entity not found" }, { status: 400 })
+      if (targetId && !(await entityBelongsToCase(targetId, access.caseId))) return NextResponse.json({ error: "Target entity not found" }, { status: 400 })
+      if (sourceId && targetId && sourceId === targetId) return NextResponse.json({ error: "Relationship entities must be different" }, { status: 400 })
+
+      const updated = await query(
+        `
+        UPDATE entity_relationships
+        SET
+          source_entity_id = COALESCE($3, source_entity_id),
+          target_entity_id = COALESCE($4, target_entity_id),
+          relationship_type = COALESCE($5, relationship_type),
+          description = COALESCE($6, description),
+          confidence_score = COALESCE($7, confidence_score),
+          verification_status = COALESCE($8, verification_status)
+        WHERE id = $1 AND case_id = $2
+        RETURNING *
+        `,
+        [
+          itemId,
+          access.caseId,
+          sourceId,
+          targetId,
+          optionalText(body.relationship_type),
+          optionalText(body.description),
+          toScore(body.confidence_score),
+          optionalText(body.verification_status),
+        ],
+      )
+      if (!updated.rows.length) return NextResponse.json({ error: "Relationship not found" }, { status: 404 })
+
+      await auditLog(access.user.id, "entity_relationship_updated", request, { case_id: access.caseId, relationship_id: itemId })
+      return NextResponse.json(updated.rows[0])
+    }
+
+    if (type === "source") {
+      const updated = await query(
+        `
+        UPDATE intelligence_sources
+        SET
+          source_type = COALESCE($3, source_type),
+          title = COALESCE($4, title),
+          url = COALESCE($5, url),
+          description = COALESCE($6, description),
+          reliability_score = COALESCE($7, reliability_score),
+          collected_at = COALESCE($8::timestamp, collected_at)
+        WHERE id = $1 AND case_id = $2
+        RETURNING *
+        `,
+        [
+          itemId,
+          access.caseId,
+          optionalText(body.source_type),
+          optionalText(body.title),
+          optionalText(body.url),
+          optionalText(body.description),
+          toScore(body.reliability_score),
+          optionalText(body.collected_at),
+        ],
+      )
+      if (!updated.rows.length) return NextResponse.json({ error: "Source not found" }, { status: 404 })
+
+      await auditLog(access.user.id, "intelligence_source_updated", request, { case_id: access.caseId, source_id: itemId })
+      return NextResponse.json(updated.rows[0])
+    }
+
+    if (type === "observation") {
+      const reviewedBy = body.status === "reviewed" ? access.user.id : null
+      const reviewedAt = body.status === "reviewed" ? new Date().toISOString() : null
+      const updated = await query(
+        `
+        UPDATE intelligence_observations
+        SET
+          observation_type = COALESCE($3, observation_type),
+          title = COALESCE($4, title),
+          description = COALESCE($5, description),
+          confidence_score = COALESCE($6, confidence_score),
+          status = COALESCE($7, status),
+          reviewed_by = COALESCE($8, reviewed_by),
+          reviewed_at = COALESCE($9::timestamp, reviewed_at)
+        WHERE id = $1 AND case_id = $2
+        RETURNING *
+        `,
+        [
+          itemId,
+          access.caseId,
+          optionalText(body.observation_type),
+          optionalText(body.title),
+          optionalText(body.description),
+          toScore(body.confidence_score),
+          optionalText(body.status),
+          reviewedBy,
+          reviewedAt,
+        ],
+      )
+      if (!updated.rows.length) return NextResponse.json({ error: "Observation not found" }, { status: 404 })
+
+      await auditLog(access.user.id, "intelligence_observation_updated", request, { case_id: access.caseId, observation_id: itemId })
+      return NextResponse.json(updated.rows[0])
+    }
+
+    return NextResponse.json({ error: "Unsupported investigation action" }, { status: 400 })
+  } catch (error) {
+    console.error("INVESTIGATION WORKSPACE PATCH ERROR", error)
+    return NextResponse.json({ error: "Failed to update investigation workspace item" }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const access = await requireInvestigationWorkspace(request, id)
+    if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
+
+    const body = await request.json()
+    const type = String(body.type || "")
+    const itemId = optionalText(body.id)
+    if (!itemId) return NextResponse.json({ error: "Item id required" }, { status: 400 })
+
+    const tableByType: Record<string, string> = {
+      entity: "investigation_entities",
+      relationship: "entity_relationships",
+      source: "intelligence_sources",
+      observation: "intelligence_observations",
+    }
+    const table = tableByType[type]
+    if (!table) return NextResponse.json({ error: "Unsupported investigation action" }, { status: 400 })
+
+    const deleted = await query(`DELETE FROM ${table} WHERE id=$1 AND case_id=$2 RETURNING id`, [itemId, access.caseId])
+    if (!deleted.rows.length) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+
+    await auditLog(access.user.id, `investigation_${type}_deleted`, request, { case_id: access.caseId, id: itemId })
+    return NextResponse.json({ id: itemId })
+  } catch (error) {
+    console.error("INVESTIGATION WORKSPACE DELETE ERROR", error)
+    return NextResponse.json({ error: "Failed to delete investigation workspace item" }, { status: 500 })
   }
 }

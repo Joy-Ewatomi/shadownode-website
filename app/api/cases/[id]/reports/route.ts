@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auditLog, getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { recordInvestigationTimeline } from "@/lib/investigation-workspace"
 
 const statuses = new Set(["draft", "review", "approved", "published"])
 
@@ -236,7 +237,7 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid report status" }, { status: 400 })
       }
 
-      const updated = await query(
+      const updated = await query<{ title: string | null }>(
         `
         UPDATE case_reports
         SET
@@ -261,6 +262,10 @@ export async function PATCH(
           caseId,
         ],
       )
+
+      if (body.status === "published") {
+        await recordInvestigationTimeline(caseId, user.id, "report_published", "Report published", updated.rows[0]?.title ?? "Case report")
+      }
 
       await auditLog(user.id, "report_updated", request, { case_id: caseId, report_id: reportId, status: body.status ?? null })
       return NextResponse.json(updated.rows[0])

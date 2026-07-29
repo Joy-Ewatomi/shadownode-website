@@ -5,6 +5,7 @@ import { useState } from "react"
 
 export default function EvidenceUpload({ caseId, onUploaded }: { caseId: string; onUploaded: () => void }) {
   const [file, setFile] = useState<File | null>(null)
+  const [evidenceType, setEvidenceType] = useState("digital")
   const [description, setDescription] = useState("")
   const [progress, setProgress] = useState(0)
   const [uploading, setUploading] = useState(false)
@@ -18,6 +19,7 @@ export default function EvidenceUpload({ caseId, onUploaded }: { caseId: string;
 
     const form = new FormData()
     form.append("file", file)
+    form.append("evidence_type", evidenceType)
     form.append("description", description)
 
     setProgress(55)
@@ -37,6 +39,7 @@ export default function EvidenceUpload({ caseId, onUploaded }: { caseId: string;
     }
 
     setFile(null)
+    setEvidenceType("digital")
     setDescription("")
     setProgress(0)
     onUploaded()
@@ -44,8 +47,9 @@ export default function EvidenceUpload({ caseId, onUploaded }: { caseId: string;
 
   return (
     <div className="rounded-md border border-[#143b28] bg-black/25 p-4">
-      <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+      <div className="grid gap-3 md:grid-cols-[1fr_11rem_1fr_auto]">
         <input type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} className="rounded-md border border-[#143b28] bg-black px-3 py-2 text-sm text-white file:mr-3 file:rounded file:border-0 file:bg-[#20dc73] file:px-3 file:py-1 file:text-sm file:font-bold file:text-black" />
+        <input value={evidenceType} onChange={(event) => setEvidenceType(event.target.value)} placeholder="Evidence type" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60" />
         <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Evidence description" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60" />
         <button onClick={upload} disabled={!file || uploading} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#20dc73] px-4 font-bold text-black disabled:opacity-50">
           <Upload className="h-4 w-4" />
