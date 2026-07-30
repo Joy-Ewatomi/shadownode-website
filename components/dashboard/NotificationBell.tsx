@@ -2,7 +2,7 @@
 
 import { Bell, Volume2, VolumeX } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 type Notification = {
   id: string
@@ -19,16 +19,38 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [soundEnabled, setSoundEnabled] = useState(false)
 
+  const notificationsRef = useRef<Notification[]>([])
+  const soundEnabledRef = useRef(false)
+
   async function load() {
-    const previousUnread = notifications.filter((item) => !item.read).length
-    const res = await fetch("/api/notifications", { credentials: "include" })
-    if (res.ok) {
-      const next = await res.json()
-      const nextUnread = next.filter((item: Notification) => !item.read).length
-      if (soundEnabled && nextUnread > previousUnread) {
-        new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=").play().catch(() => undefined)
+    try {
+      const res = await fetch("/api/notifications", {
+        credentials: "include",
+        cache: "no-store",
+      })
+
+      if (!res.ok) return
+
+      const next: Notification[] = await res.json()
+
+      const previousUnread = notificationsRef.current.filter(
+        (item) => !item.read
+      ).length
+
+      const nextUnread = next.filter(
+        (item) => !item.read
+      ).length
+
+      if (soundEnabledRef.current && nextUnread > previousUnread) {
+        new Audio(
+          "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
+        ).play().catch(() => undefined)
       }
+
+      notificationsRef.current = next
       setNotifications(next)
+    } catch (error) {
+      console.error("NOTIFICATION LOAD ERROR", error)
     }
   }
 
@@ -70,7 +92,17 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
             <p className="font-semibold text-white">Notifications</p>
             <div className="flex items-center gap-2">
-              <button onClick={() => setSoundEnabled((value) => !value)} className="rounded p-1 text-white/45 hover:bg-white/5 hover:text-white" aria-label="Toggle notification sound">
+              <button
+                onClick={() =>
+                  setSoundEnabled((value) => {
+                    const next = !value
+                    soundEnabledRef.current = next
+                    return next
+                  })
+                }
+                className="rounded p-1 text-white/45 hover:bg-white/5 hover:text-white"
+                aria-label="Toggle notification sound"
+              >
                 {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
               </button>
               <span className="text-xs text-white/45">{unread} unread</span>

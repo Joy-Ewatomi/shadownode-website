@@ -259,28 +259,25 @@ hashToken(token);
 
 const {rows}=await query<
 AppUser & {
-expires_at:string
+  expires_at: string
+  last_activity: string | null
 }
 >
 (
 `
 SELECT
-
-u.id,
-u.username,
-u.email,
-u.role,
-u.email_verified_at,
-u.totp_enabled,
-s.expires_at
-
+  u.id,
+  u.username,
+  u.email,
+  u.role,
+  u.email_verified_at,
+  u.totp_enabled,
+  s.expires_at,
+  s.last_activity
 FROM sessions s
-
 JOIN app_users u
-ON u.id=s.user_id
-
-WHERE s.token=$1
-
+  ON u.id = s.user_id
+WHERE s.token = $1
 LIMIT 1
 `,
 [
@@ -326,19 +323,22 @@ return null;
 
 
 
+const lastActivity = sessionUser.last_activity
+  ? new Date(sessionUser.last_activity).getTime()
+  : 0
 
-await query(
-`
-UPDATE sessions
+const fiveMinutes = 5 * 60 * 1000
 
-SET last_activity=NOW()
-
-WHERE token=$1
-`,
-[
-hashed
-]
-);
+if (Date.now() - lastActivity >= fiveMinutes) {
+  await query(
+    `
+    UPDATE sessions
+    SET last_activity = NOW()
+    WHERE token = $1
+    `,
+    [hashed]
+  )
+}
 
 
 

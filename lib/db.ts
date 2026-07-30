@@ -24,9 +24,9 @@ function createPool(): Pool | null {
     connectionString,
     ssl: process.env.POSTGRES_SSL === "true" ? { rejectUnauthorized: false } : undefined,
     // Supabase pooler (PgBouncer) idle-timeouts aggressively — keep our pool lean
-    max: 20,
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 5000,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
     allowExitOnIdle: false,
   });
 

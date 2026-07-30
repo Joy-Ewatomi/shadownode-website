@@ -4,11 +4,18 @@ import { query } from "@/lib/db"
 
 export async function GET() {
   try {
+    const startedAt = performance.now()
+
+    const authStartedAt = performance.now()
     const user = await getCurrentUser()
+    const authMs = Math.round(performance.now() - authStartedAt)
+
     if (!user) {
+      console.log(`[notifications] auth=${authMs}ms unauthorized`)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const queryStartedAt = performance.now()
     const notifications = await query(
       `
       SELECT
@@ -25,6 +32,13 @@ export async function GET() {
       LIMIT 25
       `,
       [user.id],
+    )
+
+    const queryMs = Math.round(performance.now() - queryStartedAt)
+    const totalMs = Math.round(performance.now() - startedAt)
+
+    console.log(
+      `[notifications] user=${user.id} auth=${authMs}ms query=${queryMs}ms total=${totalMs}ms rows=${notifications.rows.length}`
     )
 
     return NextResponse.json(notifications.rows)

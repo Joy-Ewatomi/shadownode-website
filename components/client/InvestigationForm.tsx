@@ -135,6 +135,9 @@ type SupportingLink = {
 /* ──────────── Form Data Type ──────────── */
 
 export type InvestigationFormData = {
+   /* Request metadata */
+  title: string
+
   /* Step 1 — Service */
   category: string
   service_type: string
@@ -238,6 +241,7 @@ export type EvidenceFile = {
 /* ──────────── Empty Form ──────────── */
 
 const EMPTY_FORM: InvestigationFormData = {
+  title: "",
   category: "osint",
   service_type: "",
   investigation_objective: "",
@@ -323,6 +327,39 @@ type Props = {
 }
 
 /* ──────────── Component ──────────── */
+
+/** Small reusable form input.
+ * Defined outside InvestigationForm so React preserves input focus
+ * when the parent component re-renders after each keystroke.
+ */
+function FormInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+  note,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  className?: string
+  note?: string
+}) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-xs uppercase tracking-[0.1em] text-white/50">{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
+      />
+      {note && <p className="mt-1 text-[11px] text-white/30">{note}</p>}
+    </div>
+  )
+}
 
 export default function InvestigationForm({ onSubmit, submitting }: Props) {
   const [form, setForm] = useState<InvestigationFormData>(EMPTY_FORM)
@@ -412,41 +449,73 @@ export default function InvestigationForm({ onSubmit, submitting }: Props) {
 
   /* ────────── Validation per step ────────── */
   function canProceed(): boolean {
-    switch (step) {
-      case 1: return Boolean(form.service_type)
-      case 2: return form.investigation_objective.trim().length >= 10
-      case 3:
-        // OSINT: subject fields are not required (can be empty)
-        // Training: must have at minimum training goal
-        if (isTrainingRequest) return form.training_goal.trim().length >= 5
-        return true
-      case 4: return true
-      case 5: return Boolean(form.investigation_depth)
-      case 6: return Boolean(form.urgency)
-      case 7: return Boolean(form.client_country)
-      case 8: return form.authorization_confirmed
-      default: return false
-    }
+  switch (step) {
+
+    case 1:
+  return Boolean(form.service_type)
+
+    case 2:
+  return Boolean(form.investigation_objective?.trim().length >= 20)
+
+    case 3:
+      if (isTrainingRequest) {
+        return Boolean(form.training_goal?.trim().length >= 5)
+      }
+      return true
+
+    case 4:
+      return true
+
+    case 5:
+      return Boolean(form.investigation_depth)
+
+    case 6:
+      return Boolean(form.urgency)
+
+    case 7:
+      return Boolean(form.client_country)
+
+    case 8:
+      return Boolean(form.authorization_confirmed)
+
+    default:
+      return false
   }
+}
 
   /* ────────── Submit ────────── */
-  async function handleSubmit() {
-    const desc = [
-      `Objective: ${form.investigation_objective}`,
-      form.existing_information ? `Supporting Intelligence: ${form.existing_information}` : "",
-      form.additional_notes ? `Additional Notes: ${form.additional_notes}` : "",
-      `Subject Type: ${form.subject_type}`,
-      form.subject_full_name ? `Subject Name: ${form.subject_full_name}` : "",
-      form.subject_organization ? `Organization: ${form.subject_organization}` : "",
-      form.subject_company_name ? `Company: ${form.subject_company_name}` : "",
-      form.subject_domain ? `Domain: ${form.subject_domain}` : "",
-      form.subject_url ? `URL: ${form.subject_url}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n")
+async function handleSubmit() {
+  const title =
+    form.title.trim() ||
+    form.service_type.trim() ||
+    `${form.category === "cybersecurity" ? "Cybersecurity" : "OSINT"} Investigation`
 
-    await onSubmit({ ...form, description: desc || form.service_type })
-  }
+  const description = [
+    `Service: ${form.service_type || form.category}`,
+    `Objective: ${form.investigation_objective}`,
+    `Subject Type: ${form.subject_type}`,
+    form.subject_full_name ? `Subject Name: ${form.subject_full_name}` : "",
+    form.subject_organization ? `Organization: ${form.subject_organization}` : "",
+    form.subject_company_name ? `Company: ${form.subject_company_name}` : "",
+    form.subject_domain ? `Domain: ${form.subject_domain}` : "",
+    form.subject_url ? `URL: ${form.subject_url}` : "",
+    form.existing_information
+      ? `Supporting Intelligence: ${form.existing_information}`
+      : "",
+    form.additional_notes
+      ? `Additional Notes: ${form.additional_notes}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .trim()
+
+  await onSubmit({
+    ...form,
+    title,
+    description,
+  })
+}
 
   /* ────────── Render: Step 1 — Service Selection ────────── */
   function renderStep1() {
@@ -555,36 +624,6 @@ export default function InvestigationForm({ onSubmit, submitting }: Props) {
   }
 
   /* ────────── Render: Step 3 — Subject / Target Information ────────── */
-
-  /** Small inline input */
-  function FormInput({
-    label,
-    value,
-    onChange,
-    placeholder,
-    className,
-    note,
-  }: {
-    label: string
-    value: string
-    onChange: (value: string) => void
-    placeholder?: string
-    className?: string
-    note?: string
-  }) {
-    return (
-      <div className={className}>
-        <label className="mb-1.5 block text-xs uppercase tracking-[0.1em] text-white/50">{label}</label>
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
-        />
-        {note && <p className="mt-1 text-[11px] text-white/30">{note}</p>}
-      </div>
-    )
-  }
 
   function renderSubjectFields() {
     // Cybersecurity training: show training fields instead of subject info
@@ -1260,13 +1299,21 @@ export default function InvestigationForm({ onSubmit, submitting }: Props) {
         ))}
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (step < 8) nextStep()
-          else handleSubmit()
-        }}
-      >
+     <form
+  onSubmit={(e) => {
+    e.preventDefault()
+
+    if (!canProceed() || submitting) {
+      return
+    }
+
+    if (step < 8) {
+      nextStep()
+    } else {
+      handleSubmit()
+    }
+  }}
+>
         {renderStep()}
 
         {/* Navigation */}
@@ -1288,7 +1335,7 @@ export default function InvestigationForm({ onSubmit, submitting }: Props) {
           )}
           <button
             type="submit"
-            disabled={!canProceed() || submitting}
+        disabled={Boolean(!canProceed() || submitting)}
             className="inline-flex h-10 items-center gap-2 rounded bg-[#20dc73] px-6 text-sm font-bold text-black transition enabled:hover:bg-[#20dc73]/80 disabled:opacity-40"
           >
             {step < 8 ? (
