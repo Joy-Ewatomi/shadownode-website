@@ -3,10 +3,15 @@
 import { RefreshCcw, Search } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import InvestigationForm from "@/components/client/InvestigationForm"
-import type { InvestigationFormData } from "@/components/client/InvestigationForm"
+import CybersecurityTrainingForm, {
+  type CybersecurityTrainingFormData,
+} from "@/components/client/forms/CybersecurityTrainingForm"
+import OsintRequestForm, {
+  type InvestigationFormData,
+} from "@/components/client/forms/OsintRequestForm"
 import QuoteCard from "@/components/quote/QuoteCard"
 import RequestSubmitted from "@/components/client/RequestSubmitted"
+import RequestServiceSelector from "@/components/client/requests/RequestServiceSelector"
 
 type ClientRequest = {
   id: string
@@ -18,18 +23,40 @@ type ClientRequest = {
   urgency: string | null
   preferred_deadline: string | null
   status: string
+
   quote_notes?: string | null
   ai_price_estimate?: string | null
   ai_reasoning?: string | null
+
   approved_quote_amount?: string | null
   approved_quote_currency?: string | null
   approved_quote_notes?: string | null
   approved_estimated_completion?: string | null
+
   created_at: string
+
+  // OSINT
   investigation_objective?: string | null
   investigation_depth?: string | null
   confidentiality_level?: string | null
   communication_channel?: string | null
+
+  // Cybersecurity Training
+  training_organization_name?: string | null
+  training_client_type?: string | null
+  training_participant_count?: number | null
+  training_skill_level?: string | null
+  training_goal?: string | null
+  training_topics?: string | null
+  training_preferred_dates?: string | null
+  training_additional_requirements?: string | null
+
+  // Communication
+  communication_method?: string | null
+  communication_email?: string | null
+  communication_phone?: string | null
+  client_country?: string | null
+  preferred_currency?: string | null
 }
 
 export default function ClientRequestsPage() {
@@ -37,6 +64,10 @@ export default function ClientRequestsPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submittedRef, setSubmittedRef] = useState<string | null>(null)
+  const [selectedService, setSelectedService] = useState<
+  "osint" | "cybersecurity" | null
+>(null)
+  const [showNewRequest, setShowNewRequest] = useState(false)
 
   async function load() {
     const res = await fetch("/api/client/requests", { credentials: "include" })
@@ -48,7 +79,11 @@ export default function ClientRequestsPage() {
     load()
   }, [])
 
-  async function handleSubmit(data: InvestigationFormData) {
+  type RequestFormData =
+  | InvestigationFormData
+  | CybersecurityTrainingFormData
+
+  async function handleSubmit(data: RequestFormData) {
     setSubmitting(true)
     const res = await fetch("/api/client/requests", {
       method: "POST",
@@ -137,9 +172,47 @@ export default function ClientRequestsPage() {
         </section>
 
         {/* Sidebar: New investigation form */}
-        <aside id="new-request">
-          <InvestigationForm onSubmit={handleSubmit} submitting={submitting} />
-        </aside>
+        {/* Sidebar: New investigation form */}
+       {/* Sidebar: Create New Request */}
+<aside id="new-request">
+  {selectedService === null && (
+    <RequestServiceSelector onSelect={setSelectedService} />
+  )}
+
+  {selectedService === "osint" && (
+    <>
+      <button
+        type="button"
+        onClick={() => setSelectedService(null)}
+        className="mb-4 inline-flex items-center gap-2 rounded border border-[#143b28] px-4 py-2 text-sm text-white/60 hover:border-[#20dc73] hover:text-[#20dc73]"
+      >
+        ← Back to Services
+      </button>
+
+      <OsintRequestForm
+        onSubmit={handleSubmit}
+        submitting={submitting}
+      />
+    </>
+  )}
+
+  {selectedService === "cybersecurity" && (
+    <>
+      <button
+        type="button"
+        onClick={() => setSelectedService(null)}
+        className="mb-4 inline-flex items-center gap-2 rounded border border-[#143b28] px-4 py-2 text-sm text-white/60 hover:border-[#20dc73] hover:text-[#20dc73]"
+      >
+        ← Back to Services
+      </button>
+
+      <CybersecurityTrainingForm
+        onSubmit={handleSubmit}
+        submitting={submitting}
+      />
+    </>
+  )}
+</aside>
       </section>
     </main>
   )

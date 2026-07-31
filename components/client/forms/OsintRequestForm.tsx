@@ -38,13 +38,6 @@ const OSINT_SERVICES = [
   "Litigation Evidence Package Preparation",
 ]
 
-const CYBERSECURITY_SERVICES = [
-  "Cybersecurity Training Programs",
-  "Security Awareness Training",
-  "Digital Safety Education",
-  "Security Assessment Guidance",
-]
-
 const INVESTIGATION_DEPTHS = [
   { value: "basic", label: "Basic Review", desc: "High-level overview and initial assessment" },
   { value: "standard", label: "Standard Investigation", desc: "Thorough investigation following standard procedures" },
@@ -214,16 +207,6 @@ export type InvestigationFormData = {
   /* Step 8 — Authorization */
   authorization_confirmed: boolean
 
-  /* Cybersecurity Training fields */
-  training_organization_name: string
-  training_client_type: string
-  training_participant_count: string
-  training_skill_level: string
-  training_goal: string
-  training_topics: string
-  training_preferred_dates: string
-  training_additional_requirements: string
-
   /* Legacy */
   description: string
 }
@@ -295,14 +278,6 @@ const EMPTY_FORM: InvestigationFormData = {
   client_country: "",
   preferred_currency: "",
   authorization_confirmed: false,
-  training_organization_name: "",
-  training_client_type: "organization",
-  training_participant_count: "",
-  training_skill_level: "beginner",
-  training_goal: "",
-  training_topics: "",
-  training_preferred_dates: "",
-  training_additional_requirements: "",
   description: "",
 }
 
@@ -365,23 +340,15 @@ export default function InvestigationForm({ onSubmit, submitting }: Props) {
   const [form, setForm] = useState<InvestigationFormData>(EMPTY_FORM)
   const [step, setStep] = useState(1)
   const [supportingLinkInput, setSupportingLinkInput] = useState<SupportingLink>({ type: "Website", url: "" })
-  const [showObjectiveDropdown, setShowObjectiveDropdown] = useState(false)
 
   const set = useCallback((patch: Partial<InvestigationFormData>) => {
     setForm((prev) => ({ ...prev, ...patch }))
   }, [])
 
-  /* Determine if this is a cybersecurity training request */
-  const isCybersecurity = form.category === "cybersecurity"
-  const isTrainingService = isCybersecurity && form.service_type && (
-    form.service_type === "Cybersecurity Training Programs" ||
-    form.service_type === "Security Awareness Training" ||
-    form.service_type === "Digital Safety Education"
-  )
-  // Security Assessment Guidance is still a cybersecurity service but uses different fields
-  const isTrainingRequest = isCybersecurity && isTrainingService
-  const services = isCybersecurity ? CYBERSECURITY_SERVICES : OSINT_SERVICES
+/* Available services */
+const services = OSINT_SERVICES
 
+  
   /* Automatically set currency when country changes */
   const handleCountryChange = useCallback((country: string) => {
     const currency = getCurrencyForCountry(country)
@@ -450,18 +417,38 @@ export default function InvestigationForm({ onSubmit, submitting }: Props) {
   /* ────────── Validation per step ────────── */
   function canProceed(): boolean {
   switch (step) {
-
     case 1:
-  return Boolean(form.service_type)
+      return Boolean(form.service_type)
 
     case 2:
-  return Boolean(form.investigation_objective?.trim().length >= 20)
+      return Boolean(
+        form.investigation_objective.trim().length >= 5
+      )
 
     case 3:
-      if (isTrainingRequest) {
-        return Boolean(form.training_goal?.trim().length >= 5)
+      switch (form.subject_type) {
+        case "person":
+          return Boolean(
+            form.subject_full_name.trim() ||
+            form.subject_known_usernames.trim() ||
+            form.subject_emails.trim() ||
+            form.subject_phone_numbers.trim()
+          )
+
+        case "company":
+          return Boolean(
+            form.subject_company_name.trim()
+          )
+
+        case "digital_asset":
+          return Boolean(
+            form.subject_domain.trim() ||
+            form.subject_url.trim()
+          )
+
+        default:
+          return false
       }
-      return true
 
     case 4:
       return true
@@ -473,10 +460,13 @@ export default function InvestigationForm({ onSubmit, submitting }: Props) {
       return Boolean(form.urgency)
 
     case 7:
-      return Boolean(form.client_country)
+      return Boolean(
+        form.client_country &&
+        form.communication_method
+      )
 
     case 8:
-      return Boolean(form.authorization_confirmed)
+      return form.authorization_confirmed
 
     default:
       return false
@@ -488,27 +478,43 @@ async function handleSubmit() {
   const title =
     form.title.trim() ||
     form.service_type.trim() ||
-    `${form.category === "cybersecurity" ? "Cybersecurity" : "OSINT"} Investigation`
+    "OSINT Investigation"
 
   const description = [
-    `Service: ${form.service_type || form.category}`,
+    `Service: ${form.service_type}`,
     `Objective: ${form.investigation_objective}`,
     `Subject Type: ${form.subject_type}`,
-    form.subject_full_name ? `Subject Name: ${form.subject_full_name}` : "",
-    form.subject_organization ? `Organization: ${form.subject_organization}` : "",
-    form.subject_company_name ? `Company: ${form.subject_company_name}` : "",
-    form.subject_domain ? `Domain: ${form.subject_domain}` : "",
-    form.subject_url ? `URL: ${form.subject_url}` : "",
+
+    form.subject_full_name
+      ? `Subject Name: ${form.subject_full_name}`
+      : "",
+
+    form.subject_organization
+      ? `Organization: ${form.subject_organization}`
+      : "",
+
+    form.subject_company_name
+      ? `Company: ${form.subject_company_name}`
+      : "",
+
+    form.subject_domain
+      ? `Domain: ${form.subject_domain}`
+      : "",
+
+    form.subject_url
+      ? `URL: ${form.subject_url}`
+      : "",
+
     form.existing_information
       ? `Supporting Intelligence: ${form.existing_information}`
       : "",
+
     form.additional_notes
       ? `Additional Notes: ${form.additional_notes}`
       : "",
   ]
     .filter(Boolean)
     .join("\n")
-    .trim()
 
   await onSubmit({
     ...form,
@@ -520,36 +526,7 @@ async function handleSubmit() {
   /* ────────── Render: Step 1 — Service Selection ────────── */
   function renderStep1() {
     return (
-      <div className="space-y-5">
-        <p className="text-sm text-white/60">
-          Select the division and specific service that best matches your investigation needs.
-        </p>
-
-        {/* Division selector */}
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">Service Division</label>
-          <div className="flex gap-3">
-            {[
-              { value: "osint", label: "Open Source Intelligence Operations", icon: Search },
-              { value: "cybersecurity", label: "Cybersecurity Services", icon: Shield },
-            ].map((div) => (
-              <button
-                key={div.value}
-                type="button"
-                onClick={() => set({ category: div.value, service_type: "" })}
-                className={`flex flex-1 items-center gap-3 rounded-md border px-4 py-5 text-left transition ${
-                  form.category === div.value
-                    ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                    : "border-[#143b28] text-white/60 hover:border-white/20 hover:text-white"
-                }`}
-              >
-                <div.icon className="h-5 w-5 shrink-0" />
-                <span className="text-sm font-semibold">{div.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
+      <div className="space-y-5">             
         {/* Services list */}
         <div>
           <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">Select Service</label>
@@ -592,7 +569,6 @@ async function handleSubmit() {
                 type="button"
                 onClick={() => {
                   set({ investigation_objective: ex })
-                  setShowObjectiveDropdown(false)
                 }}
                 className={`rounded border px-3 py-1.5 text-xs transition ${
                   form.investigation_objective === ex
@@ -624,14 +600,8 @@ async function handleSubmit() {
   }
 
   /* ────────── Render: Step 3 — Subject / Target Information ────────── */
-
-  function renderSubjectFields() {
-    // Cybersecurity training: show training fields instead of subject info
-    if (isTrainingRequest) {
-      return renderTrainingFields()
-    }
-
-    return (
+function renderStep3() {
+   return (
       <div className="space-y-5">
         <p className="text-sm text-white/60">
           Provide information about the subject or target of the investigation.
@@ -742,98 +712,6 @@ async function handleSubmit() {
             <FormInput label="Platform" value={form.subject_platform} onChange={(v) => set({ subject_platform: v })} />
           </div>
         )}
-      </div>
-    )
-  }
-
-  /* ────────── Render: Cybersecurity Training Fields ────────── */
-  function renderTrainingFields() {
-    return (
-      <div className="space-y-5">
-        <p className="text-sm text-white/60">
-          Provide details about your cybersecurity training requirements.
-        </p>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FormInput label="Organization Name (optional)" value={form.training_organization_name} onChange={(v) => set({ training_organization_name: v })} />
-
-          {/* Client Type */}
-          <div>
-            <label className="mb-1.5 block text-xs uppercase tracking-[0.1em] text-white/50">Individual or Organization</label>
-            <div className="flex gap-2">
-              {[
-                { value: "individual", label: "Individual" },
-                { value: "organization", label: "Organization" },
-              ].map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => set({ training_client_type: t.value })}
-                  className={`flex-1 rounded border px-3 py-2 text-xs transition ${
-                    form.training_client_type === t.value
-                      ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                      : "border-[#143b28] text-white/50 hover:border-white/20"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FormInput label="Number of Participants" value={form.training_participant_count} onChange={(v) => set({ training_participant_count: v })} placeholder="e.g. 10" />
-
-          {/* Skill Level */}
-          <div>
-            <label className="mb-1.5 block text-xs uppercase tracking-[0.1em] text-white/50">Current Skill Level</label>
-            <div className="flex gap-2">
-              {[
-                { value: "beginner", label: "Beginner" },
-                { value: "intermediate", label: "Intermediate" },
-                { value: "advanced", label: "Advanced" },
-              ].map((lvl) => (
-                <button
-                  key={lvl.value}
-                  type="button"
-                  onClick={() => set({ training_skill_level: lvl.value })}
-                  className={`flex-1 rounded border px-3 py-2 text-xs transition ${
-                    form.training_skill_level === lvl.value
-                      ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                      : "border-[#143b28] text-white/50 hover:border-white/20"
-                  }`}
-                >
-                  {lvl.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs uppercase tracking-[0.1em] text-white/50">Training Goal</label>
-          <textarea
-            value={form.training_goal}
-            onChange={(e) => set({ training_goal: e.target.value })}
-            placeholder="What is the primary goal of this training?"
-            className="min-h-24 w-full rounded-md border border-[#143b28] bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
-          />
-        </div>
-
-        <FormInput label="Topics of Interest" value={form.training_topics} onChange={(v) => set({ training_topics: v })} placeholder="Comma-separated topics" />
-
-        <FormInput label="Preferred Training Dates" value={form.training_preferred_dates} onChange={(v) => set({ training_preferred_dates: v })} placeholder="e.g. March 2026, Q2 2026" />
-
-        <div>
-          <label className="mb-1.5 block text-xs uppercase tracking-[0.1em] text-white/50">Additional Requirements</label>
-          <textarea
-            value={form.training_additional_requirements}
-            onChange={(e) => set({ training_additional_requirements: e.target.value })}
-            placeholder="Any specific requirements, prerequisites, or special considerations..."
-            className="min-h-20 w-full rounded-md border border-[#143b28] bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
-          />
-        </div>
       </div>
     )
   }
@@ -1177,20 +1055,12 @@ async function handleSubmit() {
       { label: "Objective", value: form.investigation_objective },
     ]
 
-    if (isTrainingRequest) {
-      if (form.training_organization_name) items.push({ label: "Organization", value: form.training_organization_name })
-      items.push({ label: "Client Type", value: form.training_client_type })
-      if (form.training_participant_count) items.push({ label: "Participants", value: form.training_participant_count })
-      items.push({ label: "Skill Level", value: form.training_skill_level })
-      if (form.training_goal) items.push({ label: "Training Goal", value: form.training_goal })
-      if (form.training_topics) items.push({ label: "Topics", value: form.training_topics })
-    } else {
-      items.push({ label: "Subject Type", value: form.subject_type.replace("_", " ") })
-      if (form.subject_full_name) items.push({ label: "Subject Name", value: form.subject_full_name })
-      if (form.subject_company_name) items.push({ label: "Company", value: form.subject_company_name })
-      if (form.subject_domain) items.push({ label: "Domain", value: form.subject_domain })
-    }
-
+    items.push(
+     { label: "Subject Type", value: form.subject_type.replace("_", " ") },
+     { label: "Subject Name", value: form.subject_full_name },
+     { label: "Company", value: form.subject_company_name },
+     { label: "Domain", value: form.subject_domain },
+    )
     items.push(
       { label: "Depth", value: INVESTIGATION_DEPTHS.find((d) => d.value === form.investigation_depth)?.label || "" },
       { label: "Priority", value: PRIORITY_LEVELS.find((u) => u.value === form.urgency)?.label || "" },
@@ -1262,20 +1132,36 @@ async function handleSubmit() {
   }
 
   /* ────────── Main Step Renderer ────────── */
-  function renderStep() {
-    switch (step) {
-      case 1: return renderStep1()
-      case 2: return renderStep2()
-      case 3: return renderSubjectFields()
-      case 4: return renderStep4()
-      case 5: return renderStep5()
-      case 6: return renderStep6()
-      case 7: return renderStep7()
-      case 8: return renderStep8()
-      default: return null
-    }
-  }
+ function renderStep() {
+  switch (step) {
+    case 1:
+      return renderStep1()
 
+    case 2:
+      return renderStep2()
+
+    case 3:
+      return renderStep3()
+
+    case 4:
+      return renderStep4()
+
+    case 5:
+      return renderStep5()
+
+    case 6:
+      return renderStep6()
+
+    case 7:
+      return renderStep7()
+
+    case 8:
+      return renderStep8()
+
+    default:
+      return null
+  }
+}
   /* ────────── Main Render ────────── */
   return (
     <div className="rounded-md border border-[#143b28] bg-[#06110f] p-6">

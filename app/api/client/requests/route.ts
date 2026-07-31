@@ -139,9 +139,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // ─── Extract and normalize common fields ───
-    const title = String(body.title || "").trim()
+    const title = String(
+  body.title ||
+  body.service_type ||
+  body.training_goal ||
+  body.investigation_objective ||
+  "Client Service Request"
+).trim()
     const category = String(body.category || "osint").trim()
-    const description = String(body.description || "").trim()
+    const description = String(
+  body.description ||
+  body.training_goal ||
+  body.investigation_objective ||
+  ""
+).trim()
     const urgency = String(body.urgency || "normal").trim()
     const service_type = String(body.service_type || body.category || "").trim()
     const investigation_objective = String(body.investigation_objective || "").trim()
@@ -175,9 +186,32 @@ export async function POST(request: NextRequest) {
     const training_additional_requirements = String(body.training_additional_requirements || "").trim()
 
     // ─── Validation ───
-    if (!title || !category || description.length < 20) {
-      return NextResponse.json({ error: "Title, category, and a 20+ character description are required" }, { status: 400 })
-    }
+    if (!category) {
+  return NextResponse.json(
+    { error: "Service category is required" },
+    { status: 400 }
+  )
+}
+
+if (
+  category === "cybersecurity" &&
+  training_goal.length < 5
+) {
+  return NextResponse.json(
+    { error: "Training goal is required" },
+    { status: 400 }
+  )
+}
+
+if (
+  category === "osint" &&
+  description.length < 20
+) {
+  return NextResponse.json(
+    { error: "Investigation description is required" },
+    { status: 400 }
+  )
+}
     if (!client_country) {
       return NextResponse.json({ error: "Country is required" }, { status: 400 })
     }
@@ -484,7 +518,10 @@ console.log(inserted.rows[0])
     // ─── Notifications & Audit ───
     await notifyAdmins({
       type: "client_request",
-      title: "New client investigation request",
+    title:
+    category === "cybersecurity"
+    ? "New cybersecurity service request"
+    : "New OSINT investigation request",
       message: `${user.username} submitted ${title} (${trackingNumber}) - ${service_type || category}`,
       metadata: { request_id: inserted.rows[0].id },
     })
