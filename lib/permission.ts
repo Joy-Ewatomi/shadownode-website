@@ -1,54 +1,106 @@
-export type UserRole =
-  | "admin"
-  | "manager"
-  | "analyst"
-  | "investigator"
-  | "researcher"
-  | "client";
+import type { AppUser } from "./auth"
+
+export type Permission =
+  | "dashboard:view"
+  | "cases:view"
+  | "cases:create"
+  | "cases:assign"
+  | "requests:view"
+  | "requests:approve"
+  | "team:view"
+  | "team:manage"
+  | "reports:view"
+  | "audit:view"
+  | "intelligence:access"
+  | "evidence:view"
+  | "evidence:manage"
+  | "investigation:view"
+  | "mission:view"
+  | "settings:view"
+  | "settings:manage"
+  | "messages:view"
+  | "notifications:view"
 
 
-export const rolePermissions = {
-
-  admin: [
-    "view_all_cases",
-    "assign_cases",
-    "manage_users",
-    "view_audit_logs",
-    "create_graph"
-  ],
-
-  manager: [
-    "view_cases",
-    "assign_cases",
-    "review_reports"
-  ],
+type RolePermission = Permission | "*"
 
 
-  analyst: [
-    "view_assigned_cases",
-    "create_graph",
-    "add_sources",
-    "add_entities",
-    "create_reports"
-  ],
+export const rolePermissions: Record<string, RolePermission[]> = {
+
+client:[
+ "dashboard:view",
+ "cases:view",
+ "requests:view",
+ "reports:view",
+ "messages:view",
+ "notifications:view",
+],
 
 
-  investigator: [
-    "view_assigned_cases",
-    "collect_information",
-    "add_notes"
-  ],
+investigator:[
+ "dashboard:view",
+ "cases:view",
+ "reports:view",
+ "messages:view",
+ "notifications:view",
+ "evidence:view",
+ "investigation:view",
+],
 
 
-  researcher: [
-    "search_sources",
-    "add_sources"
-  ],
+analyst:[
+ "dashboard:view",
+ "cases:view",
+ "reports:view",
+ "messages:view",
+ "notifications:view",
+ "intelligence:access",
+ "evidence:view",
+ "investigation:view",
+],
 
 
-  client: [
-    "view_own_case",
-    "send_messages"
-  ]
+administrator:[
+ "dashboard:view",
+ "cases:view",
+ "cases:assign",
+ "requests:view",
+ "requests:approve",
+ "team:view",
+ "team:manage",
+ "reports:view",
+ "audit:view",
+ "messages:view",
+ "evidence:view",
+ "notifications:view",
+ "mission:view",
+ "settings:view",
+],
 
-};
+
+super_administrator:[
+ "*"
+]
+
+}
+
+
+export function hasPermission(
+ user:AppUser,
+ permission:Permission
+){
+
+const permissions =
+rolePermissions[user.role] ?? []
+
+
+if(
+permissions.includes("*" as never)
+){
+ return true
+}
+
+
+return permissions.includes(permission)
+
+}

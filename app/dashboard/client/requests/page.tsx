@@ -25,8 +25,6 @@ type ClientRequest = {
   status: string
 
   quote_notes?: string | null
-  ai_price_estimate?: string | null
-  ai_reasoning?: string | null
 
   approved_quote_amount?: string | null
   approved_quote_currency?: string | null
@@ -118,8 +116,8 @@ export default function ClientRequestsPage() {
       <main className="space-y-6">
         <header className="border-b border-[#143b28] pb-6">
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">Client Requests</p>
-          <h1 className="mt-2 text-3xl font-bold text-white">Investigation Request Dashboard</h1>
-          <p className="mt-2 max-w-3xl text-sm text-white/55">Submit new investigation requests and track bureau review, quote, and activation status.</p>
+          <h1 className="mt-2 text-3xl font-bold text-white">ShadowNode Request Dashboard</h1>
+          <p className="mt-2 max-w-3xl text-sm text-white/55">Submit new requests and track bureau review, quote, and activation status.</p>
         </header>
         <RequestSubmitted referenceId={submittedRef} />
       </main>
@@ -130,8 +128,8 @@ export default function ClientRequestsPage() {
     <main className="space-y-6">
       <header className="border-b border-[#143b28] pb-6">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">Client Requests</p>
-        <h1 className="mt-2 text-3xl font-bold text-white">Investigation Request Dashboard</h1>
-        <p className="mt-2 max-w-3xl text-sm text-white/55">Submit new investigation requests and track bureau review, quote, and activation status.</p>
+        <h1 className="mt-2 text-3xl font-bold text-white">ShadowNode Request Dashboard</h1>
+        <p className="mt-2 max-w-3xl text-sm text-white/55">Submit new requests and track bureau review, quote, and activation status.</p>
       </header>
 
       <section className="grid gap-6 lg:grid-cols-[1fr_28rem]">
@@ -146,16 +144,16 @@ export default function ClientRequestsPage() {
             {!loading && !requests.length ? (
               <div className="flex flex-col items-center px-5 py-12 text-center">
                 <Search className="mb-4 h-12 w-12 text-white/20" />
-                <p className="text-lg font-semibold text-white/70">No active investigations yet</p>
+                <p className="text-lg font-semibold text-white/70">No active request yet</p>
                 <p className="mt-2 max-w-md text-sm text-white/45">
-                  Start an investigation request and ShadowNode analysts will review your requirements.
+                  make a request and ShadowNode officials will review your requirements.
                 </p>
                 <Link
                   href="#new-request"
                   onClick={() => document.getElementById("new-request")?.scrollIntoView({ behavior: "smooth" })}
                   className="mt-6 inline-flex h-10 items-center gap-2 rounded bg-[#20dc73] px-5 text-sm font-bold text-black hover:bg-[#20dc73]/80"
                 >
-                  Start Investigation
+                  Make a request
                 </Link>
               </div>
             ) : null}

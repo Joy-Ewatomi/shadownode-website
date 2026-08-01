@@ -1,22 +1,77 @@
+import { redirect } from "next/navigation"
+import { getCurrentUser } from "@/lib/auth"
 import RoleDashboard from "@/components/dashboard/RoleDashboard"
 
-export default function AnalystDashboard() {
+
+export default async function AnalystDashboard() {
+
+  const user = await getCurrentUser()
+
+  if (!user) {
+    redirect("/login")
+  }
+
+
   return (
     <RoleDashboard
-      eyebrow="Intelligence Analysis"
+      role="analyst"
+
+      eyebrow="Intelligence Operations"
+
       title="Analyst Dashboard"
-      description="Prioritize intelligence queues, manage analysis tasks, and prepare report-ready findings for internal review."
+
+      description="Analyze intelligence, process OSINT findings, review assigned cases, and produce investigative insights."
+
       metrics={[
-        { key: "intelligence_queue", label: "Intelligence Queue", value: "0", helper: "Cases awaiting analytical review" },
-        { key: "pending_analysis", label: "Analysis Tasks", value: "0", helper: "Entity, timeline, OSINT, and forensic analysis work" },
-        { key: "completed_reports", label: "Reports Pending", value: "0", helper: "Findings waiting for report compilation" },
-        { key: "priority_cases", label: "Priority Cases", value: "0", helper: "High-priority analytical work" },
+        {
+          key: "intelligence_queue",
+          label: "Intelligence Queue",
+          value: "0",
+          helper: "Assigned intelligence operations"
+        },
+        {
+          key: "pending_analysis",
+          label: "Pending Analysis",
+          value: "0",
+          helper: "Cases waiting for analyst review"
+        },
+        {
+          key: "completed_reports",
+          label: "Completed Reports",
+          value: "0",
+          helper: "Reports generated from analysis"
+        },
+        {
+          key: "priority_cases",
+          label: "Priority Cases",
+          value: "0",
+          helper: "High priority intelligence assignments"
+        },
       ]}
-      queueTitle="Analyst Tasking"
+
+      queueTitle="Analyst Intelligence Queue"
+
       queueItems={[
-        { title: "Source review", detail: "OSINT and submitted evidence queues will be organized here.", status: "Prepared" },
-        { title: "Entity correlation", detail: "Graph-linked entities and relationships will feed analyst tasks.", status: "Ready" },
-        { title: "Findings draft", detail: "Report-ready findings can be staged before final review.", status: "Queued" },
+        {
+          title:"OSINT assignments",
+          detail:"Assigned intelligence collection tasks will appear here.",
+          status:"Ready"
+        },
+        {
+          title:"Analysis workspace",
+          detail:"Review entities, sources, relationships and findings.",
+          status:"Prepared"
+        },
+        {
+          title:"Case intelligence",
+          detail:"Connected case intelligence data will appear here.",
+          status:"Queued"
+        },
+        {
+          title:"Report preparation",
+          detail:"Validated findings will move into reporting workflow.",
+          status:"Next"
+        },
       ]}
     />
   )

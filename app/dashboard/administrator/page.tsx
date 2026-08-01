@@ -18,7 +18,6 @@ export default function AdministratorDashboard() {
         { title: "Team assignments", detail: "Workload balancing will connect to normalized assignments.", status: "Ready" },
         { title: "Report approval", detail: "Final reports will queue for administrator sign-off.", status: "Queued" },
         { title: "Audit review", detail: "Operational events and sensitive actions will surface for inspection.", status: "Secure" },
-      ]}
-    />
+      ]} role={""}    />
   )
 }

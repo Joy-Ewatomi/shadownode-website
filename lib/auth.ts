@@ -17,11 +17,10 @@ export type AppUser = {
   id:string;
   username:string;
   email:string;
-  role:string;
+  role:AuthRole;
   email_verified_at:string | null;
   totp_enabled:boolean;
 };
-
 
 export type AuthRole =
 | "client"
@@ -351,7 +350,7 @@ username:sessionUser.username,
 
 email:sessionUser.email,
 
-role:sessionUser.role,
+role:sessionUser.role as AuthRole,
 
 email_verified_at:
 sessionUser.email_verified_at,

@@ -1,30 +1,34 @@
-import { getCurrentUser } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import { getCurrentUser } from "@/lib/auth"
 
-export default async function Dashboard() {
-  const user = await getCurrentUser()
+export default async function DashboardPage(){
 
-  if (!user) {
-    redirect("/login")
-  }
+ const user = await getCurrentUser()
 
-  switch (user.role) {
-    case "client":
-      redirect("/dashboard/client")
+ if(!user){
+   redirect("/login")
+ }
 
-    case "investigator":
-      redirect("/dashboard/investigator")
 
-    case "analyst":
-      redirect("/dashboard/analyst")
+ switch(user.role){
 
-    case "administrator":
-      redirect("/dashboard/administrator")
+  case "client":
+    redirect("/dashboard/client")
 
-    case "super_administrator":
-      redirect("/dashboard/super-administrator")
+  case "investigator":
+    redirect("/dashboard/investigator")
 
-    default:
-      redirect("/login")
-  }
+  case "analyst":
+    redirect("/dashboard/analyst")
+
+  case "administrator":
+    redirect("/dashboard/administrator")
+
+  case "super_administrator":
+    redirect("/dashboard/super-administrator")
+
+  default:
+    redirect("/403")
+ }
+
 }

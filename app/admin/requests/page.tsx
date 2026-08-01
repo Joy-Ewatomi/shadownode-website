@@ -240,8 +240,6 @@ export default function AdminRequestsPage() {
               {renderTraining()}
 
               <QuoteSummary
-                aiEstimate={selected.ai_price_estimate}
-                aiReasoning={selected.ai_reasoning}
                 quoteAmount={selected.approved_quote_amount}
                 currency={selected.approved_quote_currency || "NGN"}
                 notes={selected.approved_quote_notes || selected.quote_notes}

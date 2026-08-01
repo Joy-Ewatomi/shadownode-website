@@ -19,6 +19,7 @@ type QueueItem = {
 const iconMap = [ShieldCheck, Clock, MessageSquare, FileText, Activity, Users, AlertTriangle]
 
 export default function RoleDashboard({
+  role,
   eyebrow,
   title,
   description,
@@ -26,6 +27,7 @@ export default function RoleDashboard({
   queueTitle,
   queueItems,
 }: {
+  role: string
   eyebrow: string
   title: string
   description: string
@@ -33,6 +35,7 @@ export default function RoleDashboard({
   queueTitle: string
   queueItems: QueueItem[]
 }) {
+  
   const [data, setData] = useState<Record<string, string | number> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
