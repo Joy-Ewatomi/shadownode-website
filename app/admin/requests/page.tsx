@@ -1,6 +1,7 @@
 "use client"
 
 import { CheckCircle2, RefreshCcw, Send, XCircle } from "lucide-react"
+import QuoteApprovalCard from "@/components/client/QuoteApprovalCard"
 import { useEffect, useMemo, useState } from "react"
 import QuoteSummary from "@/components/quote/QuoteSummary"
 
@@ -31,6 +32,7 @@ export default function AdminRequestsPage() {
   const [requests, setRequests] = useState<AdminRequest[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [quote, setQuote] = useState({ approved_quote_amount: "", approved_quote_currency: "NGN", quote_notes: "", approved_estimated_completion: "" })
+  const [superAdminQuote, setSuperAdminQuote] = useState({ amount: "", currency: "NGN", reason: "", notes: "", estimated_completion: "" })
   const [loading, setLoading] = useState(true)
 
   const selected = useMemo(() => requests.find((r) => r.id === selectedId) || requests[0], [requests, selectedId])
@@ -53,6 +55,42 @@ export default function AdminRequestsPage() {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, ...body }),
+    })
+    if (res.ok) await load()
+  }
+
+  async function submitForSuperAdminReview() {
+    if (!selected) return
+    const res = await fetch(`/api/admin/requests/${selected.id}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "submit_for_super_admin_review",
+        approved_quote_amount: quote.approved_quote_amount,
+        approved_quote_currency: quote.approved_quote_currency,
+        quote_notes: quote.quote_notes,
+        approved_estimated_completion: quote.approved_estimated_completion,
+        reason: quote.quote_notes || "Administrator approved the quote for super administrator review.",
+      }),
+    })
+    if (res.ok) await load()
+  }
+
+  async function reviewAsSuperAdmin(action: "accept" | "adjust") {
+    if (!selected) return
+    const res = await fetch(`/api/admin/requests/${selected.id}/super-admin-review`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action,
+        amount: superAdminQuote.amount,
+        currency: superAdminQuote.currency,
+        notes: superAdminQuote.notes,
+        reason: superAdminQuote.reason,
+        estimated_completion: superAdminQuote.estimated_completion,
+      }),
     })
     if (res.ok) await load()
   }
@@ -266,6 +304,18 @@ export default function AdminRequestsPage() {
                 <input type="date" value={quote.approved_estimated_completion} onChange={(e) => setQuote({ ...quote, approved_estimated_completion: e.target.value })} className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
                 <textarea value={quote.quote_notes} onChange={(e) => setQuote({ ...quote, quote_notes: e.target.value })} placeholder="Quote notes" className="min-h-24 w-full rounded border border-[#143b28] bg-black px-3 py-2 text-sm outline-none" />
                 <button onClick={() => update("send_quote", { ...quote, status: "quote_sent" })} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded bg-[#20dc73] font-bold text-black"><Send className="h-4 w-4" />Send Quote</button>
+                <button onClick={submitForSuperAdminReview} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-[#20dc73]/40 text-sm text-[#20dc73]"><CheckCircle2 className="h-4 w-4" />Submit for Super Admin Review</button>
+              </div>
+
+              <div className="space-y-3 border-t border-[#143b28] pt-5">
+                <h3 className="font-semibold">Super Administrator Review</h3>
+                <input value={superAdminQuote.amount} onChange={(e) => setSuperAdminQuote({ ...superAdminQuote, amount: e.target.value })} placeholder="Final amount" className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
+                <input value={superAdminQuote.currency} onChange={(e) => setSuperAdminQuote({ ...superAdminQuote, currency: e.target.value })} placeholder="Currency" className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
+                <input type="date" value={superAdminQuote.estimated_completion} onChange={(e) => setSuperAdminQuote({ ...superAdminQuote, estimated_completion: e.target.value })} className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm outline-none" />
+                <textarea value={superAdminQuote.reason} onChange={(e) => setSuperAdminQuote({ ...superAdminQuote, reason: e.target.value })} placeholder="Reason / rationale" className="min-h-20 w-full rounded border border-[#143b28] bg-black px-3 py-2 text-sm outline-none" />
+                <textarea value={superAdminQuote.notes} onChange={(e) => setSuperAdminQuote({ ...superAdminQuote, notes: e.target.value })} placeholder="Client-safe notes" className="min-h-20 w-full rounded border border-[#143b28] bg-black px-3 py-2 text-sm outline-none" />
+                <button onClick={() => reviewAsSuperAdmin("accept")} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded bg-[#20dc73] font-bold text-black"><CheckCircle2 className="h-4 w-4" />Approve Final Quote</button>
+                <button onClick={() => reviewAsSuperAdmin("adjust")} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-amber-400/40 text-sm text-amber-200"><Send className="h-4 w-4" />Adjust Final Quote</button>
               </div>
             </div>
           ) : <p className="text-sm text-white/45">Select a request for review.</p>}

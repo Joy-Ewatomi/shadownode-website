@@ -3,7 +3,7 @@ import { auditLog, getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { declineRequest, recordRequestAudit, sendQuote } from "@/lib/services/quote-workflow-service"
 
-const requestStatuses = new Set(["pending_review", "reviewing", "approved", "quote_sent", "negotiation_requested", "negotiation_reviewing", "revised_quote_sent", "accepted", "active", "rejected", "declined", "submitted", "completed"])
+const requestStatuses = new Set(["pending_review", "reviewing", "approved", "quote_sent", "negotiation_requested", "negotiation_reviewing", "revised_quote_sent", "accepted", "active", "rejected", "declined", "submitted", "completed", "pending_admin_review", "admin_reviewed", "pending_super_admin_review", "awaiting_client_acceptance", "awaiting_payment"])
 
 async function requireAdmin() {
   const user = await getCurrentUser()
@@ -29,10 +29,9 @@ export async function PATCH(
       user_id: string | null
       title: string | null
       description: string | null
-      category: string | null
+      priority: string | null
+      timeline: string | null
       service_type: string | null
-      urgency: string | null
-      preferred_deadline: string | null
       case_number: string | null
       converted_case_id: string | null
     }>("SELECT * FROM requests WHERE id=$1 LIMIT 1", [id])
@@ -63,6 +62,49 @@ export async function PATCH(
       const updated = await declineRequest(id, auth.user?.id || "", body.reason ? String(body.reason) : null)
       await auditLog(auth.user?.id || null, "request_rejected", request, { request_id: id })
       return NextResponse.json(updated)
+    }
+
+    if (action === "submit_for_super_admin_review") {
+      const amount = Number(body.approved_quote_amount)
+      const reason = String(body.reason || body.quote_notes || "").trim()
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return NextResponse.json({ error: "A valid quote amount is required" }, { status: 400 })
+      }
+      if (!reason) {
+        return NextResponse.json({ error: "A review note is required" }, { status: 400 })
+      }
+
+      const updated = await query(
+        `
+        UPDATE requests
+        SET
+          status = 'pending_super_admin_review',
+          approved_quote_amount = $2::numeric,
+          approved_quote_currency = COALESCE($3, approved_quote_currency),
+          approved_quote_notes = COALESCE($4, approved_quote_notes),
+          approved_estimated_completion = COALESCE($5, approved_estimated_completion),
+          admin_quote_action = 'accepted',
+          admin_quote_notes = $6,
+          admin_reviewed_by = $7,
+          admin_reviewed_at = NOW(),
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+        `,
+        [
+          id,
+          amount,
+          body.approved_quote_currency ? String(body.approved_quote_currency) : null,
+          body.quote_notes ? String(body.quote_notes) : null,
+          body.approved_estimated_completion ? String(body.approved_estimated_completion) : null,
+          reason,
+          auth.user?.id || null,
+        ],
+      )
+
+      await auditLog(auth.user?.id || null, "request_submitted_for_super_admin_review", request, { request_id: id, approved_quote_amount: amount })
+      await recordRequestAudit(id, auth.user?.id || null, "request_submitted_for_super_admin_review", { approved_quote_amount: amount, reason })
+      return NextResponse.json(updated.rows[0])
     }
 
     const nextStatus = body.status ? String(body.status) : null

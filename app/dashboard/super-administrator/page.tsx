@@ -3,6 +3,7 @@ import RoleDashboard from "@/components/dashboard/RoleDashboard"
 export default function SuperAdministratorDashboard() {
   return (
     <RoleDashboard
+      role="super_admin"
       eyebrow="Bureau Command"
       title="Super Administrator Dashboard"
       description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
@@ -14,11 +15,31 @@ export default function SuperAdministratorDashboard() {
       ]}
       queueTitle="System Governance"
       queueItems={[
-        { title: "User governance", detail: "Role and permission administration will be staged here.", status: "Ready" },
-        { title: "Audit intelligence", detail: "High-signal audit events will be promoted for inspection.", status: "Prepared" },
-        { title: "Security controls", detail: "Session, MFA, and account risk indicators will connect here.", status: "Secure" },
-        { title: "Platform health", detail: "Operational telemetry can feed system health cards.", status: "Queued" },
-      ]}
+  {
+    id: "user-governance",
+    title: "User governance",
+    detail: "Role and permission administration will be staged here.",
+    status: "Ready",
+  },
+  {
+    id: "audit-intelligence",
+    title: "Audit intelligence",
+    detail: "High-signal audit events will be promoted for inspection.",
+    status: "Prepared",
+  },
+  {
+    id: "security-controls",
+    title: "Security controls",
+    detail: "Session, MFA, and account risk indicators will connect here.",
+    status: "Secure",
+  },
+  {
+    id: "platform-health",
+    title: "Platform health",
+    detail: "Operational telemetry can feed system health cards.",
+    status: "Queued",
+  },
+]}
     />
   )
 }

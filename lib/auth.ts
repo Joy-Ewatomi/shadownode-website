@@ -26,6 +26,7 @@ export type AuthRole =
 | "client"
 | "investigator"
 | "analyst"
+| "admin"
 | "administrator"
 | "super_administrator";
 
@@ -929,19 +930,14 @@ JSON.stringify(metadata)
 
 
 
-
 export function isAdminRole(
 role?:string|null
 ){
 
 return (
-
-role==="administrator"
-
-||
-
+role==="admin" ||
+role==="administrator" ||
 role==="super_administrator"
-
 );
 
 }

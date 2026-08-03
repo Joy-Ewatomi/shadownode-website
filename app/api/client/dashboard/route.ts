@@ -12,24 +12,24 @@ export async function GET() {
     const profileId = profile.rows[0]?.id || null
 
     const [requests, cases, reports, notifications, stats] = await Promise.all([
-      query(
-        `
-        SELECT
-    id,
-    case_number,
-    title,
-    status,
-    approved_quote_amount,
-    approved_quote_currency,
-    approved_estimated_completion,
-    created_at
-FROM requests
-WHERE user_id = $1
+ query(
+`
+ SELECT
+ id,
+ case_number,
+ title,
+ status,
+ priority,
+ progress,
+ created_at
+FROM cases
+WHERE client_profile_id=$1
+AND payment_status='paid'
 ORDER BY created_at DESC
-LIMIT 6;
-        `,
-        [user.id],
-      ),
+LIMIT 6
+`,
+[profileId],
+),
       query(
         `
         SELECT id, case_number, title, status, priority, progress, estimated_completion, created_at

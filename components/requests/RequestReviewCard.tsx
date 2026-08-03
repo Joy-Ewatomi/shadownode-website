@@ -2,20 +2,19 @@
 
 import { useState } from "react"
 
-
 type RequestData = {
   id: string
-  case_number: string
-  title: string
-  service_type: string
-  description: string
+  case_number: string | null
+  title: string | null
+  service_type: string | null
+  description: string | null
   status: string
-  priority: string
-  ai_price_estimate: number
-  ai_complexity: string
-  ai_confidence: number
-  ai_reasoning: string
-  client_email: string
+  priority: string | null
+  ai_price_estimate: number | null
+  ai_complexity: string | null
+  ai_confidence: number | null
+  ai_reasoning: string | null
+  client_email: string | null
 }
 
 
@@ -39,19 +38,20 @@ export default function RequestReviewCard({
 
 
       const res = await fetch(
-        `/api/requests/${request.id}/approve`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            quoteAmount: request.ai_price_estimate,
-            currency: "NGN",
-            notes: "Initial investigation quote"
-          })
-        }
-      )
+`/api/admin/requests/${request.id}`,
+{
+method:"PATCH",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+action:"send_quote",
+approved_quote_amount:request.ai_price_estimate,
+approved_quote_currency:"NGN",
+quote_notes:"Initial investigation quote"
+})
+}
+)
 
 
       const data = await res.json()
@@ -108,19 +108,20 @@ try{
 
 setRejecting(true)
 
-
 const res = await fetch(
-`/api/requests/${request.id}/reject`,
+`/api/admin/requests/${request.id}`,
 {
 method:"PATCH",
 headers:{
 "Content-Type":"application/json"
 },
 body:JSON.stringify({
+action:"reject",
 reason
 })
 }
 )
+
 
 
 

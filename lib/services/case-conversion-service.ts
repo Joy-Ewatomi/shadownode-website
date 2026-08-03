@@ -37,14 +37,12 @@ export async function convertAcceptedRequestToCase(
       status:string
     }>(
       `
-      SELECT *
-
-      FROM requests
-
-      WHERE id=$1
-      AND user_id=$2
-
-      LIMIT 1
+   SELECT *
+FROM requests
+WHERE id=$1
+AND user_id=$2
+FOR UPDATE
+LIMIT 1
       `,
       [
         requestId,
@@ -71,28 +69,23 @@ export async function convertAcceptedRequestToCase(
 
     // PREVENT DUPLICATE CASE CREATION
 
-    if(item.converted_case_id){
+  if(item.converted_case_id){
 
-      await query("COMMIT")
+  await query("ROLLBACK")
 
-      return item.converted_case_id
+  return item.converted_case_id
 
-    }
-
-
+}
 
 
-
-    if(
-      item.status === "active"
-    ){
-
-      throw new Error(
-        "Request already converted"
-      )
-
-    }
-
+if (
+  item.status === "active" ||
+  item.status === "awaiting_payment"
+) {
+  throw new Error(
+    "Request already converted or awaiting payment"
+  )
+}
 
 
 
@@ -121,46 +114,11 @@ export async function convertAcceptedRequestToCase(
 
 
 
-    const clientProfile =
-      profile.rows[0]
+  const clientProfile = profile.rows[0]
 
-
-
-
-
-    // FIND AVAILABLE INVESTIGATOR
-
-    const investigator = await query<{
-      id:string
-      user_id:string | null
-    }>(
-      `
-      SELECT
-      up.id,
-      up.user_id
-
-      FROM user_profiles up
-
-      JOIN app_users au
-      ON au.id = up.user_id
-
-      WHERE au.role='investigator'
-      AND au.status='active'
-
-      ORDER BY up.created_at ASC
-
-      LIMIT 1
-
-      `
-    )
-
-
-
-    const assignedInvestigator =
-      investigator.rows[0]
-
-
-
+if (!clientProfile) {
+  throw new Error("Client profile not found")
+}
 
 
 
@@ -169,15 +127,30 @@ export async function convertAcceptedRequestToCase(
 
 
     const caseNumber =
-      item.case_number
-      ||
-      `SN-CASE-${new Date().getFullYear()}-${Date.now()}`
+  `SN-CASE-${new Date().getFullYear()}-${Date.now()}`
 
 
 
+const existingCase = await query<{id:string}>(
+`
+SELECT id
+FROM cases
+WHERE case_number=$1
+LIMIT 1
+`,
+[
+caseNumber
+]
+)
 
 
+if(existingCase.rows[0]){
 
+await query("ROLLBACK")
+
+return existingCase.rows[0].id
+
+}
 
 
     // CREATE CASE
@@ -235,7 +208,7 @@ export async function convertAcceptedRequestToCase(
 
         $6,
 
-        'active',
+        'awaiting_payment',
 
         $7,
 
@@ -247,9 +220,9 @@ export async function convertAcceptedRequestToCase(
 
         0,
 
-        'pending',
+       'pending',
 
-        NOW(),
+        NULL,
 
         NOW(),
 
@@ -282,7 +255,7 @@ export async function convertAcceptedRequestToCase(
         item.urgency ||
         "normal",
 
-        assignedInvestigator?.id || null,
+       null,
 
         item.approved_quote_amount,
 
@@ -313,11 +286,11 @@ export async function convertAcceptedRequestToCase(
 
       SET
 
-      status='active',
+      status='awaiting_payment',
 
       converted_case_id=$2,
 
-      client_decision_at=NOW(),
+      client_decision_at=NULL,
 
       updated_at=NOW()
 
@@ -338,205 +311,79 @@ export async function convertAcceptedRequestToCase(
 
 
 
-    // CREATE CASE TIMELINE EVENT
+   // CREATE CASE TIMELINE EVENT
 
-
-    await query(
-      `
-      INSERT INTO case_updates
-
-      (
-        case_id,
-        updated_by,
-        update_type,
-        title,
-        content
-      )
-
-      VALUES
-
-      (
-
-        $1,
-
-        $2,
-
-        'status_change',
-
-        'Case Created',
-
-        'Client accepted quote and investigation case was opened.'
-
-      )
-
-      `,
-      [
-        caseId,
-        clientProfile?.id || null
-      ]
-    )
+await query(
+  `
+  INSERT INTO case_updates
+  (
+    case_id,
+    updated_by,
+    update_type,
+    title,
+    content
+  )
+  VALUES
+  (
+    $1,
+    $2,
+    'status_change',
+    'Case Created',
+    'Client accepted the quote. Payment is pending before the investigation begins.'
+  )
+  `,
+  [
+    caseId,
+    clientProfile.id
+  ]
+)
 
 
 
+// AUDIT
+
+await recordRequestAudit(
+  requestId,
+  actorUserId,
+  "client_accepted_quote_awaiting_payment",
+  {
+    case_id: caseId
+  }
+)
 
 
 
+// COMMIT ONCE
 
-
-    // ASSIGN INVESTIGATOR
-
-
-    if(
-      assignedInvestigator?.id
-    ){
-
-
-      await query(
-        `
-        INSERT INTO case_assignments
-
-        (
-          case_id,
-          assigned_to,
-          assignment_role,
-          status,
-          assigned_by
-        )
-
-        VALUES
-
-        (
-
-          $1,
-
-          $2,
-
-          'investigator',
-
-          'assigned',
-
-          $3
-
-        )
-
-        `,
-        [
-
-          caseId,
-
-          assignedInvestigator.id,
-
-          actorUserId
-
-        ]
-      )
+await query(
+  "COMMIT"
+)
 
 
 
+// NOTIFY CLIENT AFTER SUCCESS
+
+if(item.user_id){
+
+  await notifyUser(
+    item.user_id,
+    {
+      caseId,
+
+      type: "payment_required",
+
+      title: "Payment Required",
+
+      message:
+      "Your quote has been accepted. Complete payment to begin your investigation.",
     }
+  )
+
+}
 
 
 
-
-
-
-
-
-    // COMMIT DATABASE CHANGES
-
-
-    await query(
-      "COMMIT"
-    )
-
-
-
-
-
-
-
-
-    // NOTIFICATIONS AFTER SUCCESS
-
-
-    if(
-      assignedInvestigator?.user_id
-    ){
-
-      await notifyUser(
-        assignedInvestigator.user_id,
-        {
-
-          caseId,
-
-          type:
-          "assignment_completed",
-
-          title:
-          "New Investigation Assignment",
-
-          message:
-          item.title ||
-          "A new case has been assigned.",
-
-          metadata:{
-            request_id:requestId
-          }
-
-        }
-      )
-
-    }
-
-
-
-
-    if(item.user_id){
-
-      await notifyUser(
-        item.user_id,
-        {
-
-          caseId,
-
-          type:
-          "case_created",
-
-          title:
-          "Investigation Started",
-
-          message:
-          "Your accepted quote has been converted into an active investigation.",
-
-          metadata:{
-            request_id:requestId
-          }
-
-        }
-      )
-
-    }
-
-
-
-
-
-
-    await recordRequestAudit(
-      requestId,
-      actorUserId,
-      "client_accepted_quote_case_created",
-      {
-        case_id:caseId
-      }
-    )
-
-
-
-
-    return caseId
-
-
+return caseId
 
   }
 

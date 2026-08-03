@@ -17,12 +17,13 @@ type ClientRequest = {
   id: string
   case_number: string | null
   title: string | null
-  category: string | null
   service_type: string | null
   description: string | null
-  urgency: string | null
-  preferred_deadline: string | null
   status: string
+  priority?: string | null
+  timeline?: string | null
+  price_notes?: string | null
+  
 
   quote_notes?: string | null
 

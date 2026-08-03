@@ -1,23 +1,94 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import RoleDashboard from "@/components/dashboard/RoleDashboard"
 
 export default function AdministratorDashboard() {
+
+const [stats,setStats] = useState<any>(null)
+
+
+useEffect(()=>{
+
+fetch("/api/dashboard/overview")
+.then(res=>res.json())
+.then(data=>setStats(data))
+
+},[])
+
+
+if(!stats){
+
+return (
+<div className="text-white/50">
+Loading Mission Control...
+</div>
+)
+
+}
   return (
     <RoleDashboard
       eyebrow="Mission Control"
       title="Administrator Dashboard"
-      description="Review bureau-wide case posture, active investigation load, team workload, and operational approvals."
+       description="Monitor client requests, investigation workflow, quote approvals, team workload, and bureau operations."
       metrics={[
-        { key: "total_cases", label: "Mission Control Summary", value: "0", helper: "Total investigations in bureau custody" },
-        { key: "active_investigations", label: "Active Investigations", value: "0", helper: "Open cases across all teams" },
-        { key: "pending_assignments", label: "Team Workload", value: "0", helper: "Assignments waiting for operator acceptance" },
-        { key: "unresolved_alerts", label: "Pending Approvals", value: "0", helper: "Unread operational alerts and approvals" },
-      ]}
+{
+key:"total_cases",
+label:"Mission Control Summary",
+value:String(stats.total_cases ?? 0),
+helper:"Total client requests received"
+},
+
+{
+key:"active_investigations",
+label:"Active Investigations",
+value:String(stats.active_investigations ?? 0),
+helper:"Requests currently in workflow"
+},
+
+{
+key:"pending_assignments",
+label:"Team Workload",
+value:String(stats.pending_assignments ?? 0),
+helper:"Requests waiting for review"
+},
+
+{
+key:"unresolved_alerts",
+label:"Pending Approvals",
+value:String(stats.unresolved_alerts ?? 0),
+helper:"Unread operational notifications"
+},
+]}
       queueTitle="Administrator Review Queue"
-      queueItems={[
-        { title: "Case intake review", detail: "Anonymous and registered requests will be triaged here.", status: "Prepared" },
-        { title: "Team assignments", detail: "Workload balancing will connect to normalized assignments.", status: "Ready" },
-        { title: "Report approval", detail: "Final reports will queue for administrator sign-off.", status: "Queued" },
-        { title: "Audit review", detail: "Operational events and sensitive actions will surface for inspection.", status: "Secure" },
-      ]} role={""}    />
+     queueItems={[
+{
+id:"pending_requests",
+title:"Pending Requests",
+detail:`${stats.pending_assignments ?? 0} requests awaiting review`,
+status:"Live"
+},
+
+{
+id:"active_investigations",
+title:"Active Investigations",
+detail:`${stats.active_investigations ?? 0} active workflows`,
+status:"Monitoring"
+},
+
+{
+id:"client_requests",
+title:"Client Requests",
+detail:`${stats.total_cases ?? 0} total submissions`,
+status:"Tracked"
+},
+
+{
+id:"security_alerts",
+title:"Security Alerts",
+detail:`${stats.unresolved_alerts ?? 0} unread alerts`,
+status:"Review"
+},
+]} role={"administrator"}    />
   )
 }

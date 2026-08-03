@@ -1,12 +1,25 @@
 import { query } from "@/lib/db"
 import { notifyAdmins, notifyUser } from "@/lib/services/notification-service"
 
-export async function recordRequestAudit(requestId: string, actorUserId: string | null, action: string, details: Record<string, unknown> = {}) {
+export async function recordRequestAudit(
+  requestId: string,
+  actorUserId: string | null,
+  action: string,
+  details: Record<string, unknown> = {}
+) {
   await query(
     "INSERT INTO request_audit_events (request_id, actor_user_id, action, details) VALUES ($1, $2, $3, $4)",
-    [requestId, actorUserId, action, JSON.stringify(details)],
-  ).catch(() => undefined)
+    [
+      requestId,
+      actorUserId,
+      action,
+      JSON.stringify(details),
+    ],
+  ).catch((err)=>{
+    console.error("AUDIT ERROR", err)
+  })
 }
+
 
 export async function sendQuote(input: {
   requestId: string
@@ -16,27 +29,36 @@ export async function sendQuote(input: {
   notes?: string | null
   estimatedCompletion?: string | null
 }) {
-  const updated = await query(
-    `
-    UPDATE requests
-    SET status='quote_sent',
-        quote_notes=$4,
-        final_price=$2,
-        approved_quote_amount=$2,
-        approved_quote_currency=$3,
-        approved_quote_notes=$4,
-        approved_estimated_completion=$5,
-        quote_sent_at=NOW(),
-        reviewed_by=$6,
-        updated_at=NOW()
-    WHERE id=$1
-    RETURNING *
-    `,
-    [input.requestId, input.amount, input.currency, input.notes || null, input.estimatedCompletion || null, input.actorUserId],
-  )
+const updated = await query(
+`
+UPDATE requests
+SET status='quote_sent',
+    price_notes=$4,
+    final_price=$2::integer,
+    approved_quote_amount=$2::numeric,
+    approved_quote_currency=$3,
+    approved_quote_notes=$4,
+    approved_estimated_completion=$5,
+    quote_sent_at=NOW(),
+    updated_at=NOW()
+WHERE id=$1
+RETURNING *
+`,
+[
+ input.requestId,
+ input.amount,
+ input.currency,
+ input.notes || null,
+ input.estimatedCompletion || null
+],
+)
   await recordRequestAudit(input.requestId, input.actorUserId, "quote_sent", { amount: input.amount, currency: input.currency })
-  const row = updated.rows[0] as { user_id?: string | null; title?: string | null }
-  await notifyUser(row.user_id, { type: "quote_ready", title: "Quote ready", message: row.title || "Your investigation quote is ready.", metadata: { request_id: input.requestId } })
+const row = updated.rows[0] as {
+  user_id?: string | null
+  title?: string | null
+}
+console.log("QUOTE USER:", row.user_id)
+  await notifyUser(row.user_id, { type: "quote_ready", title: "Quote ready", message: row.title || "Your investigation quote is ready." })
   return row
 }
 
@@ -44,7 +66,7 @@ export async function declineRequest(requestId: string, actorUserId: string, rea
   const updated = await query("UPDATE requests SET status='rejected', declined_reason=$2, reviewed_by=$3, updated_at=NOW() WHERE id=$1 RETURNING *", [requestId, reason || null, actorUserId])
   await recordRequestAudit(requestId, actorUserId, "request_rejected", { reason: reason || null })
   const row = updated.rows[0] as { user_id?: string | null; title?: string | null }
-  await notifyUser(row.user_id, { type: "quote_rejected", title: "Request rejected", message: row.title || "Your investigation request was rejected.", metadata: { request_id: requestId } })
+  await notifyUser(row.user_id, { type: "quote_rejected", title: "Request rejected", message: row.title || "Your investigation request was rejected."})
   return row
 }
 
@@ -68,6 +90,6 @@ export async function requestQuoteReview(input: { requestId: string; clientId: s
   )
   await query("UPDATE requests SET status='negotiation_requested', updated_at=NOW() WHERE id=$1", [input.requestId])
   await recordRequestAudit(input.requestId, input.clientId, "client_requested_quote_review", { negotiation_id: inserted.rows[0].id, requested_budget: input.requestedBudget })
-  await notifyAdmins({ type: "negotiation_requested", title: "Quote review requested", message: input.reason, metadata: { request_id: input.requestId, negotiation_id: inserted.rows[0].id } })
+  await notifyAdmins({ type: "negotiation_requested", title: "Quote review requested", message: input.reason})
   return inserted.rows[0]
 }

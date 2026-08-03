@@ -14,7 +14,7 @@ type ClientCaseRow = {
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value)
+  return value.includes("-") && value.length === 36
 }
 
 async function clientProfileId(userId: string) {
@@ -32,11 +32,15 @@ export async function GET(
 ) {
   try {
     const user = await getCurrentUser()
+    console.log("CLIENT CASE USER:", user)
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     if (user.role !== "client") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
     const { id } = await params
+    console.log("CASE ID:", id)
+    console.log("IS UUID:", isUuid(id))
     const profileId = await clientProfileId(user.id)
+    console.log("CLIENT PROFILE:", profileId)
 
     const caseResult = await query<ClientCaseRow>(
       `
@@ -50,14 +54,18 @@ export async function GET(
         progress,
         created_at
       FROM cases
-      WHERE ${isUuid(id) ? "id = $1" : "case_number = $1"}
-        AND client_profile_id = $2
-      LIMIT 1
+     WHERE ${isUuid(id) ? "id = $1" : "case_number = $1"}
+AND (
+  client_profile_id = $2
+  OR case_user_id = $3
+)
+LIMIT 1
       `,
-      [id, profileId],
+      [id, profileId, user.id],
     )
+console.log("CASE QUERY RESULT:", caseResult.rows)
 
-    const caseInfo = caseResult.rows[0]
+const caseInfo = caseResult.rows[0]
     if (!caseInfo) return NextResponse.json({ error: "Case not found" }, { status: 404 })
 
     const [timeline, reports, conversation] = await Promise.all([

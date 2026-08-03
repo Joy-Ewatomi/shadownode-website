@@ -16,7 +16,15 @@ ALTER TABLE requests
   ADD COLUMN IF NOT EXISTS approved_estimated_completion DATE,
   ADD COLUMN IF NOT EXISTS quote_sent_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS client_decision_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS declined_reason TEXT;
+  ADD COLUMN IF NOT EXISTS declined_reason TEXT,
+  ADD COLUMN IF NOT EXISTS admin_reviewed_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS admin_reviewed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS admin_quote_action VARCHAR(40),
+  ADD COLUMN IF NOT EXISTS admin_quote_notes TEXT,
+  ADD COLUMN IF NOT EXISTS super_admin_reviewed_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS super_admin_reviewed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS super_admin_quote_action VARCHAR(40),
+  ADD COLUMN IF NOT EXISTS super_admin_quote_notes TEXT;
 
 CREATE TABLE IF NOT EXISTS quote_negotiations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

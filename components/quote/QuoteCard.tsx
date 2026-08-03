@@ -7,7 +7,9 @@ type QuoteCardProps = {
     id: string
     case_number: string | null
     title: string | null
-    category: string | null
+    service_type?: string | null
+    priority?: string | null
+    timeline?: string | null
     description: string | null
     status: string
     created_at: string
@@ -47,7 +49,7 @@ export default function QuoteCard({
           </p>
 
           <p className="mt-1 text-xs text-white/40">
-            {request.case_number} · {request.category} ·{" "}
+            {request.case_number} · {request.service_type} ·{" "}
             {new Date(request.created_at).toLocaleDateString()}
           </p>
         </div>
@@ -82,7 +84,7 @@ export default function QuoteCard({
         canDecide={
           Boolean(
             quoteAmount &&
-            ["quote_sent", "revised_quote_sent"]
+            ["quote_sent", "revised_quote_sent", "awaiting_client_acceptance"]
             .includes(request.status)
           )
         }

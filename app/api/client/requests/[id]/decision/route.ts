@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (action === "accept") {
       const eligible = await query<{ id: string }>(
-        "SELECT id FROM requests WHERE id=$1 AND user_id=$2 AND status IN ('quote_sent', 'revised_quote_sent') AND converted_case_id IS NULL LIMIT 1",
+        "SELECT id FROM requests WHERE id=$1 AND user_id=$2 AND status IN ('quote_sent', 'revised_quote_sent', 'awaiting_client_acceptance') AND converted_case_id IS NULL LIMIT 1",
         [id, user.id],
       )
       if (!eligible.rows[0]) return NextResponse.json({ error: "No active quote is available for acceptance" }, { status: 400 })

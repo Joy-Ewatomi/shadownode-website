@@ -26,6 +26,15 @@ export async function GET() {
 
     if (user.role === "client") {
       return NextResponse.json({
+        pending_quotes: await count(
+ `
+ SELECT COUNT(*) AS total
+ FROM requests
+ WHERE user_id=$1
+ AND status='quote_sent'
+ `,
+ [user.id]
+),
         active_cases: await count(
           "SELECT COUNT(*) AS total FROM cases WHERE client_profile_id=$1 AND status <> 'archived'",
           [profile],
@@ -65,13 +74,60 @@ export async function GET() {
 
     if (user.role === "investigator") {
       return NextResponse.json({
-        assigned_cases: await count("SELECT COUNT(DISTINCT case_id) AS total FROM case_assignments WHERE assigned_to=$1 AND removed_at IS NULL", [profile]),
-        pending_assignments: await count("SELECT COUNT(*) AS total FROM case_assignments WHERE assigned_to=$1 AND status='assigned' AND removed_at IS NULL", [profile]),
-        accepted_cases: await count("SELECT COUNT(DISTINCT case_id) AS total FROM case_assignments WHERE assigned_to=$1 AND status='accepted' AND removed_at IS NULL", [profile]),
-        deadlines: await count("SELECT COUNT(*) AS total FROM case_assignments WHERE assigned_to=$1 AND deadline IS NOT NULL AND deadline <= CURRENT_DATE + INTERVAL '7 days' AND status IN ('assigned','accepted') AND removed_at IS NULL", [profile]),
-        evidence_tasks: await count("SELECT COUNT(DISTINCT f.id) AS total FROM forensic_files f JOIN case_assignments ca ON ca.case_id=f.case_id WHERE ca.assigned_to=$1 AND ca.removed_at IS NULL", [profile]),
-        recent_activity: await count("SELECT COUNT(*) AS total FROM case_updates cu JOIN case_assignments ca ON ca.case_id=cu.case_id WHERE ca.assigned_to=$1 AND cu.created_at > NOW() - INTERVAL '7 days'", [profile]),
-      })
+
+  total_requests: await count(
+    "SELECT COUNT(*) AS total FROM requests"
+  ),
+
+  pending_requests: await count(
+    `
+    SELECT COUNT(*) AS total
+    FROM requests
+    WHERE status IN ('pending_review','submitted','reviewing')
+    `
+  ),
+
+  quoted_requests: await count(
+    `
+    SELECT COUNT(*) AS total
+    FROM requests
+    WHERE status IN ('quote_sent','negotiation_requested','revised_quote_sent')
+    `
+  ),
+
+  active_cases: await count(
+    `
+    SELECT COUNT(*) AS total
+    FROM cases
+    WHERE status NOT IN ('closed','archived','completed')
+    `
+  ),
+
+  investigators: await count(
+    `
+    SELECT COUNT(*) AS total
+    FROM app_users
+    WHERE role='investigator'
+    `
+  ),
+
+  analysts: await count(
+    `
+    SELECT COUNT(*) AS total
+    FROM app_users
+    WHERE role='analyst'
+    `
+  ),
+
+  unread_notifications: await count(
+    `
+    SELECT COUNT(*) AS total
+    FROM notifications
+    WHERE is_read=false
+    `
+  ),
+
+})
     }
 
     if (user.role === "analyst") {
@@ -84,25 +140,101 @@ export async function GET() {
     }
 
     if (isAdminRole(user.role)) {
-      if (user.role === "super_administrator") {
-        return NextResponse.json({
-          total_users: await count("SELECT COUNT(*) AS total FROM app_users"),
-          system_activity: await count("SELECT COUNT(*) AS total FROM activity_logs WHERE created_at > NOW() - INTERVAL '24 hours'"),
-          audit_events: await count("SELECT COUNT(*) AS total FROM audit_logs WHERE created_at > NOW() - INTERVAL '7 days'"),
-          security_events: await count("SELECT COUNT(*) AS total FROM audit_logs WHERE action ILIKE '%security%' OR action ILIKE '%password%' OR action ILIKE '%two_factor%'"),
-          database_health: "online",
-        })
-      }
 
-      return NextResponse.json({
-        total_cases: await count("SELECT COUNT(*) AS total FROM cases"),
-        active_investigations: await count("SELECT COUNT(*) AS total FROM cases WHERE status NOT IN ('closed','archived','completed')"),
-        investigators: await count("SELECT COUNT(*) AS total FROM app_users WHERE role='investigator' AND status='active'"),
-        analysts: await count("SELECT COUNT(*) AS total FROM app_users WHERE role='analyst' AND status='active'"),
-        pending_assignments: await count("SELECT COUNT(*) AS total FROM case_assignments WHERE status='assigned' AND removed_at IS NULL"),
-        unresolved_alerts: await count("SELECT COUNT(*) AS total FROM notifications WHERE is_read = false AND type IN ('security','system','case_update')"),
-      })
-    }
+  if (user.role === "super_administrator") {
+    return NextResponse.json({
+      total_users: await count(
+        "SELECT COUNT(*) AS total FROM app_users"
+      ),
+
+      system_activity: await count(
+        "SELECT COUNT(*) AS total FROM activity_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+      ),
+
+      audit_events: await count(
+        "SELECT COUNT(*) AS total FROM audit_logs WHERE created_at > NOW() - INTERVAL '7 days'"
+      ),
+
+      security_events: await count(
+        `
+        SELECT COUNT(*) AS total
+        FROM audit_logs
+        WHERE action ILIKE '%security%'
+        OR action ILIKE '%password%'
+        OR action ILIKE '%two_factor%'
+        `
+      ),
+
+      database_health:"online",
+    })
+  }
+
+
+  return NextResponse.json({
+
+    total_cases: await count(
+      `
+      SELECT COUNT(*) AS total
+      FROM requests
+      `
+    ),
+
+
+    active_investigations: await count(
+      `
+      SELECT COUNT(*) AS total
+      FROM requests
+      WHERE status IN (
+        'reviewing',
+        'quote_sent',
+        'accepted',
+        'active'
+      )
+      `
+    ),
+
+
+    pending_assignments: await count(
+      `
+      SELECT COUNT(*) AS total
+      FROM requests
+      WHERE status IN (
+        'pending_review',
+        'submitted'
+      )
+      `
+    ),
+
+
+    investigators: await count(
+      `
+      SELECT COUNT(*) AS total
+      FROM app_users
+      WHERE role='investigator'
+      `
+    ),
+
+
+    analysts: await count(
+      `
+      SELECT COUNT(*) AS total
+      FROM app_users
+      WHERE role='analyst'
+      `
+    ),
+
+
+    unresolved_alerts: await count(
+      `
+      SELECT COUNT(*) AS total
+      FROM notifications
+      WHERE is_read=false
+      `
+    ),
+
+  })
+}
+     
 
     return NextResponse.json({})
   } catch (error) {

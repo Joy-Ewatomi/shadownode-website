@@ -2,7 +2,7 @@
 
 import type { AppUser } from "@/lib/auth"
 import { hasPermission } from "@/lib/permission"
-import { navigation } from "@/components/dashboard/navigation"
+import { getNavigation } from "@/components/dashboard/navigation"
 import { BarChart3, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -30,9 +30,9 @@ export default function Sidebar({
   const pathname = usePathname()
 
 
-  const navItems = navigation.filter(
-    (item) => hasPermission(user, item.permission)
-  )
+ const navItems = getNavigation(user.role).filter(
+  (item) => hasPermission(user, item.permission)
+)
 
 
   function isActive(href:string){
