@@ -25,7 +25,7 @@ export default function QuoteApprovalCard({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            decision,
+            action: decision,
           }),
         }
       )
@@ -97,7 +97,7 @@ export default function QuoteApprovalCard({
         {request.approved_quote_notes}
       </p>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <button
           disabled={loading}
           onClick={() => decide("accept")}

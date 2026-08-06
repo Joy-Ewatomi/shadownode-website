@@ -376,6 +376,12 @@ if(item.user_id){
 
       message:
       "Your quote has been accepted. Complete payment to begin your investigation.",
+      metadata: {
+        request_id: requestId,
+        case_id: caseId,
+        target_page: "payment",
+        action: "pay_now",
+      },
     }
   )
 

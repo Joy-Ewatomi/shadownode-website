@@ -21,17 +21,23 @@ const CONF_LABELS: Record<string, string> = {
 }
 
 function isTraining(s: AdminRequest) {
-  return s.category === "cybersecurity" && (
-    s.service_type === "Cybersecurity Training Programs" ||
-    s.service_type === "Security Awareness Training" ||
-    s.service_type === "Digital Safety Education"
+  return Boolean(
+    s.training_goal ||
+    s.training_topics ||
+    s.training_organization_name ||
+    s.training_skill_level
   )
 }
 
 export default function AdminRequestsPage() {
   const [requests, setRequests] = useState<AdminRequest[]>([])
   const [selectedId, setSelectedId] = useState("")
-  const [quote, setQuote] = useState({ approved_quote_amount: "", approved_quote_currency: "NGN", quote_notes: "", approved_estimated_completion: "" })
+  const [quote, setQuote] = useState({
+ approved_quote_amount:"",
+ approved_quote_currency:"",
+ quote_notes:"",
+ approved_estimated_completion:""
+})
   const [superAdminQuote, setSuperAdminQuote] = useState({ amount: "", currency: "NGN", reason: "", notes: "", estimated_completion: "" })
   const [loading, setLoading] = useState(true)
 
@@ -48,6 +54,18 @@ export default function AdminRequestsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+  if(selected){
+    setQuote(prev => ({
+      ...prev,
+      approved_quote_currency:
+        selected.preferred_currency ||
+        selected.currency ||
+        "USD"
+    }))
+  }
+}, [selected])
 
   async function update(action: string, body: Record<string, unknown>) {
     if (!selected) return
@@ -223,7 +241,24 @@ export default function AdminRequestsPage() {
     if (s.training_skill_level) fields.push({ label: "Level", value: s.training_skill_level })
     if (s.training_goal) fields.push({ label: "Goal", value: s.training_goal })
     if (s.training_topics) fields.push({ label: "Topics", value: s.training_topics })
-    if (s.training_preferred_dates) fields.push({ label: "Dates", value: s.training_preferred_dates })
+    if (
+ s.training_preferred_start_date ||
+ s.training_preferred_completion_date
+){
+ fields.push({
+  label:"Training Period",
+  value:
+  `${s.training_preferred_start_date || "TBD"} → ${s.training_preferred_completion_date || "TBD"}`
+ })
+}
+
+
+if(s.training_timeline_flexible){
+ fields.push({
+  label:"Flexible Timeline",
+  value:"Yes"
+ })
+}
     if (s.training_additional_requirements) fields.push({ label: "Requirements", value: s.training_additional_requirements })
     return <Section title="Training Details">{fields.map((f) => <Field key={f.label} label={f.label} value={f.value} />)}</Section>
   }

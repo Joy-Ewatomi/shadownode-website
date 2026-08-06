@@ -2,6 +2,7 @@ import { nanoid } from "nanoid"
 import { NextRequest, NextResponse } from "next/server"
 import { auditLog, getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { createQuoteVersion } from "@/lib/services/quote-version-service"
 import { analyzeRequest } from "@/lib/services/request-analysis-service"
 import { notifyAdmins } from "@/lib/services/notification-service"
 import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
@@ -113,7 +114,9 @@ const requests = await query(
     training_skill_level,
     training_goal,
     training_topics,
-    training_preferred_dates,
+    training_preferred_start_date,
+    training_preferred_completion_date,
+    training_timeline_flexible,
     training_additional_requirements
 
   FROM requests
@@ -182,7 +185,14 @@ export async function POST(request: NextRequest) {
     const training_skill_level = String(body.training_skill_level || "beginner").trim()
     const training_goal = String(body.training_goal || "").trim()
     const training_topics = String(body.training_topics || "").trim()
-    const training_preferred_dates = String(body.training_preferred_dates || "").trim()
+   const training_preferred_start_date =
+    String(body.training_preferred_start_date || "").trim()
+
+   const training_preferred_completion_date =
+  String(body.training_preferred_completion_date || "").trim()
+
+   const training_timeline_flexible =
+    Boolean(body.training_timeline_flexible)
     const training_additional_requirements = String(body.training_additional_requirements || "").trim()
 
     // ─── Validation ───
@@ -228,7 +238,7 @@ if (
       `SELECT COUNT(*) AS total FROM requests WHERE created_at >= $1 AND created_at < $2`,
       [`${year}-01-01`, `${year + 1}-01-01`],
     )
-    const trackingNumber = `SN-${year}-${String(Number(existing.rows[0]?.total || 0) + 1).padStart(6, "0")}`
+    const trackingNumber = `SOB-${year}-${String(Number(existing.rows[0]?.total || 0) + 1).padStart(6, "0")}`
 
     // ─── AI Analysis ───
     const analysis = analyzeRequest({
@@ -265,7 +275,6 @@ const inserted = await query<{ id: string; case_number: string }>(
       token,
       case_number,
       title,
-      category,
       service_type,
       description,
       status,
@@ -340,7 +349,9 @@ const inserted = await query<{ id: string; case_number: string }>(
       training_skill_level,
       training_goal,
       training_topics,
-      training_preferred_dates,
+      training_preferred_start_date,
+      training_preferred_completion_date,
+      training_timeline_flexible,
       training_additional_requirements
     )
   VALUES
@@ -350,7 +361,6 @@ const inserted = await query<{ id: string; case_number: string }>(
       $3,
       $4,
       $5,
-      $6,
       'pending_review',
       $6,
       $7,
@@ -424,7 +434,9 @@ const inserted = await query<{ id: string; case_number: string }>(
       $70,
       $71,
       $72,
-      $73
+      $73,
+      $74,
+      $75
     )
   RETURNING id, case_number
   `,
@@ -502,30 +514,49 @@ const inserted = await query<{ id: string; case_number: string }>(
     body.subject_ip_addresses || null,               // 64
     body.subject_vehicle_registration || null,       // 65
 
-    // 66-73: training
-    training_organization_name || null,              // 66
-    training_client_type || null,                    // 67
-    training_participant_count ?? null,              // 68
-    training_skill_level || null,                    // 69
-    training_goal || null,                           // 70
-    training_topics || null,                         // 71
-    training_preferred_dates || null,                // 72
-    training_additional_requirements || null,        // 73
+    // 66-75: training
+   // 66-75: training
+training_organization_name || null,          // 66
+training_client_type || null,                // 67
+training_participant_count ?? null,          // 68
+training_skill_level || null,                // 69
+training_goal || null,                       // 70
+training_topics || null,                     // 71
+training_preferred_start_date || null,       // 72
+training_preferred_completion_date || null,  // 73
+training_timeline_flexible,                  // 74
+training_additional_requirements || null,    // 75
   ],
 )
 
 console.log("=== REQUEST INSERTED ===")
 console.log(inserted.rows[0])
 
+await createQuoteVersion({
+  requestId: inserted.rows[0].id,
+  userId: user.id,
+  role: "ai",
+  source: "ai",
+  price: Number(analysis.suggestedPrice),
+  currency: preferred_currency,
+  estimated_completion: body.preferred_deadline || null,
+  reasoning: analysis.reasoning,
+  status: "generated",
+})
+
     // ─── Notifications & Audit ───
     await notifyAdmins({
       type: "client_request",
-    title:
-    category === "cybersecurity"
-    ? "New cybersecurity service request"
-    : "New OSINT investigation request",
+      title:
+        category === "cybersecurity"
+          ? "New cybersecurity service request"
+          : "New OSINT investigation request",
       message: `${user.username} submitted ${title} (${trackingNumber}) - ${service_type || category}`,
-      metadata: { request_id: inserted.rows[0].id },
+      metadata: {
+        request_id: inserted.rows[0].id,
+        target_page: "admin_request_review",
+        action: "review_request",
+      },
     })
     await recordRequestAudit(inserted.rows[0].id, user.id, "ai_estimate_generated", {
       suggested_price: analysis.suggestedPrice,

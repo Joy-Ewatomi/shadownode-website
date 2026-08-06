@@ -1,111 +1,66 @@
 import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
-import { requireInvestigationWorkspace } from "@/lib/investigation-workspace"
+import { requireUser } from "@/lib/auth"
 
 
 export async function GET(
-  request: NextRequest,
-  {
-    params,
-  }: {
-    params: Promise<{ id: string }>
-  }
+  request: NextRequest
 ) {
 
   try {
 
-    const { id } = await params
+    const { user, response } =
+      await requireUser()
 
 
-    const access =
-      await requireInvestigationWorkspace(
-        request,
-        id
-      )
-
-
-    if (!access.ok) {
-      return NextResponse.json(
-        {
-          error: access.error,
-        },
-        {
-          status: access.status,
-        }
-      )
+    if (!user) {
+      return response
     }
-
 
 
     const result =
       await query(
         `
         SELECT
-          c.id,
-          c.case_number,
-          c.title,
-          c.description,
-          c.service_type,
-          c.status,
-          c.priority,
-          c.progress,
-          c.budget,
-          c.payment_status,
-          c.estimated_completion,
-          c.started_at,
-          c.completed_at,
-          c.created_at,
-          c.updated_at,
+          id,
+          case_number,
+          title,
+          description,
+          service_type,
+          status,
+          priority,
+          progress,
+          created_at,
+          updated_at
 
-          up.username AS investigator_username
+        FROM cases
 
-        FROM cases c
+        WHERE client_email=$1
 
-        LEFT JOIN user_profiles up
-          ON up.id = c.assigned_to
-
-        WHERE c.id=$1
-
-        LIMIT 1
+        ORDER BY created_at DESC
         `,
         [
-          access.caseId
+          user.email
         ]
       )
 
 
-
-    if (!result.rows.length) {
-
-      return NextResponse.json(
-        {
-          error:"Case not found"
-        },
-        {
-          status:404
-        }
-      )
-
-    }
-
-
-
     return NextResponse.json(
-      result.rows[0]
+      result.rows
     )
 
 
   } catch(error){
 
     console.error(
-      "CASE API ERROR",
+      "CASES LIST ERROR",
       error
     )
 
 
     return NextResponse.json(
       {
-        error:"Failed to fetch case"
+        error:"Failed to fetch cases"
       },
       {
         status:500

@@ -24,6 +24,10 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
       const data = await res.json()
       setNotification(data)
 
+      if (data?.id) {
+        fetch(`/api/notifications/${data.id}/read`, { method: "PATCH", credentials: "include" }).catch(() => undefined)
+      }
+
       if (data?.metadata?.request_id) {
         const requestRes = await fetch(`/api/client/requests/${data.metadata.request_id}`, { credentials: "include" })
         if (requestRes.ok) {
@@ -46,7 +50,13 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
   return (
     <div className="space-y-6 p-6 text-white">
       <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.25em] text-[#20dc73]">Client Quote</p>
+       <p className="text-xs uppercase tracking-[0.25em] text-[#20dc73]">
+{
+ notification.type === "payment_required"
+ ? "Payment"
+ : "Client Quote"
+}
+</p>
         <h1 className="text-3xl font-bold">{notification.title}</h1>
         <p className="text-sm text-white/55">{notification.message}</p>
       </header>
@@ -77,10 +87,92 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
             <p className="mt-2 text-sm leading-7 text-white/65">{request.approved_quote_notes || "No additional notes were provided."}</p>
           </div>
 
-          <QuoteApprovalCard request={request} />
+          {notification.type === "quote_ready" && (
+  <QuoteApprovalCard request={request} />
+)}
 
+
+{notification.type === "payment_required" && (
+  <div className="
+    rounded-md
+    border border-[#20dc73]/40
+    bg-[#20dc73]/5
+    p-6
+    space-y-5
+  ">
+
+    <div>
+      <p className="
+      text-xs uppercase tracking-[0.2em]
+      text-[#20dc73]
+      ">
+        Payment Required
+      </p>
+
+      <h2 className="
+      mt-2 text-xl font-semibold
+      ">
+        Investigation Ready To Start
+      </h2>
+
+      <p className="
+      mt-2 text-sm text-white/60
+      ">
+        Your quote has been accepted. Complete payment to activate your investigation.
+      </p>
+    </div>
+
+
+    <div className="
+    rounded border border-[#143b28]
+    bg-black/30
+    p-4
+    ">
+
+      <p className="
+      text-xs uppercase tracking-widest
+      text-white/40
+      ">
+        Amount Due
+      </p>
+
+
+      <p className="
+      mt-2 text-3xl font-bold
+      text-[#20dc73]
+      ">
+
+        {request.approved_quote_currency || "NGN"}{" "}
+        {Number(
+          request.approved_quote_amount || 0
+        ).toLocaleString()}
+
+      </p>
+
+    </div>
+
+
+
+    <Link
+      href={`/dashboard/client/payments/${notification?.metadata?.case_id || request.id}`}
+      className="
+        inline-flex
+        rounded
+        bg-[#20dc73]
+        px-5
+        py-3
+        font-semibold
+        text-black
+      "
+    >
+      Make Payment
+    </Link>
+
+
+  </div>
+)}
           <div className="flex flex-wrap gap-3">
-            <Link href="/dashboard/client/requests" className="rounded bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black">View quote actions</Link>
+            <Link href={notification?.metadata?.target_page === "payment" || notification?.metadata?.target_page === "client_payment" ? `/dashboard/client/payments/${notification?.metadata?.case_id || request.id}` : `/dashboard/client/requests/${request.id}`} className="rounded bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black">Open workflow page</Link>
             <Link href="/dashboard/client/notifications" className="rounded border border-[#143b28] px-4 py-2 text-sm text-white/70">Back to notifications</Link>
           </div>
         </div>

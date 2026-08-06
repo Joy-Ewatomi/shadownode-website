@@ -15,24 +15,72 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const isSuperAdministrator = user.role === "super_administrator"
     const queryStartedAt = performance.now()
-    const notifications = await query(
-      `
-      SELECT
-        id,
-        title,
-        message,
-        type,
-        is_read AS read,
-        created_at,
-        case_id
-      FROM notifications
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 25
-      `,
-      [user.id],
-    )
+
+    const notifications = isSuperAdministrator
+      ? await query(
+          `
+          SELECT
+            n.id,
+            n.title,
+            n.message,
+            n.type,
+            n.is_read AS read,
+            n.created_at,
+            n.case_id,
+            n.metadata,
+            n.user_id AS recipient_id,
+            u.username AS recipient_name,
+            u.email AS recipient_email,
+            u.role AS recipient_role
+          FROM notifications n
+          LEFT JOIN app_users u ON u.id = n.user_id
+          ORDER BY n.created_at DESC
+          `,
+        )
+      : await query(
+          `
+          SELECT
+            n.id,
+            n.title,
+            n.message,
+            n.type,
+            n.is_read AS read,
+            n.created_at,
+            n.case_id,
+            n.metadata,
+            n.user_id AS recipient_id,
+            u.username AS recipient_name,
+            u.email AS recipient_email,
+            u.role AS recipient_role
+          FROM notifications n
+          LEFT JOIN app_users u ON u.id = n.user_id
+          WHERE n.user_id = $1
+          ORDER BY n.created_at DESC
+          `,
+          [user.id],
+        )
+
+    const rows = notifications.rows.map((row: Record<string, unknown>) => {
+      const metadata = row.metadata
+      let parsedMetadata: Record<string, unknown> | null = null
+
+      if (typeof metadata === "string") {
+        try {
+          parsedMetadata = JSON.parse(metadata)
+        } catch {
+          parsedMetadata = null
+        }
+      } else if (metadata && typeof metadata === "object") {
+        parsedMetadata = metadata as Record<string, unknown>
+      }
+
+      return {
+        ...row,
+        metadata: parsedMetadata,
+      }
+    })
 
     const queryMs = Math.round(performance.now() - queryStartedAt)
     const totalMs = Math.round(performance.now() - startedAt)
@@ -41,7 +89,7 @@ export async function GET() {
       `[notifications] user=${user.id} auth=${authMs}ms query=${queryMs}ms total=${totalMs}ms rows=${notifications.rows.length}`
     )
 
-    return NextResponse.json(notifications.rows)
+    return NextResponse.json(rows)
   } catch (error) {
     console.error("NOTIFICATIONS GET ERROR", error)
     return NextResponse.json({ error: "Failed to load notifications" }, { status: 500 })
@@ -65,7 +113,7 @@ export async function PATCH(req: NextRequest) {
       UPDATE notifications
       SET is_read = true
       WHERE id = $1
-        AND user_id = $2
+        AND (user_id = $2 OR $3 = 'super_administrator')
       RETURNING
         id,
         title,
@@ -73,9 +121,10 @@ export async function PATCH(req: NextRequest) {
         type,
         is_read AS read,
         created_at,
-        case_id
+        case_id,
+        metadata
       `,
-      [id, user.id],
+      [id, user.id, user.role],
     )
 
     if (!updated.rows.length) {

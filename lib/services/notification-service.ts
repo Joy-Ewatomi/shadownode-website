@@ -14,6 +14,8 @@ export async function notifyUser(
 ) {
   if (!userId) return
 
+  const normalizedType = String(event.type || "system").toLowerCase().replace(/\s+/g, "_")
+
   await query(
     `
     INSERT INTO notifications
@@ -31,7 +33,7 @@ export async function notifyUser(
     [
       userId,
       event.caseId || null,
-      event.type,
+      normalizedType,
       event.title,
       event.message || null,
       JSON.stringify(event.metadata || {}),
@@ -41,8 +43,71 @@ export async function notifyUser(
   })
 }
 
-export async function notifyAdmins(event: { type: string; title: string; message?: string; metadata?: Record<string, unknown> }) {
-  await query<{ id: string }>("SELECT id FROM app_users WHERE role IN ('administrator', 'super-administrator', 'super_administrator') AND status='active'").then(async (users) => {
-    await Promise.all(users.rows.map((user) => notifyUser(user.id, event)))
-  }).catch(() => undefined)
+export async function notifyAdmins(event: {
+  type: string
+  title: string
+  message?: string
+  metadata?: Record<string, unknown>
+}) {
+
+  await query<{ id: string }>(
+    `
+    SELECT id
+    FROM app_users
+    WHERE role='administrator'
+    AND status='active'
+    `
+  )
+  .then(async (users) => {
+
+    await Promise.all(
+      users.rows.map((user) =>
+        notifyUser(user.id, event)
+      )
+    )
+
+  })
+  .catch((err) => {
+    console.error(
+      "ADMIN NOTIFICATION ERROR",
+      err
+    )
+  })
+
+}
+
+
+
+
+export async function notifySuperAdmins(event: {
+  type: string
+  title: string
+  message?: string
+  metadata?: Record<string, unknown>
+}) {
+
+  await query<{ id: string }>(
+    `
+    SELECT id
+    FROM app_users
+    WHERE role='super_administrator'
+    AND status='active'
+    `
+  )
+  .then(async (users) => {
+
+    await Promise.all(
+      users.rows.map((user) =>
+        notifyUser(user.id, event)
+      )
+    )
+
+  })
+  .catch((err) => {
+    console.error(
+      "SUPER ADMIN NOTIFICATION ERROR",
+      err
+    )
+  })
+
 }

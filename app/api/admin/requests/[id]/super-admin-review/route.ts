@@ -16,16 +16,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       requestId: id,
       actorUserId: user.id,
       actorRole: user.role,
-      action: body.action === "adjust" ? "adjust" : "accept",
+      action: body.action === "adjust" ? "adjust" : body.action === "reject" ? "reject" : "accept",
       amount: body.amount ? Number(body.amount) : null,
       currency: body.currency ? String(body.currency) : null,
       notes: body.notes ? String(body.notes) : null,
       reason: body.reason ? String(body.reason) : "",
-      estimatedCompletion: body.estimated_completion ? String(body.estimated_completion) : null,
+      estimated_completion: body.estimated_completion ? String(body.estimated_completion) : null,
     })
 
-    await auditLog(user.id, "super_admin_reviewed_quote", request, { request_id: id, action: body.action === "adjust" ? "adjust" : "accept" })
-    await recordRequestAudit(id, user.id, "super_admin_reviewed_quote", { action: body.action === "adjust" ? "adjust" : "accept" })
+    await auditLog(
+      user.id,
+      "super_admin_reviewed_quote",
+      undefined,
+      {
+        request_id: id,
+        action:
+          body.action === "adjust"
+            ? "adjust"
+            : body.action === "reject"
+            ? "reject"
+            : "accept",
+      }
+    )
+    await recordRequestAudit(id, user.id, "super_admin_reviewed_quote", { action: body.action === "adjust" ? "adjust" : body.action === "reject" ? "reject" : "accept" })
 
     return NextResponse.json(result)
   } catch (error) {

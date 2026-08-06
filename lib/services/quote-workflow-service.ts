@@ -27,46 +27,82 @@ export async function sendQuote(input: {
   amount: number
   currency: string
   notes?: string | null
-  estimatedCompletion?: string | null
-}) {
+  estimated_completion?: string | null
+  approved_start_date?: string | null
+  approved_completion_date?: string | null
+  adminAction?: string | null
+  adminNotes?: string | null
+}){
 const updated = await query(
 `
 UPDATE requests
-SET status='quote_sent',
+SET 
+    status='quote_sent',
+
     price_notes=$4,
     final_price=$2::integer,
+
     approved_quote_amount=$2::numeric,
     approved_quote_currency=$3,
+
+    approved_start_date=$9,
+    approved_completion_date=$10,
+    approved_estimated_completion=$10,
+
     approved_quote_notes=$4,
-    approved_estimated_completion=$5,
+
+    admin_quote_action=COALESCE($6, admin_quote_action),
+    admin_quote_notes=COALESCE($7, admin_quote_notes),
+
+    admin_reviewed_by=$8,
+    admin_reviewed_at=NOW(),
+
     quote_sent_at=NOW(),
     updated_at=NOW()
+
 WHERE id=$1
+
 RETURNING *
 `,
 [
- input.requestId,
- input.amount,
- input.currency,
- input.notes || null,
- input.estimatedCompletion || null
-],
+  input.requestId,
+  input.amount,
+  input.currency,
+  input.notes || null,
+
+  input.adminAction || null,
+  input.adminNotes || input.notes || null,
+  input.actorUserId,
+
+  input.estimated_completion || null,
+
+  input.approved_start_date || null,
+  input.approved_completion_date || null
+]
 )
   await recordRequestAudit(input.requestId, input.actorUserId, "quote_sent", { amount: input.amount, currency: input.currency })
 const row = updated.rows[0] as {
   user_id?: string | null
   title?: string | null
 }
-console.log("QUOTE USER:", row.user_id)
-  await notifyUser(row.user_id, { type: "quote_ready", title: "Quote ready", message: row.title || "Your investigation quote is ready." })
+  await notifyUser(row.user_id, {
+    type: "quote_ready",
+    title: "Quote ready",
+    message: row.title || "Your investigation quote is ready.",
+    metadata: {
+      request_id: input.requestId,
+      target_page: "client_quote_review",
+      action: "review_quote",
+    },
+  })
   return row
 }
 
 export async function declineRequest(requestId: string, actorUserId: string, reason?: string | null) {
-  const updated = await query("UPDATE requests SET status='rejected', declined_reason=$2, reviewed_by=$3, updated_at=NOW() WHERE id=$1 RETURNING *", [requestId, reason || null, actorUserId])
+  const updated = await query("UPDATE requests SET status='rejected', declined_reason=$2, reviewed_by=$3, admin_quote_action='rejected', admin_quote_notes=$2, admin_reviewed_by=$3, admin_reviewed_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *", [requestId, reason || null, actorUserId])
   await recordRequestAudit(requestId, actorUserId, "request_rejected", { reason: reason || null })
   const row = updated.rows[0] as { user_id?: string | null; title?: string | null }
-  await notifyUser(row.user_id, { type: "quote_rejected", title: "Request rejected", message: row.title || "Your investigation request was rejected."})
+  await notifyUser(row.user_id, { type: "quote_rejected", title: "Request rejected", message: row.title || "Your investigation request was rejected.", metadata: { request_id: requestId, target_page: "client_quote_review", action: "view_request" }})
   return row
 }
 
@@ -90,6 +126,15 @@ export async function requestQuoteReview(input: { requestId: string; clientId: s
   )
   await query("UPDATE requests SET status='negotiation_requested', updated_at=NOW() WHERE id=$1", [input.requestId])
   await recordRequestAudit(input.requestId, input.clientId, "client_requested_quote_review", { negotiation_id: inserted.rows[0].id, requested_budget: input.requestedBudget })
-  await notifyAdmins({ type: "negotiation_requested", title: "Quote review requested", message: input.reason})
+  await notifyAdmins({
+    type: "negotiation_requested",
+    title: "Quote review requested",
+    message: input.reason,
+    metadata: {
+      request_id: input.requestId,
+      target_page: "admin_request_review",
+      action: "review_negotiation",
+    },
+  })
   return inserted.rows[0]
 }

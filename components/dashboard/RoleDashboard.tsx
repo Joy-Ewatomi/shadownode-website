@@ -183,9 +183,8 @@ export default function RoleDashboard({
 
 
 
-  return (
-
-    <div className="space-y-6">
+return (
+  <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 sm:px-6 lg:px-8">
 
 
       <header className="border-b border-[#143b28] pb-6">
@@ -195,7 +194,7 @@ export default function RoleDashboard({
         </p>
 
 
-        <h1 className="mt-2 text-3xl font-bold text-white">
+        <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
           {title}
         </h1>
 
@@ -210,7 +209,7 @@ export default function RoleDashboard({
 
 
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
 
 
         {metrics.map((metric,index)=>{
@@ -224,7 +223,15 @@ export default function RoleDashboard({
 
             <div
             key={`${metric.label}-${index}`}
-              className="rounded-md border border-[#143b28] bg-[#06110f] p-5"
+              className="
+rounded-md 
+border 
+border-[#143b28] 
+bg-[#06110f] 
+p-5
+transition
+hover:border-[#20dc73]/40
+"
             >
 
               <Icon className="h-5 w-5 text-[#20dc73]" />
@@ -234,18 +241,15 @@ export default function RoleDashboard({
                 {metric.label}
               </p>
 
-
-              <p className="mt-1 text-3xl font-bold text-[#20dc73]">
-
-                {
-                  loading
-                    ? "..."
-                    : data?.[metric.key] ?? metric.value
-                }
-
-              </p>
-
-
+<div className="mt-1 text-3xl font-bold text-[#20dc73]">
+{
+  loading ? (
+    <div className="h-9 w-16 animate-pulse rounded bg-[#143b28]" />
+  ) : (
+    data?.[metric.key] ?? metric.value
+  )
+}
+</div>
               <p className="mt-2 text-xs text-white/38">
                 {metric.helper}
               </p>
@@ -273,7 +277,7 @@ export default function RoleDashboard({
 
 
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+     <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
 
 
 
@@ -293,8 +297,26 @@ export default function RoleDashboard({
           <div className="divide-y divide-[#143b28]">
 
 
- {
-displayQueue.map((item, index) => (
+{
+displayQueue.length === 0 ? (
+
+<div className="px-5 py-10 text-center">
+
+<p className="text-sm text-white/50">
+No activity yet.
+</p>
+
+<p className="mt-2 text-xs text-white/30">
+Your investigation requests and bureau updates will appear here.
+</p>
+
+</div>
+
+) : (
+
+displayQueue.map((item,index)=>(
+
+  
 
     <div
       key={
@@ -302,7 +324,7 @@ displayQueue.map((item, index) => (
           ? `${item.type || "item"}-${item.id}`
           : `${item.title}-${item.status}-${index}`
       }
-      className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+      className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
     >
                   <div>
 
@@ -329,12 +351,13 @@ displayQueue.map((item, index) => (
 
                 </div>
 
-              ))
-            }
-
+            ))
+)
+}
 
 
           </div>
+
 
 
         </div>
@@ -343,7 +366,7 @@ displayQueue.map((item, index) => (
 
 
 
-        <aside className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
+        <aside className="rounded-md border border-[#143b28] bg-[#06110f] p-5 xl:sticky xl:top-6 xl:self-start">
 
 
           <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#20dc73]">

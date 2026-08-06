@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import RoleDashboard from "@/components/dashboard/RoleDashboard"
-import ClientQuotes from "@/components/client/ClientQuotes"
 
 export default async function ClientDashboard() {
 
@@ -13,64 +12,125 @@ export default async function ClientDashboard() {
 
 
   return (
-    <div className="space-y-8">
+
+    <div className="space-y-6">
 
       <RoleDashboard
+
         role="client"
-        eyebrow="Client Operations"
+
+        eyebrow="ShadowNode Operations"
+
         title="Client Dashboard"
-        description="Track investigations, requests, quotes, reports and bureau communication."
+
+        description="Manage investigation requests, cybersecurity engagements, reports and secure bureau communication."
+
+
         metrics={[
-  {
-    key:"active_cases",
-    label:"Active Cases",
-    value:"0",
-    helper:"Current investigations"
-  },
-  {
-    key:"open_requests",
-    label:"Requests",
-    value:"0",
-    helper:"Open investigation requests"
-  },
-  {
-    key:"unread_notifications",
-    label:"Notifications",
-    value:"0",
-    helper:"Unread bureau notifications"
-  },
-  {
-    key:"reports_available",
-    label:"Reports",
-    value:"0",
-    helper:"Available reports"
-  }
-]}
-        queueTitle="Client Activity"
-        queueItems={[
+
           {
-            title:"Requests",
-            detail:"Submit OSINT, cybersecurity or investigation requests.",
-            status:"Ready"
+            key:"active_cases",
+            label:"Active Cases",
+            value:"0",
+            helper:"Ongoing investigations"
           },
+
+
           {
-            title:"Quotes",
-            detail:"Review, negotiate or approve investigation quotes.",
-            status:"Workflow"
+            key:"pending_requests",
+            label:"Pending Requests",
+            value:"0",
+            helper:"Awaiting bureau review"
           },
+
+
           {
-            title:"Cases",
-            detail:"Access converted investigations.",
-            status:"Active"
+            key:"available_reports",
+            label:"Reports",
+            value:"0",
+            helper:"Completed intelligence reports"
+          },
+
+
+          {
+            key:"notifications",
+            label:"Notifications",
+            value:"0",
+            helper:"Secure updates"
           }
+
         ]}
+
+
+
+        queueTitle="Client Operations"
+
+
+
+        queueItems={[
+
+
+          {
+
+            id:"new_request",
+
+            title:"Create Investigation Request",
+
+            detail:
+            "Submit OSINT, cybersecurity, digital forensics or intelligence requests.",
+
+            status:"Available"
+
+          },
+
+
+          {
+
+            id:"pending_review",
+
+            title:"Request Review",
+
+            detail:
+            "ShadowNode analysts review requirements and prepare engagement details.",
+
+            status:"Waiting"
+
+          },
+
+
+          {
+
+            id:"secure_messages",
+
+            title:"Secure Communication",
+
+            detail:
+            "Communicate with assigned analysts through the bureau portal.",
+
+            status:"Secure"
+
+          },
+
+
+          {
+
+            id:"reports",
+
+            title:"Investigation Reports",
+
+            detail:
+            "Access completed intelligence and forensic reports.",
+
+            status:"Protected"
+
+          }
+
+
+        ]}
+
       />
 
-
-      {/* LIVE QUOTES SECTION */}
-      <ClientQuotes />
-
-
     </div>
+
   )
 }

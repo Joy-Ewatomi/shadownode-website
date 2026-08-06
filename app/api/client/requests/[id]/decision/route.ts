@@ -5,7 +5,7 @@ import { convertAcceptedRequestToCase } from "@/lib/services/case-conversion-ser
 import { notifyAdmins } from "@/lib/services/notification-service"
 import { recordRequestAudit, requestQuoteReview } from "@/lib/services/quote-workflow-service"
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handleDecision(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { id } = await params
     const body = await request.json()
-    const action = String(body.action || "")
+    const action = String(body.action || body.decision || "").trim()
 
     if (action === "accept") {
       const eligible = await query<{ id: string }>(
@@ -58,4 +58,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.error("CLIENT QUOTE DECISION ERROR", error)
     return NextResponse.json({ error: "Failed to process quote decision" }, { status: 500 })
   }
+}
+
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  return handleDecision(request, context)
+}
+
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  return handleDecision(request, context)
 }

@@ -24,12 +24,15 @@ export default function RequestReviewCard({
   request: RequestData
 }) {
 
-
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
-  const [rejecting,setRejecting]=useState(false)
+  const [rejecting, setRejecting] = useState(false)
 
-  async function approveRequest() {
+
+  async function updateRequest(
+    action: string,
+    extra: Record<string, unknown> = {}
+  ) {
 
     try {
 
@@ -38,41 +41,43 @@ export default function RequestReviewCard({
 
 
       const res = await fetch(
-`/api/admin/requests/${request.id}`,
-{
-method:"PATCH",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-action:"send_quote",
-approved_quote_amount:request.ai_price_estimate,
-approved_quote_currency:"NGN",
-quote_notes:"Initial investigation quote"
-})
-}
-)
+        `/api/admin/requests/${request.id}`,
+        {
+          method: "PATCH",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body: JSON.stringify({
+            action,
+            ...extra
+          })
+        }
+      )
 
 
       const data = await res.json()
 
 
-      if (!res.ok) {
+      if(!res.ok){
 
         throw new Error(
-          data.error || "Approval failed"
+          data.error || "Action failed"
         )
 
       }
 
 
       setMessage(
-        "Request approved and quote sent."
+        action === "submit_for_super_admin_review"
+        ?
+        "Sent to super administrator review."
+        :
+        "Updated successfully."
       )
 
 
-    } catch (error) {
-
+    }
+    catch(error){
 
       setMessage(
         error instanceof Error
@@ -80,8 +85,8 @@ quote_notes:"Initial investigation quote"
         : "Something went wrong"
       )
 
-
-    } finally {
+    }
+    finally{
 
       setLoading(false)
 
@@ -89,326 +94,386 @@ quote_notes:"Initial investigation quote"
 
   }
 
+
+
+  async function acceptRequest(){
+
+    await updateRequest(
+      "submit_for_super_admin_review",
+      {
+        decision:"accepted",
+
+        approved_quote_amount:
+          request.ai_price_estimate || 0,
+
+        approved_quote_currency:"NGN",
+
+        admin_quote_notes:
+          "Accepted based on AI assessment."
+      }
+    )
+
+  }
+
+
+
+  async function adjustRequest(){
+
+    const amount = prompt(
+      "Enter adjusted quote amount",
+      String(request.ai_price_estimate || "")
+    )
+
+
+    if(!amount){
+      return
+    }
+
+
+    const reason = prompt(
+      "Reason for adjustment"
+    )
+
+
+    if(!reason){
+      return
+    }
+
+
+    await updateRequest(
+      "submit_for_super_admin_review",
+      {
+        decision:"adjusted",
+
+        approved_quote_amount:
+          Number(amount),
+
+        approved_quote_currency:"NGN",
+
+        admin_quote_notes:
+          reason
+      }
+    )
+
+  }
+
+
+
   async function rejectRequest(){
 
-
-const reason =
-prompt(
-"Reason for rejection"
-)
+    const reason = prompt(
+      "Reason for rejection"
+    )
 
 
-if(!reason){
- return
-}
+    if(!reason){
+      return
+    }
+
+
+    try{
+
+      setRejecting(true)
+
+
+      await updateRequest(
+        "submit_for_super_admin_review",
+        {
+          decision:"rejected",
+
+          admin_quote_notes:
+            reason
+        }
+      )
+
+
+    }
+    finally{
+
+      setRejecting(false)
+
+    }
+
+  }
 
 
 
-try{
 
-setRejecting(true)
+return (
 
-const res = await fetch(
-`/api/admin/requests/${request.id}`,
+<div className="space-y-6">
+
+
 {
-method:"PATCH",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-action:"reject",
-reason
-})
-}
+message && (
+
+<div
+className="
+rounded-md
+border
+border-[#20dc73]/30
+bg-[#20dc73]/10
+px-4
+py-3
+text-sm
+text-[#20dc73]
+"
+>
+{message}
+</div>
+
 )
-
-
-
-
-const data = await res.json()
-
-
-if(!res.ok){
-
-throw new Error(
-data.error || "Reject failed"
-)
-
 }
 
 
 
-setMessage(
-"Request rejected"
-)
+<div
+className="
+rounded-md
+border
+border-[#143b28]
+bg-[#06110f]
+p-6
+"
+>
 
+<p
+className="
+text-xs
+uppercase
+tracking-[0.2em]
+text-[#20dc73]
+"
+>
+Investigation Request
+</p>
 
 
-}
-catch(error){
+<h1
+className="
+mt-3
+text-2xl
+font-bold
+text-white
+"
+>
+{request.title}
+</h1>
 
-setMessage(
-error instanceof Error
-? error.message
-:"Something went wrong"
-)
 
-}
-finally{
+<p
+className="
+mt-2
+text-sm
+text-white/50
+"
+>
+{request.case_number}
+</p>
 
-setRejecting(false)
 
-}
+</div>
 
 
-}
 
 
-  return (
 
-    <div className="space-y-6">
+<div className="grid gap-6 lg:grid-cols-2">
 
 
-      {
-        message && (
+<div
+className="
+rounded-md
+border
+border-[#143b28]
+bg-[#06110f]
+p-5
+"
+>
 
-          <div className="
-          rounded-md
-          border
-          border-[#20dc73]/30
-          bg-[#20dc73]/10
-          px-4
-          py-3
-          text-sm
-          text-[#20dc73]
-          ">
+<h2 className="font-semibold text-white">
+Client Information
+</h2>
 
-            {message}
 
-          </div>
+<p className="mt-4 text-sm text-white/60">
+{request.client_email}
+</p>
 
-        )
-      }
 
+</div>
 
 
-      <div className="rounded-md border border-[#143b28] bg-[#06110f] p-6">
 
 
-        <p className="
-        text-xs
-        uppercase
-        tracking-[0.2em]
-        text-[#20dc73]
-        ">
-          Investigation Request
-        </p>
 
+<div
+className="
+rounded-md
+border
+border-[#143b28]
+bg-[#06110f]
+p-5
+"
+>
 
-        <h1 className="
-        mt-3
-        text-2xl
-        font-bold
-        text-white
-        ">
-          {request.title}
-        </h1>
+<h2 className="font-semibold text-white">
+AI Analysis
+</h2>
 
 
-        <p className="
-        mt-2
-        text-sm
-        text-white/50
-        ">
-          {request.case_number}
-        </p>
+<p className="mt-4 text-sm text-white/60">
+Complexity:
 
+<span className="text-[#20dc73]">
+{" "}
+{request.ai_complexity}
+</span>
 
-      </div>
+</p>
 
 
 
+<p className="mt-2 text-sm text-white/60">
+Confidence:
 
+<span className="text-[#20dc73]">
+{" "}
+{request.ai_confidence}%
+</span>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+</p>
 
 
-        <div className="
-        rounded-md
-        border
-        border-[#143b28]
-        bg-[#06110f]
-        p-5
-        ">
 
+<p className="mt-2 text-sm text-white/60">
+Estimated:
 
-          <h2 className="font-semibold text-white">
-            Client Information
-          </h2>
+<span className="text-[#20dc73]">
+{" "}
+₦{request.ai_price_estimate?.toLocaleString()}
+</span>
 
+</p>
 
-          <p className="mt-4 text-sm text-white/60">
-            {request.client_email}
-          </p>
 
+</div>
 
-        </div>
 
+</div>
 
 
 
 
-        <div className="
-        rounded-md
-        border
-        border-[#143b28]
-        bg-[#06110f]
-        p-5
-        ">
 
+<div
+className="
+rounded-md
+border
+border-[#143b28]
+bg-[#06110f]
+p-5
+"
+>
 
-          <h2 className="font-semibold text-white">
-            AI Analysis
-          </h2>
+<h2 className="font-semibold text-white">
+Description
+</h2>
 
 
-          <div className="
-          mt-4
-          space-y-2
-          text-sm
-          text-white/60
-          ">
+<p
+className="
+mt-3
+text-sm
+leading-7
+text-white/60
+"
+>
+{request.description}
+</p>
 
 
-            <p>
-              Complexity:
-              <span className="text-[#20dc73]">
-                {" "}
-                {request.ai_complexity}
-              </span>
-            </p>
+</div>
 
 
-            <p>
-              Confidence:
-              <span className="text-[#20dc73]">
-                {" "}
-                {request.ai_confidence}%
-              </span>
-            </p>
 
 
-            <p>
-              Estimated Price:
-              <span className="text-[#20dc73]">
-                {" "}
-                ₦{request.ai_price_estimate?.toLocaleString()}
-              </span>
-            </p>
 
+<div
+className="
+rounded-md
+border
+border-[#143b28]
+bg-[#06110f]
+p-5
+"
+>
 
-          </div>
+<h2 className="font-semibold text-white">
+AI Reasoning
+</h2>
 
 
-        </div>
+<p
+className="
+mt-3
+text-sm
+leading-7
+text-white/60
+"
+>
+{request.ai_reasoning}
+</p>
 
 
-      </div>
+</div>
 
 
 
 
 
-      <div className="
-      rounded-md
-      border
-      border-[#143b28]
-      bg-[#06110f]
-      p-5
-      ">
+<div className="flex flex-wrap gap-3">
 
 
-        <h2 className="font-semibold text-white">
-          Investigation Description
-        </h2>
+<button
+onClick={acceptRequest}
+disabled={loading}
+className="
+rounded-md
+bg-[#20dc73]
+px-5
+py-3
+font-semibold
+text-black
+disabled:opacity-50
+"
+>
+Accept
+</button>
 
 
-        <p className="
-        mt-3
-        text-sm
-        leading-7
-        text-white/60
-        ">
-          {request.description}
-        </p>
 
 
-      </div>
+<button
+onClick={adjustRequest}
+disabled={loading}
+className="
+rounded-md
+border
+border-yellow-400/40
+px-5
+py-3
+text-yellow-300
+disabled:opacity-50
+"
+>
+Adjust
+</button>
 
 
 
 
-
-      <div className="
-      rounded-md
-      border
-      border-[#143b28]
-      bg-[#06110f]
-      p-5
-      ">
-
-
-        <h2 className="font-semibold text-white">
-          AI Reasoning
-        </h2>
-
-
-        <p className="
-        mt-3
-        text-sm
-        leading-7
-        text-white/60
-        ">
-          {request.ai_reasoning}
-        </p>
-
-
-      </div>
-
-
-
-
-
-      <div className="flex gap-3">
-
-
-        <button
-          onClick={approveRequest}
-          disabled={loading}
-          className="
-          rounded-md
-          bg-[#20dc73]
-          px-5
-          py-3
-          font-semibold
-          text-black
-          disabled:opacity-50
-          "
-        >
-
-          {
-            loading
-            ? "Approving..."
-            : "Approve Request"
-          }
-
-        </button>
-
-
-
-
-
-        <button
+<button
 onClick={rejectRequest}
 disabled={rejecting}
 className="
@@ -421,7 +486,6 @@ text-red-300
 disabled:opacity-50
 "
 >
-
 {
 rejecting
 ?
@@ -429,14 +493,14 @@ rejecting
 :
 "Reject"
 }
-
 </button>
 
-      </div>
+
+</div>
 
 
-    </div>
+</div>
 
-  )
+)
 
 }

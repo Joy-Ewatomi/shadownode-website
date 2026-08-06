@@ -41,14 +41,18 @@ type ClientRequest = {
   communication_channel?: string | null
 
   // Cybersecurity Training
-  training_organization_name?: string | null
-  training_client_type?: string | null
-  training_participant_count?: number | null
-  training_skill_level?: string | null
-  training_goal?: string | null
-  training_topics?: string | null
-  training_preferred_dates?: string | null
-  training_additional_requirements?: string | null
+training_organization_name?: string | null
+training_client_type?: string | null
+training_participant_count?: number | null
+training_skill_level?: string | null
+training_goal?: string | null
+training_topics?: string | null
+
+training_preferred_start_date?: string | null
+training_preferred_completion_date?: string | null
+training_timeline_flexible?: boolean | null
+
+training_additional_requirements?: string | null
 
   // Communication
   communication_method?: string | null

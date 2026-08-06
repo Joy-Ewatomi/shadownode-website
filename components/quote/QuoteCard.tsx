@@ -18,7 +18,12 @@ type QuoteCardProps = {
     approved_quote_currency?: string | null
     quote_notes?: string | null
     approved_quote_notes?: string | null
-    approved_estimated_completion?: string | null
+ approved_estimated_completion?: string | null
+
+// Cybersecurity Training
+training_preferred_start_date?: string | null
+training_preferred_completion_date?: string | null
+training_timeline_flexible?: boolean | null
   }
 
   onAccept: () => Promise<void>
@@ -66,17 +71,18 @@ export default function QuoteCard({
 
 
       <div className="mt-4">
-        <QuoteSummary
-          quoteAmount={quoteAmount}
-          currency={request.approved_quote_currency || "NGN"}
-          notes={
-            request.approved_quote_notes ||
-            request.quote_notes
-          }
-          estimatedCompletion={
-            request.approved_estimated_completion
-          }
-        />
+     <QuoteSummary
+  quoteAmount={quoteAmount}
+  currency={request.approved_quote_currency || "NGN"}
+  notes={
+    request.approved_quote_notes ||
+    request.quote_notes
+  }
+
+  estimatedCompletion={
+    request.approved_estimated_completion
+  }
+/>
       </div>
 
 

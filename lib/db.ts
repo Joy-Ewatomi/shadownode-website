@@ -1,6 +1,5 @@
 import { Pool, type QueryResult, type QueryResultRow } from "pg";
 import dns from "dns";
-
 dns.setDefaultResultOrder("ipv4first");
 
 declare global {

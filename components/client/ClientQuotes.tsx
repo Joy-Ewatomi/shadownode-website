@@ -1,6 +1,7 @@
 "use client"
 
 import {useEffect,useState} from "react"
+import Link from "next/link"
 
 
 export default function ClientQuotes(){
@@ -75,13 +76,15 @@ className="mt-4 rounded border border-[#143b28] p-4"
 
 
 <p className="text-sm text-white/50">
-{q.approved_quote_notes}
+Final quotation ready for your review.
 </p>
 
-
-<button className="mt-4 rounded border border-[#20dc73]/40 px-4 py-2 text-[#20dc73]">
-Review Quote
-</button>
+<Link
+  href={`/dashboard/requests/${q.id}`}
+  className="mt-4 inline-flex rounded border border-[#20dc73]/40 px-4 py-2 text-[#20dc73]"
+>
+  Review Quote
+</Link>
 
 
 </div>

@@ -1,7 +1,9 @@
 "use client"
 
 import { Bell, CheckCheck, RefreshCcw } from "lucide-react"
+import Link from "next/link"
 import { useEffect, useState } from "react"
+import { getNotificationDestination } from "@/lib/notification-routing"
 
 type Notification = {
   id: string
@@ -11,6 +13,7 @@ type Notification = {
   read: boolean
   created_at: string
   case_id: string | null
+  metadata?: Record<string, unknown> | null
 }
 
 export default function ClientNotificationsPage() {
@@ -122,7 +125,7 @@ export default function ClientNotificationsPage() {
                 {typeIcon[notification.type] || "🔔"}
               </span>
 
-              <div className="min-w-0 flex-1">
+              <Link href={getNotificationDestination(notification)} className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="font-semibold text-white">{notification.title}</p>
                   {!notification.read ? (
@@ -133,7 +136,7 @@ export default function ClientNotificationsPage() {
                 <p className="mt-2 text-xs text-white/35">
                   {new Date(notification.created_at).toLocaleString()}
                 </p>
-              </div>
+              </Link>
 
               {!notification.read ? (
                 <button
