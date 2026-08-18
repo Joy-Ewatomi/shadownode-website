@@ -1,5 +1,5 @@
 import { query } from "@/lib/db"
-import { notifyUser } from "@/lib/services/notification-service"
+import { notifySuperAdmins } from "@/lib/services/notification-service"
 import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
 import { createQuoteVersion } from "@/lib/services/quote-version-service"
 
@@ -16,45 +16,62 @@ export async function reviewQuoteAsAdmin(input: {
   reason: string
   estimated_completion?: string | null
 }) {
+  if (!input.requestId) {
+    throw new Error("Request id is required")
+  }
 
-  if (!input.requestId) throw new Error("Request id is required")
-  if (!input.actorUserId) throw new Error("Actor user id is required")
+  if (!input.actorUserId) {
+    throw new Error("Actor user id is required")
+  }
 
   if (input.actorRole !== "administrator") {
     throw new Error("Only administrators can review quotes")
   }
 
-  const reason = input.reason?.trim()
+  if (!["accept", "adjust"].includes(input.action)) {
+    throw new Error("Invalid administrator quote action")
+  }
+
+  const reason = input.reason?.trim() || ""
 
   if (!reason) {
     throw new Error("A reason is required")
   }
 
+  /*
+   * =========================================================
+   * LOAD REQUEST
+   * =========================================================
+   */
 
-const current = await query<{
-  id: string
-  user_id: string | null
-  title: string | null
-  status: string | null
-  approved_quote_amount: number | null
-  approved_quote_currency: string | null
-}>(
+  const current = await query<{
+    id: string
+    user_id: string | null
+    client_email: string | null
+    title: string | null
+    status: string | null
+    approved_quote_amount: number | null
+    approved_quote_currency: string | null
+    approved_quote_notes: string | null
+    approved_estimated_completion: string | null
+  }>(
     `
-    SELECT
-      id,
-      user_id,
-      title,
-      status,
-      approved_quote_amount,
-      approved_quote_currency
-    FROM requests
-    WHERE id=$1
-    FOR UPDATE
-    LIMIT 1
+      SELECT
+        id,
+        user_id,
+        client_email,
+        title,
+        status,
+        approved_quote_amount,
+        approved_quote_currency,
+        approved_quote_notes,
+        approved_estimated_completion
+      FROM requests
+      WHERE id = $1
+      LIMIT 1
     `,
-    [input.requestId]
+    [input.requestId],
   )
-
 
   const request = current.rows[0]
 
@@ -62,109 +79,263 @@ const current = await query<{
     throw new Error("Request not found")
   }
 
+  /*
+   * =========================================================
+   * ALLOWED STATUSES
+   * =========================================================
+   */
 
+  const allowedStatuses = new Set([
+    "pending_review",
+    "reviewing",
+    "approved",
+    "pending_admin_review",
+    "admin_reviewed",
+  ])
 
-  // GET AI ORIGINAL QUOTE ONLY
+  if (!allowedStatuses.has(request.status || "")) {
+    throw new Error(
+      "This request is not available for administrator quote review",
+    )
+  }
+
+  /*
+   * =========================================================
+   * GET INTERNAL AI QUOTE
+   * =========================================================
+   *
+   * AI quote is INTERNAL ONLY.
+   *
+   * It is never returned to the client.
+   */
+
   const aiResult = await query<{
-  price: number | null
-  currency: string | null
-  estimated_completion: string | null
-  notes: string | null
-}>(
+    price: number | null
+    currency: string | null
+    estimated_completion: string | null
+    notes: string | null
+  }>(
     `
-    SELECT
-      price,
-      currency,
-      estimated_completion,
-      notes
-    FROM quote_versions
-    WHERE request_id=$1
-    AND source='ai'
-    ORDER BY version_number DESC
-    LIMIT 1
+      SELECT
+        price,
+        currency,
+        estimated_completion,
+        notes
+      FROM quote_versions
+      WHERE request_id = $1
+        AND source = 'ai'
+      ORDER BY version_number DESC
+      LIMIT 1
     `,
-    [input.requestId]
+    [input.requestId],
   )
-
 
   const aiQuote = aiResult.rows[0]
 
+  /*
+   * =========================================================
+   * DETERMINE ADMINISTRATOR QUOTE
+   * =========================================================
+   *
+   * Priority:
+   *
+   * 1. Administrator supplied amount
+   * 2. Internal AI estimate
+   * 3. Existing quote amount
+   */
 
-  const amount = Number(
-    input.amount ??
-    aiQuote?.price ??
-    request.approved_quote_amount
+if (
+  input.amount === null ||
+  input.amount === undefined ||
+  !Number.isFinite(input.amount) ||
+  input.amount <= 0
+) {
+  throw new Error(
+    "Administrator quote amount is required",
   )
+}
 
+const amount = Number(input.amount)
 
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("Valid quote amount required")
+if (!Number.isFinite(amount) || amount <= 0) {
+  throw new Error("Valid quote amount required")
+}
+  /*
+   * =========================================================
+   * CURRENCY
+   * =========================================================
+   */
+
+  const currency = String(
+    input.currency ??
+      request.approved_quote_currency ??
+      aiQuote?.currency ??
+      "USD",
+  )
+    .trim()
+    .toUpperCase()
+
+  if (!currency) {
+    throw new Error("Quote currency is required")
   }
 
+  if (currency.length > 10) {
+    throw new Error("Invalid quote currency")
+  }
 
- const currency = String(
-  input.currency ??
-  aiQuote?.currency ??
-  request.approved_quote_currency ??
-  "NGN"
-).trim().slice(0,10)
+  /*
+   * =========================================================
+   * ESTIMATED COMPLETION
+   * =========================================================
+   */
 
+  const estimatedCompletion =
+    input.estimated_completion?.trim() ||
+    request.approved_estimated_completion ||
+    aiQuote?.estimated_completion ||
+    null
 
-const updated = await query<{
-  user_id:string | null
-  title:string | null
-}>(
+  if (
+    estimatedCompletion &&
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      estimatedCompletion,
+    )
+  ) {
+    throw new Error(
+      "Estimated completion must be a valid date (YYYY-MM-DD)",
+    )
+  }
+
+  /*
+   * =========================================================
+   * NOTES
+   * =========================================================
+   */
+
+  const notes =
+    input.notes?.trim() ||
+    request.approved_quote_notes ||
+    null
+
+  /*
+   * =========================================================
+   * ADMIN ACTION
+   * =========================================================
+   */
+
+  const adminAction =
+    input.action === "adjust"
+      ? "adjusted"
+      : "submitted_for_review"
+
+  /*
+   * =========================================================
+   * SAVE ADMIN PROPOSED QUOTE
+   * =========================================================
+   *
+   * IMPORTANT:
+   *
+   * This is NOT the final client quote yet.
+   *
+   * The request moves to:
+   *
+   * pending_super_admin_review
+   */
+
+  const updated = await query<{
+    id: string
+    user_id: string | null
+    client_email: string | null
+    title: string | null
+    status: string | null
+    approved_quote_amount: number | null
+    approved_quote_currency: string | null
+    approved_quote_notes: string | null
+    approved_estimated_completion: string | null
+    admin_quote_action: string | null
+    admin_quote_notes: string | null
+    admin_reviewed_by: string | null
+    admin_reviewed_at: string | null
+    updated_at: string
+  }>(
     `
-    UPDATE requests
-    SET
-      status='pending_super_admin_review',
+      UPDATE requests
+      SET
+        status = 'pending_super_admin_review',
 
-      approved_quote_amount=$2::numeric,
-      approved_quote_currency=$3,
+        approved_quote_amount = $2::numeric,
+        approved_quote_currency = $3,
+        approved_quote_notes = $4,
+        approved_estimated_completion = $5::date,
 
-      admin_quote_action=$4,
-      admin_quote_notes=$5,
+        admin_quote_action = $6,
+        admin_quote_notes = $7,
 
-      admin_reviewed_by=$6,
-      admin_reviewed_at=NOW(),
+        admin_reviewed_by = $8,
+        admin_reviewed_at = NOW(),
 
-      updated_at=NOW()
+        updated_at = NOW()
 
-    WHERE id=$1
+      WHERE id = $1
 
-    RETURNING *
+      RETURNING
+        id,
+        user_id,
+        client_email,
+        title,
+        status,
+        approved_quote_amount,
+        approved_quote_currency,
+        approved_quote_notes,
+        approved_estimated_completion,
+        admin_quote_action,
+        admin_quote_notes,
+        admin_reviewed_by,
+        admin_reviewed_at,
+        updated_at
     `,
     [
       input.requestId,
       amount,
       currency,
-      input.action==="adjust"
-        ? "adjusted"
-        : "submitted_for_review",
+      notes,
+      estimatedCompletion,
+      adminAction,
       reason,
-      input.actorUserId
-    ]
+      input.actorUserId,
+    ],
   )
-
 
   const row = updated.rows[0]
 
+  if (!row) {
+    throw new Error("Failed to update request")
+  }
 
+  /*
+   * =========================================================
+   * CREATE IMMUTABLE ADMIN QUOTE VERSION
+   * =========================================================
+   */
 
-  await createQuoteVersion({
+  const adminVersion = await createQuoteVersion({
     requestId: input.requestId,
     userId: input.actorUserId,
-    role:"administrator",
-    source:"administrator",
-    price:amount,
+    role: "administrator",
+    source: "administrator",
+    price: amount,
     currency,
     estimated_completion:
-      input.estimated_completion ?? null,
-    reasoning:reason,
-    status:"pending_super_admin_review"
+      estimatedCompletion,
+    reasoning: reason,
+    status: "pending_super_admin_review",
   })
 
-
+  /*
+   * =========================================================
+   * AUDIT
+   * =========================================================
+   */
 
   await recordRequestAudit(
     input.requestId,
@@ -173,29 +344,64 @@ const updated = await query<{
     {
       amount,
       currency,
-      action:input.action,
-      reason
-    }
+      action: input.action,
+      reason,
+      estimated_completion:
+        estimatedCompletion,
+      quote_version_id:
+        adminVersion.id,
+    },
   )
 
+  /*
+   * =========================================================
+   * NOTIFY SUPER ADMIN
+   * =========================================================
+   *
+   * DO NOT notify the client here.
+   *
+   * The client must not receive the proposed quote until
+   * Super Admin has given final approval.
+   */
 
+  await notifySuperAdmins({
+    type: "quote_pending_super_admin_review",
+    title: "Quote awaiting final approval",
+    message:
+      request.title ||
+      "A quote is awaiting Super Administrator review.",
+    metadata: {
+      request_id: input.requestId,
+      quote_version_id:
+        adminVersion.id,
+      target_page:
+        "super_admin_request_review",
+      action: "review_quote",
+    },
+  })
 
-  if(row.user_id){
+  /*
+   * =========================================================
+   * RETURN INTERNAL ADMIN RESULT
+   * =========================================================
+   *
+   * This function is server-side.
+   *
+   * The API route should still avoid exposing AI data.
+   */
 
-    await notifyUser(row.user_id,{
-      type:"quote_review",
-      title:"Quote sent for final approval",
-      message:
-        "Your investigation quote is being reviewed.",
-      metadata:{
-        request_id:input.requestId,
-        target_page:"client_quote_review"
-      }
-    })
+  return {
+    ...row,
 
+    quote_version_id:
+      adminVersion.id,
+
+    /*
+     * Explicitly identify this as a proposed quote,
+     * not a final client quote.
+     */
+
+    quote_stage:
+      "pending_super_admin_review",
   }
-
-
-  return row
-
 }

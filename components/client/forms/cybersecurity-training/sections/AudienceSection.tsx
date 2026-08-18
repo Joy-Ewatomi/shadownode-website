@@ -16,30 +16,31 @@ type Props = {
 
   industry: string
 
+  customIndustry: string
 
-  onAudienceChange: (value: string) => void
 
-  onCustomAudienceChange: (value: string) => void
+  onAudienceChange:(value:string)=>void
 
-  onIndustryChange: (value: string) => void
+  onCustomAudienceChange:(value:string)=>void
+
+  onIndustryChange:(value:string)=>void
+
+  onCustomIndustryChange:(value:string)=>void
 
 }
 
 
 
 export default function AudienceSection({
-
   audience,
-
   customAudience,
-
   industry,
+  customIndustry,
 
   onAudienceChange,
-
   onCustomAudienceChange,
-
   onIndustryChange,
+  onCustomIndustryChange,
 
 }: Props) {
 
@@ -70,7 +71,7 @@ export default function AudienceSection({
 
               active={audience === item}
 
-              onClick={()=>
+              onClick={() =>
                 onAudienceChange(item)
               }
 
@@ -81,53 +82,39 @@ export default function AudienceSection({
         </div>
 
 
+        {audience === "Custom" && (
 
-        {/* CUSTOM AUDIENCE TEXTAREA */}
+          <textarea
 
-        {audience === "custom" && (
+            value={customAudience}
 
-          <div className="mt-4">
+            onChange={(e)=>
+              onCustomAudienceChange(
+                e.target.value
+              )
+            }
 
-            <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-              Custom Training Audience
-            </label>
+            rows={5}
 
+            placeholder="Describe your target training audience..."
 
-            <textarea
+            className="
+              mt-4
+              w-full rounded-md
+              border border-[#143b28]
+              bg-black
+              p-4
+              text-white
+              placeholder:text-white/30
+              focus:border-[#20dc73]
+              focus:outline-none
+            "
 
-              value={customAudience}
-
-              onChange={(e)=>
-                onCustomAudienceChange(
-                  e.target.value
-                )
-              }
-
-              rows={5}
-
-              placeholder="Describe your target training audience..."
-
-              className="
-                w-full rounded-md
-                border border-[#143b28]
-                bg-black
-                p-4
-                text-white
-                placeholder:text-white/30
-                focus:border-[#20dc73]
-                focus:outline-none
-              "
-
-            />
-
-          </div>
+          />
 
         )}
 
-
       </div>
-
-
 
 
 
@@ -157,8 +144,6 @@ export default function AudienceSection({
             px-3
             text-sm
             text-white
-            outline-none
-            focus:border-[#20dc73]/50
           "
 
         >
@@ -182,10 +167,45 @@ export default function AudienceSection({
 
         </select>
 
+
+
+        {industry === "Other" && (
+
+          <textarea
+
+            value={customIndustry}
+
+            onChange={(e)=>
+              onCustomIndustryChange(
+                e.target.value
+              )
+            }
+
+            rows={5}
+
+            placeholder="Describe your industry..."
+
+            className="
+              mt-4
+              w-full rounded-md
+              border border-[#143b28]
+              bg-black
+              p-4
+              text-white
+              placeholder:text-white/30
+              focus:border-[#20dc73]
+              focus:outline-none
+            "
+
+          />
+
+        )}
+
       </div>
 
 
     </div>
 
   )
+
 }

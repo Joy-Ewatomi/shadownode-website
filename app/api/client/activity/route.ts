@@ -2,24 +2,27 @@ import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 
-
 export async function GET() {
-
   try {
-
     const user = await getCurrentUser()
 
     if (!user) {
       return NextResponse.json(
-        { error:"Unauthorized" },
-        { status:401 }
+        { error: "Unauthorized" },
+        { status: 401 },
       )
     }
 
-
     const activities = await query(
       `
-      SELECT *
+      SELECT
+        id,
+        type,
+        case_number,
+        title,
+        detail,
+        status,
+        created_at
       FROM (
 
         SELECT
@@ -29,7 +32,7 @@ export async function GET() {
           r.title,
           CONCAT(
             'Investigation request ',
-            COALESCE(r.case_number,''),
+            COALESCE(r.case_number, ''),
             ' is currently ',
             r.status
           ) AS detail,
@@ -38,12 +41,10 @@ export async function GET() {
 
         FROM requests r
 
-        WHERE r.user_id=$1
-
+        WHERE r.user_id = $1
 
 
         UNION ALL
-
 
 
         SELECT
@@ -51,21 +52,19 @@ export async function GET() {
           'activity' AS type,
           NULL AS case_number,
           n.title,
-          COALESCE(n.message,n.title) AS detail,
+          COALESCE(n.message, n.title) AS detail,
           CASE
-            WHEN n.is_read=false THEN 'Unread'
+            WHEN n.is_read = false THEN 'Unread'
             ELSE 'Read'
           END AS status,
           n.created_at
 
         FROM notifications n
 
-        WHERE n.user_id=$1
-
+        WHERE n.user_id = $1
 
 
         UNION ALL
-
 
 
         SELECT
@@ -85,63 +84,42 @@ export async function GET() {
         FROM cases c
 
         WHERE c.client_profile_id IN (
-
           SELECT id
           FROM user_profiles
-          WHERE user_id=$1
-
+          WHERE user_id = $1
         )
 
-
       ) activity
-
 
       ORDER BY created_at DESC
 
       LIMIT 10
-
       `,
-      [user.id]
+      [user.id],
     )
-
-
 
     return NextResponse.json(
-
-      activities.rows.map((item)=>({
-
-        id:item.id,
-
-        type:item.type,
-
-        title:item.title,
-
-        detail:item.detail,
-
-        status:item.status || "Update"
-
-      }))
-
+      activities.rows.map((item) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        detail: item.detail,
+        status: item.status || "Update",
+      })),
     )
-
-
-  } catch(error){
-
+  } catch (error) {
     console.error(
       "CLIENT ACTIVITY ERROR",
-      error
+      error,
     )
-
 
     return NextResponse.json(
       {
-        error:"Failed to load activity"
+        error: "Failed to load activity",
       },
       {
-        status:500
-      }
+        status: 500,
+      },
     )
-
   }
-
 }

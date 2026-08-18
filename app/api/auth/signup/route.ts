@@ -8,27 +8,100 @@ export async function POST(req: Request) {
     const { username: rawUsername, email: rawEmail, password, confirmPassword } = await req.json();
     const username = typeof rawUsername === "string" ? rawUsername.trim() : "";
     const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
-    if (!validateUsername(username) || !/^\S+@\S+\.\S+$/.test(email) || typeof password !== "string" || !validatePassword(password)) {
+ if (
+  !validateUsername(username) ||
+  !/^\S+@\S+\.\S+$/.test(email) ||
+  typeof password !== "string" ||
+  !validatePassword(password)
+) {
       return NextResponse.json({ error: "Use a valid email, a 4-30 character username, and a 12+ character password with uppercase, lowercase, number, and symbol." }, { status: 400 });
     }
     if (confirmPassword !== undefined && password !== confirmPassword) return NextResponse.json({ error: "Passwords do not match" }, { status: 400 });
-    const password_hash = await hashPassword(password);
-    const { rows } = await query<{ id: string; username: string; email: string }>(
-      `INSERT INTO app_users (username, email, password_hash, status, role)
-       VALUES ($1, $2, $3, 'pending', 'client')
-       RETURNING id, username, email`,
-      [username, email, password_hash],
-    ).catch((error) => {
-      if (error?.code === "23505") return { rows: [] };
-      throw error;
-    });
-    const user = rows[0];
-    if (!user) return NextResponse.json({ error: "An account with those details already exists" }, { status: 409 });
-    const verificationToken = newToken();
-    await query("INSERT INTO email_verifications (user_id, token_hash, expires_at) VALUES ($1, $2, $3)", [user.id, hashToken(verificationToken), new Date(Date.now() + 86400_000).toISOString()]);
-    await query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE name = 'client' ON CONFLICT DO NOTHING", [user.id]).catch(() => undefined);
-    await auditLog(user.id, "registration", req, { email });
-    const emailSent = await sendVerificationEmail(email, verificationToken);
+const password_hash = await hashPassword(password);
+
+const { rows } = await query<{
+  id: string;
+  username: string;
+  email: string;
+}>(
+  `
+  INSERT INTO app_users
+    (username, email, password_hash, status, role)
+  VALUES
+    ($1, $2, $3, 'pending', 'client')
+  RETURNING id, username, email
+  `,
+  [username, email, password_hash],
+).catch((error) => {
+  if (error?.code === "23505") {
+    return { rows: [] };
+  }
+
+  throw error;
+});
+
+const user = rows[0];
+
+if (!user) {
+  return NextResponse.json(
+    { error: "An account with those details already exists" },
+    { status: 409 },
+  );
+}
+
+// Create the client profile.
+await query(
+  `
+  INSERT INTO user_profiles
+    (id, user_id, full_name, is_anonymous)
+  VALUES
+    ($1, $1, $2, false)
+  ON CONFLICT (user_id) DO NOTHING
+  `,
+  [user.id, username],
+);
+
+// Create email verification token.
+const verificationToken = newToken();
+
+await query(
+  `
+  INSERT INTO email_verifications
+    (user_id, token_hash, expires_at)
+  VALUES
+    ($1, $2, $3)
+  `,
+  [
+    user.id,
+    hashToken(verificationToken),
+    new Date(Date.now() + 86400_000).toISOString(),
+  ],
+);
+
+// Assign client role.
+await query(
+  `
+  INSERT INTO user_roles
+    (user_id, role_id)
+  SELECT $1, id
+  FROM roles
+  WHERE name = 'client'
+  ON CONFLICT DO NOTHING
+  `,
+  [user.id],
+).catch(() => undefined);
+
+await auditLog(
+  user.id,
+  "registration",
+  req,
+  { email },
+);
+
+const emailSent = await sendVerificationEmail(
+  email,
+  verificationToken,
+);
     return NextResponse.json({ message: emailSent ? "Account created. Check your email to verify it." : "Account created. Configure Resend to enable email verification.", requiresEmailVerification: true }, { status: 201 });
   } catch (error) {
     console.error("SIGNUP ERROR:", error);

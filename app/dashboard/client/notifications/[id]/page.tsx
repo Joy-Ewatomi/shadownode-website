@@ -3,6 +3,7 @@
 import QuoteApprovalCard from "@/components/client/QuoteApprovalCard"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { getNotificationDestination } from "@/lib/notification-routing"
 
 export default function ClientNotificationDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const [notification, setNotification] = useState<any>(null)
@@ -172,7 +173,12 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
   </div>
 )}
           <div className="flex flex-wrap gap-3">
-            <Link href={notification?.metadata?.target_page === "payment" || notification?.metadata?.target_page === "client_payment" ? `/dashboard/client/payments/${notification?.metadata?.case_id || request.id}` : `/dashboard/client/requests/${request.id}`} className="rounded bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black">Open workflow page</Link>
+            <Link
+  href={getNotificationDestination(notification)}
+  className="rounded bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black"
+>
+  Open workflow page
+</Link>
             <Link href="/dashboard/client/notifications" className="rounded border border-[#143b28] px-4 py-2 text-sm text-white/70">Back to notifications</Link>
           </div>
         </div>

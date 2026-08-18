@@ -99,13 +99,32 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getCurrentUser()
+
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 },
+      )
+    }
+
+    // Super Administrator is strictly read-only.
+    if (user.role === "super_administrator") {
+      return NextResponse.json(
+        {
+          error:
+            "Super Administrator notifications are read-only",
+        },
+        { status: 403 },
+      )
     }
 
     const { id } = await req.json()
+
     if (!id) {
-      return NextResponse.json({ error: "Missing notification id" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Missing notification id" },
+        { status: 400 },
+      )
     }
 
     const updated = await query(
@@ -113,7 +132,7 @@ export async function PATCH(req: NextRequest) {
       UPDATE notifications
       SET is_read = true
       WHERE id = $1
-        AND (user_id = $2 OR $3 = 'super_administrator')
+        AND user_id = $2
       RETURNING
         id,
         title,
@@ -124,16 +143,28 @@ export async function PATCH(req: NextRequest) {
         case_id,
         metadata
       `,
-      [id, user.id, user.role],
+      [id, user.id],
     )
 
     if (!updated.rows.length) {
-      return NextResponse.json({ error: "Notification not found" }, { status: 404 })
+      return NextResponse.json(
+        { error: "Notification not found" },
+        { status: 404 },
+      )
     }
 
     return NextResponse.json(updated.rows[0])
   } catch (error) {
-    console.error("NOTIFICATIONS PATCH ERROR", error)
-    return NextResponse.json({ error: "Failed to update notification" }, { status: 500 })
+    console.error(
+      "NOTIFICATIONS PATCH ERROR",
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        error: "Failed to update notification",
+      },
+      { status: 500 },
+    )
   }
 }

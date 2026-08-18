@@ -1,7 +1,12 @@
 "use client"
 
+import { useMemo } from "react"
+import useCountryList from "react-select-country-list"
+
+import PhoneInput from "react-phone-number-input"
+import "react-phone-number-input/style.css"
+
 import {
-  MapPin,
   MessageSquareText,
   Phone,
   Shield,
@@ -10,93 +15,63 @@ import {
 
 type Props = {
   country: string
-  currency: string
+  customCountry: string
+
   communicationMethod: string
 
   email: string
-  countryCode: string
   whatsapp: string
   signal: string
 
-  onCountryChange: (value:string)=>void
-  onMethodChange: (value:string)=>void
+  onCountryChange: (value: string) => void
+  onCustomCountryChange: (value: string) => void
 
-  onEmailChange: (value:string)=>void
-  onCountryCodeChange: (value:string)=>void
-  onWhatsappChange: (value:string)=>void
-  onSignalChange: (value:string)=>void
+  onMethodChange: (value: string) => void
+
+  onEmailChange: (value: string) => void
+  onWhatsappChange: (value: string) => void
+  onSignalChange: (value: string) => void
 }
 
-
-const COUNTRY_OPTIONS = [
-  "Nigeria",
-  "United States",
-  "Canada",
-  "India",
-  "Ghana",
-  "Kenya",
-]
-
-
-function FormInput({
-label,
-value,
-onChange,
-placeholder,
-}:{
-label:string
-value:string
-onChange:(value:string)=>void
-placeholder?:string
-}){
-
-return (
-<div>
-
-<label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-{label}
-</label>
-
-
-<input
-value={value}
-onChange={(e)=>onChange(e.target.value)}
-placeholder={placeholder}
-className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/50"
-/>
-
-
-</div>
-)
-
-}
 
 
 export default function CommunicationSection({
-country,
-currency,
-communicationMethod,
+  country,
+  customCountry,
 
-email,
-countryCode,
-whatsapp,
-signal,
+  communicationMethod,
 
-onCountryChange,
-onMethodChange,
+  email,
+  whatsapp,
+  signal,
 
-onEmailChange,
-onCountryCodeChange,
-onWhatsappChange,
-onSignalChange,
+  onCountryChange,
+  onCustomCountryChange,
 
-}:Props){
+  onMethodChange,
+
+  onEmailChange,
+  onWhatsappChange,
+  onSignalChange,
+
+}: Props) {
+
+
+const countryList = useCountryList()
+
+const countries = useMemo(
+  () => countryList.getData(),
+  [countryList]
+)
+
 
 
 return (
 
 <div className="space-y-6">
 
+
+{/* COUNTRY */}
 
 <div>
 
@@ -106,58 +81,97 @@ Country
 
 
 <select
+
 value={country}
-onChange={(e)=>onCountryChange(e.target.value)}
-className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white"
+
+onChange={(e)=>
+onCountryChange(e.target.value)
+}
+
+className="
+h-10 w-full rounded
+border border-[#143b28]
+bg-black
+px-3
+text-sm
+text-white
+outline-none
+focus:border-[#20dc73]/50
+"
+
 >
+
 
 <option value="">
 Select country
 </option>
 
 
-{COUNTRY_OPTIONS.map(item=>(
-<option key={item}>
-{item}
+{
+countries.map((item)=>(
+<option
+key={item.value}
+value={item.label}
+>
+{item.label}
 </option>
-))}
+))
+}
+
+
+<option value="custom">
+Other Country
+</option>
 
 
 </select>
 
+
+{
+country==="custom" && (
+
+<input
+
+value={customCountry}
+
+onChange={(e)=>
+onCustomCountryChange(e.target.value)
+}
+
+placeholder="Enter your country"
+
+className="
+h-10 w-full rounded
+border border-[#143b28]
+bg-black
+px-3
+text-sm
+text-white
+outline-none
+focus:border-[#20dc73]/50
+"
+
+/>
+
+)
+}
+
+
 </div>
 
 
 
-<div>
-
-<label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-Currency
-</label>
-
-
-<div className="flex items-center gap-3 rounded border border-[#143b28] p-3 text-white/70">
-
-<MapPin className="h-4 w-4 text-[#20dc73]" />
-
-{currency || "Select country"}
-
-</div>
-
-
-</div>
-
-
+{/* COMMUNICATION METHOD */}
 
 
 <div>
 
 <label className="mb-3 block text-xs uppercase tracking-[0.12em] text-white/50">
-Communication Method
+Preferred Communication
 </label>
 
 
-<div className="grid gap-3 sm:grid-cols-4">
+<div className="grid gap-3 sm:grid-cols-2">
 
 
 {[
@@ -166,44 +180,82 @@ value:"email",
 label:"Email",
 icon:MessageSquareText
 },
+
 {
 value:"whatsapp",
 label:"WhatsApp",
 icon:Phone
 },
+
 {
 value:"signal",
 label:"Signal",
 icon:MessageSquareText
 },
+
 {
 value:"portal_notification",
 label:"Portal",
 icon:Shield
 }
 
-].map(item=>(
+].map((item)=>{
+
+const Icon=item.icon
+
+
+return (
 
 <button
+
 key={item.value}
+
 type="button"
-onClick={()=>onMethodChange(item.value)}
-className={`rounded border p-3 flex items-center justify-center gap-2 ${
+
+onClick={()=>
+onMethodChange(item.value)
+}
+
+className={`
+flex
+items-center
+justify-center
+gap-2
+rounded
+border
+p-3
+text-sm
+transition
+
+${
 communicationMethod===item.value
+
 ?
-"border-[#20dc73] text-[#20dc73]"
+
+"border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
+
 :
-"border-[#143b28] text-white/70"
-}`}
+
+"border-[#143b28] text-white/70 hover:border-[#20dc73]/40"
+
+}
+
+`}
+
 >
 
-<item.icon className="h-4 w-4"/>
+
+<Icon className="h-4 w-4"/>
 
 {item.label}
 
+
 </button>
 
-))}
+
+)
+
+})}
 
 
 </div>
@@ -214,56 +266,119 @@ communicationMethod===item.value
 
 
 
-{communicationMethod==="email" && (
+{/* EMAIL */}
 
-<FormInput
-label="Email Address"
+{
+communicationMethod==="email" && (
+
+<div>
+
+<label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
+Email Address
+</label>
+
+
+<input
+
 value={email}
-onChange={onEmailChange}
-placeholder="name@example.com"
-/>
 
-)}
+onChange={(e)=>
+onEmailChange(e.target.value)
+}
 
+placeholder="client@example.com"
 
+className="
+h-10
+w-full
+rounded
+border border-[#143b28]
+bg-black
+px-3
+text-sm
+text-white
+outline-none
+focus:border-[#20dc73]/50
+"
 
-
-{communicationMethod==="whatsapp" && (
-
-<div className="grid gap-4 sm:grid-cols-2">
-
-<FormInput
-label="Country Code"
-value={countryCode}
-onChange={onCountryCodeChange}
-placeholder="+234"
-/>
-
-
-<FormInput
-label="WhatsApp Number"
-value={whatsapp}
-onChange={onWhatsappChange}
 />
 
 
 </div>
 
-)}
+)
+}
 
 
 
 
+{/* WHATSAPP */}
 
-{communicationMethod==="signal" && (
+{
+communicationMethod==="whatsapp" && (
 
-<FormInput
-label="Signal Username"
-value={signal}
-onChange={onSignalChange}
+<div>
+
+<label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
+WhatsApp Number
+</label>
+
+
+<PhoneInput
+
+international
+
+defaultCountry="GB"
+
+value={whatsapp}
+
+onChange={(value)=>
+onWhatsappChange(value || "")
+}
+
 />
 
-)}
+
+</div>
+
+)
+}
+
+
+
+
+{/* SIGNAL */}
+
+{
+communicationMethod==="signal" && (
+
+<div>
+
+<label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
+Signal Number
+</label>
+
+
+<PhoneInput
+
+international
+
+defaultCountry="GB"
+
+value={signal}
+
+onChange={(value)=>
+onSignalChange(value || "")
+}
+
+/>
+
+
+</div>
+
+)
+}
+
 
 
 </div>

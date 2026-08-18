@@ -130,8 +130,7 @@ const caseInfo = caseResult.rows[0]
         FROM conversations c
         JOIN conversation_members cm ON cm.conversation_id = c.id
         LEFT JOIN messages m ON m.conversation_id = c.id
-        LEFT JOIN user_profiles sender_profile ON sender_profile.id = m.sender_id
-        LEFT JOIN app_users au ON au.id = sender_profile.user_id
+        LEFT JOIN app_users au ON au.id = m.sender_id
         WHERE c.case_id = $1
           AND cm.user_id = $2
         GROUP BY c.id

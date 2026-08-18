@@ -1,150 +1,104 @@
 type QuoteSummaryProps = {
-  aiEstimate?: string | number | null
-  aiReasoning?: string | null
-
   quoteAmount?: string | number | null
   currency?: string | null
   notes?: string | null
 
-  // Investigation
   estimatedCompletion?: string | null
 
-  // Cybersecurity Training
   trainingStartDate?: string | null
   trainingCompletionDate?: string | null
   trainingFlexible?: boolean | null
 }
 
-
 export default function QuoteSummary({
-  aiEstimate,
-  aiReasoning,
   quoteAmount,
   currency,
   notes,
-
   estimatedCompletion,
-
   trainingStartDate,
   trainingCompletionDate,
   trainingFlexible,
-
 }: QuoteSummaryProps) {
+  const hasQuote =
+    quoteAmount !== null &&
+    quoteAmount !== undefined &&
+    quoteAmount !== ""
 
+  const formattedAmount = hasQuote
+    ? Number(quoteAmount).toLocaleString()
+    : null
 
   return (
-    <div className="rounded-md border border-[#143b28] bg-black/35 p-4 text-sm">
+    <div className="rounded-md border border-[#143b28] bg-black/20 p-4">
+      <p className="text-xs uppercase tracking-[0.15em] text-white/40">
+        Final Approved Quote
+      </p>
 
-
-      <div>
-        <p className="text-xs uppercase text-white/40">
-          Approved Quote
-        </p>
-
-        <p className="mt-1 font-semibold text-[#20dc73]">
-          {quoteAmount
-            ? `${currency || "NGN"} ${Number(quoteAmount).toLocaleString()}`
-            : "Not sent"}
-        </p>
-      </div>
-
-
+      <p className="mt-1 text-xl font-bold text-[#20dc73]">
+        {formattedAmount
+          ? `${currency || "NGN"} ${formattedAmount}`
+          : "Not yet available"}
+      </p>
 
       {/* Investigation completion */}
       {estimatedCompletion ? (
+        <div className="mt-4">
+          <p className="text-xs uppercase tracking-[0.12em] text-white/40">
+            Estimated Completion
+          </p>
 
-        <p className="mt-3 text-white/55">
-
-          Estimated completion:{" "}
-
-          {new Date(
-            estimatedCompletion
-          ).toLocaleDateString()}
-
-        </p>
-
+          <p className="mt-1 text-sm text-white/70">
+            {new Date(
+              estimatedCompletion,
+            ).toLocaleDateString()}
+          </p>
+        </div>
       ) : null}
-
-
-
 
       {/* Cybersecurity training period */}
+      {trainingStartDate ||
+      trainingCompletionDate ? (
+        <div className="mt-4">
+          <p className="text-xs uppercase tracking-[0.12em] text-white/40">
+            Training Period
+          </p>
 
-      {
-        trainingStartDate ||
-        trainingCompletionDate
-        ?
-
-        (
-          <div className="mt-3 text-white/55">
-
-            <p>
-              Training period:
-            </p>
-
-
-            <p className="mt-1 text-white">
-
-              {
-                trainingStartDate
-                ?
-                new Date(
-                  trainingStartDate
+          <p className="mt-1 text-sm text-white/70">
+            {trainingStartDate
+              ? new Date(
+                  trainingStartDate,
                 ).toLocaleDateString()
-                :
-                "TBD"
-              }
+              : "TBD"}
 
+            {" → "}
 
-              {" → "}
-
-
-              {
-                trainingCompletionDate
-                ?
-                new Date(
-                  trainingCompletionDate
+            {trainingCompletionDate
+              ? new Date(
+                  trainingCompletionDate,
                 ).toLocaleDateString()
-                :
-                "TBD"
-              }
+              : "TBD"}
+          </p>
 
+          {trainingFlexible ? (
+            <p className="mt-1 text-xs text-[#20dc73]">
+              Timeline flexible
             </p>
-
-
-            {
-              trainingFlexible
-              &&
-              (
-                <p className="mt-1 text-[#20dc73]">
-                  Timeline flexible
-                </p>
-              )
-            }
-
-
-          </div>
-        )
-
-        :
-        null
-      }
-
-
-
-
-
-      {notes ? (
-
-        <p className="mt-3 text-white/65">
-
-          {notes}
-
-        </p>
-
+          ) : null}
+        </div>
       ) : null}
 
+      {/* Official quote notes only */}
+      {notes ? (
+        <div className="mt-4 border-t border-[#143b28] pt-3">
+          <p className="text-xs uppercase tracking-[0.12em] text-white/40">
+            Bureau Notes
+          </p>
 
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/65">
+            {notes}
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }

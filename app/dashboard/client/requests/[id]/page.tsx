@@ -52,24 +52,44 @@ export default function ClientRequestDetailsPage({ params }: { params: Promise<{
   }
 
   return (
-    <div className="space-y-6 p-6 text-white">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden p-6 text-white">
       <header className="space-y-2 border-b border-[#143b28] pb-6">
         <p className="text-xs uppercase tracking-[0.25em] text-[#20dc73]">Client Quote Workflow</p>
-        <h1 className="text-3xl font-bold">{request.title || "Investigation request"}</h1>
-        <p className="text-sm text-white/55">{request.description}</p>
+<h1 className="break-all text-3xl font-bold">
+  {request.title || "Investigation request"}
+</h1>
+
+<p className="break-all text-sm leading-6 text-white/55">
+  {request.description}
+</p>
       </header>
 
       <div className="rounded-md border border-[#143b28] bg-[#06110f] p-6">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded border border-[#143b28] bg-black/30 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/35">Service Request</p>
-            <p className="mt-2 text-lg font-semibold text-white">{request.service_type || request.title || "Investigation request"}</p>
-          </div>
-          <div className="rounded border border-[#143b28] bg-black/30 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/35">Investigation Summary</p>
-            <p className="mt-2 text-sm leading-7 text-white/65">{request.investigation_objective || request.description || "No summary available yet."}</p>
-          </div>
-        </div>
+<div className="mt-5 grid min-w-0 gap-4 md:grid-cols-2">
+  <div className="min-w-0 overflow-hidden rounded border border-[#143b28] bg-black/30 p-4">
+    <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+      Service Request
+    </p>
+
+    <p className="mt-2 min-w-0 break-all text-lg font-semibold text-white">
+      {request.service_type ||
+        request.title ||
+        "Investigation request"}
+    </p>
+  </div>
+
+  <div className="min-w-0 overflow-hidden rounded border border-[#143b28] bg-black/30 p-4">
+    <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+      Investigation Summary
+    </p>
+
+    <p className="mt-2 min-w-0 break-all text-sm leading-7 text-white/65">
+      {request.investigation_objective ||
+        request.description ||
+        "No summary available yet."}
+    </p>
+  </div>
+</div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="rounded border border-[#143b28] bg-black/30 p-4">
@@ -86,20 +106,23 @@ export default function ClientRequestDetailsPage({ params }: { params: Promise<{
 
         <div className="mt-5 rounded border border-[#143b28] bg-black/30 p-4">
           <p className="text-xs uppercase tracking-[0.2em] text-white/35">Notes</p>
-          <p className="mt-2 text-sm leading-7 text-white/65">{request.approved_quote_notes || "No notes provided yet."}</p>
+        <p className="mt-2 break-all text-sm leading-7 text-white/65">
+  {request.approved_quote_notes ||
+    "No notes provided yet."}
+</p>
         </div>
       </div>
 
       <QuoteApprovalCard request={request} />
 
-      <div className="flex flex-wrap gap-3">
-        <Link href={id ? `/dashboard/client/payments/${id}` : "/dashboard/client/payments"} className="rounded border border-[#20dc73]/40 px-4 py-2 text-sm text-[#20dc73]">
-          Open payment page
-        </Link>
-        <Link href="/dashboard/client/requests" className="rounded border border-[#143b28] px-4 py-2 text-sm text-white/70">
-          Back to requests
-        </Link>
-      </div>
+     <div className="flex flex-wrap gap-3">
+  <Link
+    href="/dashboard/client/requests"
+    className="rounded border border-[#143b28] px-4 py-2 text-sm text-white/70"
+  >
+    Back to requests
+  </Link>
+</div>
     </div>
   )
 }

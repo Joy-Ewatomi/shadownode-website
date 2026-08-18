@@ -2,243 +2,162 @@ import { NextResponse } from "next/server"
 import { getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
 
-async function count(sql: string, params: unknown[] = []) {
-  try {
-    const result = await query<{ total: string | number }>(sql, params)
-    return Number(result.rows[0]?.total || 0)
-  } catch (error) {
-    console.error("DASHBOARD COUNT ERROR", error)
-    return 0
-  }
-}
-
-async function profileId(userId: string) {
-  const result = await query<{ id: string }>("SELECT id FROM user_profiles WHERE user_id=$1 LIMIT 1", [userId]).catch(() => ({ rows: [] }))
-  return result.rows[0]?.id || null
-}
-
 export async function GET() {
   try {
     const user = await getCurrentUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const profile = await profileId(user.id)
-
-    if (user.role === "client") {
-      return NextResponse.json({
-        pending_quotes: await count(
- `
- SELECT COUNT(*) AS total
- FROM requests
- WHERE user_id=$1
- AND status='quote_sent'
- `,
- [user.id]
-),
-        active_cases: await count(
-          "SELECT COUNT(*) AS total FROM cases WHERE client_profile_id=$1 AND status <> 'archived'",
-          [profile],
-        ),
-        latest_updates: await count(
-          `
-          SELECT COUNT(*) AS total
-          FROM case_updates cu
-          JOIN cases c ON c.id = cu.case_id
-          WHERE c.client_profile_id = $1
-            AND cu.created_at > NOW() - INTERVAL '7 days'
-          `,
-          [profile],
-        ),
-        unread_messages: await count(
-          `
-          SELECT COUNT(*) AS total
-          FROM messages m
-          JOIN conversation_members cm ON cm.conversation_id = m.conversation_id
-          WHERE cm.user_id = $1
-            AND m.sender_id <> $2
-            AND m.read_at IS NULL
-          `,
-          [user.id, profile],
-        ),
-        reports_available: await count(
-          `
-          SELECT COUNT(*) AS total
-          FROM case_reports r
-          JOIN cases c ON c.id = r.case_id
-          WHERE c.client_profile_id = $1
-          `,
-          [profile],
-        ),
-      })
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      )
     }
 
-    if (user.role === "investigator") {
-      return NextResponse.json({
-
-  total_requests: await count(
-    "SELECT COUNT(*) AS total FROM requests"
-  ),
-
-  pending_requests: await count(
-    `
-    SELECT COUNT(*) AS total
-    FROM requests
-    WHERE status IN ('pending_review','submitted','reviewing')
-    `
-  ),
-
-  quoted_requests: await count(
-    `
-    SELECT COUNT(*) AS total
-    FROM requests
-    WHERE status IN ('quote_sent','negotiation_requested','revised_quote_sent')
-    `
-  ),
-
-  active_cases: await count(
-    `
-    SELECT COUNT(*) AS total
-    FROM cases
-    WHERE status NOT IN ('closed','archived','completed')
-    `
-  ),
-
-  investigators: await count(
-    `
-    SELECT COUNT(*) AS total
-    FROM app_users
-    WHERE role='investigator'
-    `
-  ),
-
-  analysts: await count(
-    `
-    SELECT COUNT(*) AS total
-    FROM app_users
-    WHERE role='analyst'
-    `
-  ),
-
-  unread_notifications: await count(
-    `
-    SELECT COUNT(*) AS total
-    FROM notifications
-    WHERE is_read=false
-    `
-  ),
-
-})
+    if (!isAdminRole(user.role)) {
+      return NextResponse.json(
+        { error: "Forbidden" },
+        { status: 403 }
+      )
     }
 
-    if (user.role === "analyst") {
-      return NextResponse.json({
-        intelligence_queue: await count("SELECT COUNT(DISTINCT case_id) AS total FROM case_assignments WHERE assigned_to=$1 AND assignment_role IN ('analyst','intelligence_analyst') AND status IN ('assigned','accepted') AND removed_at IS NULL", [profile]),
-        pending_analysis: await count("SELECT COUNT(*) AS total FROM analysis_results ar JOIN case_assignments ca ON ca.case_id=ar.case_id WHERE ca.assigned_to=$1 AND ar.findings IS NULL", [profile]),
-        completed_reports: await count("SELECT COUNT(DISTINCT r.id) AS total FROM case_reports r JOIN case_assignments ca ON ca.case_id=r.case_id WHERE ca.assigned_to=$1", [profile]),
-        priority_cases: await count("SELECT COUNT(DISTINCT c.id) AS total FROM cases c JOIN case_assignments ca ON ca.case_id=c.id WHERE ca.assigned_to=$1 AND c.priority IN ('high','critical')", [profile]),
-      })
-    }
 
-    if (isAdminRole(user.role)) {
+   const stats = await query(`
+  SELECT
 
-  if (user.role === "super_administrator") {
-    return NextResponse.json({
-      total_users: await count(
-        "SELECT COUNT(*) AS total FROM app_users"
-      ),
+    /* =========================
+       SYSTEM HEALTH
+       ========================= */
 
-      system_activity: await count(
-        "SELECT COUNT(*) AS total FROM activity_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
-      ),
+    'healthy' AS database_health,
 
-      audit_events: await count(
-        "SELECT COUNT(*) AS total FROM audit_logs WHERE created_at > NOW() - INTERVAL '7 days'"
-      ),
+    /* =========================
+       USERS
+       ========================= */
 
-      security_events: await count(
-        `
-        SELECT COUNT(*) AS total
-        FROM audit_logs
-        WHERE action ILIKE '%security%'
-        OR action ILIKE '%password%'
-        OR action ILIKE '%two_factor%'
-        `
-      ),
+    (
+      SELECT COUNT(*)::int
+      FROM app_users
+    ) AS total_users,
 
-      database_health:"online",
-    })
-  }
+    (
+      SELECT COUNT(*)::int
+      FROM app_users
+      WHERE status = 'active'
+    ) AS active_users,
 
+    /* =========================
+       REQUESTS
+       ========================= */
+
+    (
+      SELECT COUNT(*)::int
+      FROM requests
+    ) AS total_requests,
+
+    (
+      SELECT COUNT(*)::int
+      FROM requests
+      WHERE status = 'active'
+    ) AS active_investigations,
+
+    (
+      SELECT COUNT(*)::int
+      FROM requests
+      WHERE status IN (
+        'submitted',
+        'pending_review',
+        'pending_super_admin_review'
+      )
+    ) AS pending_requests,
+
+    /* =========================
+       AUDIT
+       ========================= */
+
+    (
+      SELECT COUNT(*)::int
+      FROM request_audit_events
+    ) AS audit_events,
+
+    /* =========================
+       NOTIFICATIONS
+       ========================= */
+
+    (
+      SELECT COUNT(*)::int
+      FROM notifications
+      WHERE is_read = false
+    ) AS unread_notifications
+
+`)
+
+    const alerts = await query(`
+      SELECT COUNT(*)::int AS unresolved_alerts
+      FROM notifications
+      WHERE is_read = false
+      AND user_id = $1
+    `,[user.id])
+
+
+    const requests = await query(`
+      SELECT
+        r.*,
+
+        u.username AS client_username,
+        u.email AS client_email
+
+      FROM requests r
+
+      LEFT JOIN app_users u
+        ON u.id = r.user_id
+
+      ORDER BY r.created_at DESC
+
+      LIMIT 100
+    `)
+
+    console.log("DASHBOARD REQUESTS:", requests.rows)
 
   return NextResponse.json({
+  database_health:
+    stats.rows[0]?.database_health ?? "unknown",
 
-    total_cases: await count(
-      `
-      SELECT COUNT(*) AS total
-      FROM requests
-      `
-    ),
+  total_users:
+    stats.rows[0]?.total_users ?? 0,
 
+  active_users:
+    stats.rows[0]?.active_users ?? 0,
 
-    active_investigations: await count(
-      `
-      SELECT COUNT(*) AS total
-      FROM requests
-      WHERE status IN (
-        'reviewing',
-        'quote_sent',
-        'accepted',
-        'active'
-      )
-      `
-    ),
+  total_requests:
+    stats.rows[0]?.total_requests ?? 0,
 
+  active_investigations:
+    stats.rows[0]?.active_investigations ?? 0,
 
-    pending_assignments: await count(
-      `
-      SELECT COUNT(*) AS total
-      FROM requests
-      WHERE status IN (
-        'pending_review',
-        'submitted'
-      )
-      `
-    ),
+  pending_requests:
+    stats.rows[0]?.pending_requests ?? 0,
 
+  audit_events:
+    stats.rows[0]?.audit_events ?? 0,
 
-    investigators: await count(
-      `
-      SELECT COUNT(*) AS total
-      FROM app_users
-      WHERE role='investigator'
-      `
-    ),
+  unread_notifications:
+    stats.rows[0]?.unread_notifications ?? 0,
+})
 
+  } catch(error){
 
-    analysts: await count(
-      `
-      SELECT COUNT(*) AS total
-      FROM app_users
-      WHERE role='analyst'
-      `
-    ),
+    console.error(
+      "DASHBOARD OVERVIEW ERROR",
+      error
+    )
 
-
-    unresolved_alerts: await count(
-      `
-      SELECT COUNT(*) AS total
-      FROM notifications
-      WHERE is_read=false
-      `
-    ),
-
-  })
-}
-     
-
-    return NextResponse.json({})
-  } catch (error) {
-    console.error("DASHBOARD OVERVIEW ERROR", error)
-    return NextResponse.json({ error: "Failed to load dashboard overview" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error:"Failed to load dashboard"
+      },
+      {
+        status:500
+      }
+    )
   }
 }

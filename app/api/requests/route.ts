@@ -2,29 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 
-
-export async function GET(
-  request: NextRequest,
-  {
-    params
-  }: {
-    params: Promise<{ id:string }>
-  }
-){
-
+export async function GET(request: NextRequest) {
   const { user, response } = await requireUser()
 
-
-  if(!user){
+  if (!user) {
     return response
   }
 
-
   try {
-
-    const { id } = await params
-
-
     const { rows } = await query(
       `
       SELECT
@@ -47,55 +32,21 @@ export async function GET(
 
       FROM requests
 
-      WHERE id=$1
-
-      LIMIT 1
-      `,
-      [
-        id
-      ]
+      ORDER BY created_at DESC
+      `
     )
 
-
-
-    if(!rows[0]){
-
-      return NextResponse.json(
-        {
-          error:"Request not found"
-        },
-        {
-          status:404
-        }
-      )
-
-    }
-
-
-
-    return NextResponse.json(
-      rows[0]
-    )
-
-
-
-  } catch(error){
-
-    console.error(
-      "REQUEST DETAIL ERROR",
-      error
-    )
-
+    return NextResponse.json(rows)
+  } catch (error) {
+    console.error("REQUESTS LIST ERROR", error)
 
     return NextResponse.json(
       {
-        error:"Failed to load request"
+        error: "Failed to load requests",
       },
       {
-        status:500
+        status: 500,
       }
     )
-
   }
-
 }

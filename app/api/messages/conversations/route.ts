@@ -18,7 +18,13 @@ export async function GET(request: NextRequest) {
       .select('*')
       .in('status', ['active', 'completed'])
       .order('updated_at', { ascending: false })
-    if (user.role !== 'admin' && user.role !== 'agent') query = query.eq('user_id', user.id)
+    if (
+  user.role !== "administrator" &&
+  user.role !== "super_administrator" &&
+  user.role !== "analyst"
+) {
+  query = query.eq("user_id", user.id)
+}
     const { data, error } = await query
 
     if (error) {

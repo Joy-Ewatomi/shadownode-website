@@ -22,6 +22,8 @@ export default function RequestList() {
 
   async function loadRequests() {
     try {
+      setLoading(true)
+
       const res = await fetch("/api/admin/requests", {
         credentials: "include",
       })
@@ -41,112 +43,167 @@ export default function RequestList() {
   }
 
   useEffect(() => {
-    loadRequests()
+    void loadRequests()
   }, [])
 
   return (
-    <main className="space-y-6">
+    <main className="min-w-0 max-w-full space-y-6">
 
-      <header className="border-b border-[#143b28] pb-6">
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
+      <header className="min-w-0 max-w-full border-b border-[#143b28] pb-6">
+
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">
           Operations
         </p>
 
-        <h1 className="mt-2 text-3xl font-bold text-white">
+        <h1 className="mt-2 break-words text-3xl font-bold text-white">
           Service Requests
         </h1>
 
-        <p className="mt-2 text-sm text-white/50">
+        <p className="mt-2 break-words text-sm text-white/50">
           Review incoming ShadowNode client investigations.
         </p>
+
       </header>
 
+      {/* =====================================================
+          REQUEST LIST
+      ===================================================== */}
 
-      <section className="rounded-md border border-[#143b28] bg-[#06110f]">
+      <section className="min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-[#06110f]">
 
-        <div className="flex items-center justify-between border-b border-[#143b28] px-5 py-4">
+        {/* ===================================================
+            SECTION HEADER
+        =================================================== */}
 
-          <h2 className="font-semibold text-white">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#143b28] px-5 py-4">
+
+          <h2 className="min-w-0 break-words font-semibold text-white">
             All Requests
           </h2>
 
           <button
-            onClick={loadRequests}
-            className="inline-flex items-center gap-2 rounded border border-[#20dc73]/40 px-3 py-2 text-sm text-[#20dc73]"
+            type="button"
+            onClick={() => void loadRequests()}
+            disabled={loading}
+            className="inline-flex shrink-0 items-center gap-2 rounded border border-[#20dc73]/40 px-3 py-2 text-sm text-[#20dc73] transition hover:bg-[#20dc73]/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCcw className="h-4 w-4" />
+            <RefreshCcw
+              className={[
+                "h-4 w-4",
+                loading ? "animate-spin" : "",
+              ].join(" ")}
+            />
+
             Refresh
           </button>
 
         </div>
 
+        {/* ===================================================
+            REQUESTS
+        =================================================== */}
 
-        <div className="divide-y divide-[#143b28]">
+        <div className="min-w-0 max-w-full divide-y divide-[#143b28]">
+
+          {/* LOADING */}
 
           {loading && (
-            <p className="p-5 text-sm text-white/50">
-              Loading requests...
-            </p>
-          )}
-
-
-          {!loading && requests.length === 0 && (
-            <div className="flex flex-col items-center py-12 text-white/40">
-              <Search className="mb-3 h-10 w-10" />
-
-              <p>
-                No requests found
+            <div className="p-5">
+              <p className="break-words text-sm text-white/50">
+                Loading requests...
               </p>
             </div>
           )}
 
+          {/* EMPTY */}
 
-          {requests.map((request) => (
+          {!loading && requests.length === 0 && (
+            <div className="flex min-w-0 flex-col items-center px-5 py-12 text-center text-white/40">
 
-            <div
-              key={request.id}
-              className="flex items-center justify-between px-5 py-5"
-            >
+              <Search className="mb-3 h-10 w-10" />
 
-              <div>
-
-                <h3 className="font-semibold text-white">
-                  {request.title || "Untitled Request"}
-                </h3>
-
-
-                <p className="mt-1 text-sm text-white/50">
-                  {request.case_number}
-                </p>
-
-
-                <div className="mt-2 flex gap-2">
-
-                  <span className="rounded border border-[#20dc73]/30 bg-[#20dc73]/10 px-2 py-1 text-xs text-[#20dc73]">
-                    {request.status}
-                  </span>
-
-
-                  <span className="rounded border border-white/10 px-2 py-1 text-xs text-white/50">
-                    {request.category || request.service_type}
-                  </span>
-
-                </div>
-
-              </div>
-
-
-              <Link
-                href={`/dashboard/requests/${request.id}`}
-                className="rounded border border-[#20dc73]/40 px-4 py-2 text-sm text-[#20dc73] hover:bg-[#20dc73]/10"
-              >
-                Open
-              </Link>
-
+              <p className="break-words">
+                No requests found
+              </p>
 
             </div>
+          )}
 
-          ))}
+          {/* REQUESTS */}
+
+          {!loading &&
+            requests.map((request) => {
+
+              const requestType =
+                request.category ||
+                request.service_type ||
+                "Uncategorized"
+
+              return (
+                <div
+                  key={request.id}
+                  className="flex min-w-0 max-w-full flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between"
+                >
+
+                  {/* =================================================
+                      REQUEST INFORMATION
+                  ================================================= */}
+
+                  <div className="min-w-0 max-w-full flex-1">
+
+                    {/* TITLE */}
+
+                    <h3 className="min-w-0 max-w-full break-words text-base font-semibold text-white">
+                      {request.title ||
+                        "Untitled Request"}
+                    </h3>
+
+                    {/* CASE NUMBER */}
+
+                    <p className="mt-1 min-w-0 max-w-full break-all font-mono text-xs text-white/50">
+                      {request.case_number ||
+                        "No case number"}
+                    </p>
+
+                    {/* BADGES */}
+
+                    <div className="mt-3 flex min-w-0 max-w-full flex-wrap gap-2">
+
+                      {/* STATUS */}
+
+                      <span className="max-w-full break-all rounded border border-[#20dc73]/30 bg-[#20dc73]/10 px-2 py-1 text-xs leading-5 text-[#20dc73]">
+                        {request.status ||
+                          "unknown"}
+                      </span>
+
+                      {/* CATEGORY / SERVICE */}
+
+                      <span className="max-w-full break-words rounded border border-white/10 px-2 py-1 text-xs leading-5 text-white/50">
+                        {requestType}
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                  {/* =================================================
+                      OPEN BUTTON
+                  ================================================= */}
+
+                  <Link
+                    href={`/dashboard/requests/${request.id}`}
+                    className="inline-flex w-full shrink-0 items-center justify-center rounded border border-[#20dc73]/40 px-4 py-2 text-sm text-[#20dc73] transition hover:bg-[#20dc73]/10 sm:w-auto"
+                  >
+                    Open
+                  </Link>
+
+                </div>
+              )
+            })}
 
         </div>
 

@@ -63,10 +63,11 @@ export const TRAINING_DURATION_OPTIONS = [
   "Full Day",
   "2 Days",
   "1 Week",
-  "Custom",
+  "custom",
 ]
 
 export const TRAINING_AUDIENCE_OPTIONS = [
+  "individual",
   "Employees",
   "Executives",
   "IT Team",
@@ -103,7 +104,7 @@ export const TRAINING_OBJECTIVES = [
   "Compliance",
   "Cloud Security",
   "Network Security",
-  "Custom",
+  "custom",
 ]
 
 export const TRAINING_TOPICS = [
@@ -124,12 +125,8 @@ export const TRAINING_TOPICS = [
 
 export const TRAINING_MATERIALS = [
   "Slides",
-  "Labs",
   "Videos",
-  "Exercises",
-  "Assessments",
-  "Printed Manuals",
-  "Certificates",
+  "pdfs"
 ]
 
 export const COMPLIANCE_STANDARDS = [

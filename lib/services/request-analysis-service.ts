@@ -20,68 +20,154 @@ export type RequestAnalysis = {
   reasoning: string
 }
 
-/* Depth level multipliers used in AI estimation */
-const DEPTH_MULTIPLIERS: Record<string, number> = {
-  basic: 0.6,
-  standard: 1.0,
-  deep: 1.6,
-  comprehensive: 2.2,
-}
+const SERVICE_TYPES = new Set([
+  "osint",
+  "forensics",
+  "ethical-hacking",
+  "mixed",
+])
 
-/* Confidentiality surcharge */
-const CONFIDENTIALITY_SURCHARGE: Record<string, number> = {
-  standard: 1.0,
-  confidential: 1.25,
-  highly_confidential: 1.5,
-}
+const TIMELINES = new Set([
+  "urgent",
+  "standard",
+  "flexible",
+])
 
-/* Subject-type complexity factor */
-const SUBJECT_COMPLEXITY: Record<string, number> = {
-  person: 1.0,
-  company: 1.15,
-  digital_asset: 1.3,
-}
+export function analyzeRequest(
+  input: AnalysisInput,
+): RequestAnalysis {
+  const description =
+    input.description.trim()
 
-const serviceTypes = new Set(["osint", "forensics", "ethical-hacking", "mixed"])
-const timelines = new Set(["urgent", "standard", "flexible"])
+  const words =
+    description
+      .split(/\s+/)
+      .filter(Boolean).length
 
-export function analyzeRequest(input: AnalysisInput): RequestAnalysis {
-  const description = input.description.trim()
-  const words = description.split(/\s+/).filter(Boolean).length
-  const normalizedService = serviceTypes.has(input.serviceType) ? input.serviceType : "mixed"
-  const timeline = timelines.has(input.timeline || "") ? input.timeline || "standard" : input.urgency === "critical" || input.urgency === "high" ? "urgent" : "standard"
+  const normalizedService =
+    SERVICE_TYPES.has(input.serviceType)
+      ? input.serviceType
+      : "mixed"
+
+  const timeline =
+    TIMELINES.has(input.timeline || "")
+      ? (input.timeline as
+          | "urgent"
+          | "standard"
+          | "flexible")
+      : input.urgency === "critical" ||
+          input.urgency === "high"
+        ? "urgent"
+        : "standard"
+
   const estimate = estimatePrice({
-    serviceType: normalizedService as "osint" | "forensics" | "ethical-hacking" | "mixed",
+    serviceType:
+      normalizedService as
+        | "osint"
+        | "forensics"
+        | "ethical-hacking"
+        | "mixed",
+
     description,
-    timeline: timeline as "urgent" | "standard" | "flexible",
+
+    timeline,
+
+    investigationDepth:
+      input.investigationDepth,
+
+    confidentialityLevel:
+      input.confidentialityLevel,
+
+    subjectType:
+      input.subjectType,
   })
 
-  /* Incorporate depth, confidentiality, and subject type into complexity */
-  const depthMultiplier = DEPTH_MULTIPLIERS[input.investigationDepth || "standard"] || 1.0
-  const confMultiplier = CONFIDENTIALITY_SURCHARGE[input.confidentialityLevel || "standard"] || 1.0
-  const subjectMultiplier = SUBJECT_COMPLEXITY[input.subjectType || "person"] || 1.0
+  /**
+   * Determine complexity.
+   */
 
-  /* Effective complexity combines all factors */
-  const effectiveMultiplier = estimate.complexityMultiplier * depthMultiplier * subjectMultiplier
-  const complexity = effectiveMultiplier >= 1.8 || words > 200 ? "high" : effectiveMultiplier >= 1.3 || words > 80 ? "medium" : "low"
-  const estimatedHours = Math.round(
-    complexity === "high" ? 48 * depthMultiplier * confMultiplier
-    : complexity === "medium" ? 24 * depthMultiplier * confMultiplier
-    : 10 * depthMultiplier * confMultiplier,
+  const complexity =
+    estimate.complexityMultiplier >= 1.5
+      ? "high"
+      : estimate.complexityMultiplier >= 1.2
+        ? "medium"
+        : "low"
+
+  /**
+   * More realistic working-hour estimates.
+   */
+
+  const estimatedHours =
+    complexity === "high"
+      ? 24
+      : complexity === "medium"
+        ? 12
+        : 6
+
+  /**
+   * Priority.
+   */
+
+  const suggestedPriority =
+    input.urgency === "critical"
+      ? "critical"
+      : input.urgency === "high" ||
+          timeline === "urgent"
+        ? "high"
+        : "normal"
+
+  /**
+   * Confidence is based on how much information
+   * the request contains.
+   */
+
+  let confidence = 0.65
+
+  if (words >= 80) {
+    confidence += 0.05
+  }
+
+  if (input.subjectType) {
+    confidence += 0.05
+  }
+
+  if (input.investigationDepth) {
+    confidence += 0.05
+  }
+
+  if (input.confidentialityLevel) {
+    confidence += 0.05
+  }
+
+  confidence = Math.min(
+    0.9,
+    Number(confidence.toFixed(2)),
   )
-
-  const suggestedPriority = input.urgency === "critical" ? "critical" : input.urgency === "high" || timeline === "urgent" ? "high" : "normal"
-
-  /* Adjusted price takes depth, confidentiality, and subject into account */
-  const adjustedPrice = Math.round(estimate.estimatedPrice * depthMultiplier * confMultiplier)
 
   return {
     complexity,
+
     estimatedHours,
-    suggestedService: normalizedService,
+
+    suggestedService:
+      normalizedService,
+
     suggestedPriority,
-    suggestedPrice: adjustedPrice,
-    confidence: 0.72,
-    reasoning: `Estimated from ${words} words, ${normalizedService} service type, ${timeline} timeline, ${input.investigationDepth || "standard"} depth, ${input.confidentialityLevel || "standard"} confidentiality, ${input.subjectType || "person"} subject type, and ${effectiveMultiplier.toFixed(2)}x effective complexity multiplier.`,
+
+    suggestedPrice:
+      estimate.estimatedPrice,
+
+    confidence,
+
+    reasoning:
+      `Internal estimate based on ${words} words, ` +
+      `${normalizedService} service, ` +
+      `${timeline} timeline, ` +
+      `${input.investigationDepth || "standard"} depth, ` +
+      `${input.confidentialityLevel || "standard"} confidentiality, ` +
+      `${input.subjectType || "person"} subject, ` +
+      `and a ${estimate.complexityMultiplier}x ` +
+      `complexity multiplier. ` +
+      `Recommended internal estimate: $${estimate.estimatedPrice.toLocaleString()}.`,
   }
 }

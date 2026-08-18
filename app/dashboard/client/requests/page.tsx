@@ -1,16 +1,8 @@
 "use client"
 
 import { RefreshCcw, Search } from "lucide-react"
-import Link from "next/link"
 import { useEffect, useState } from "react"
-import CybersecurityTrainingForm, {
-  type CybersecurityTrainingFormData,
-} from "@/components/client/forms/CybersecurityTrainingForm"
-import OsintRequestForm, {
-  type InvestigationFormData,
-} from "@/components/client/forms/OsintRequestForm"
-import QuoteCard from "@/components/quote/QuoteCard"
-import RequestSubmitted from "@/components/client/RequestSubmitted"
+
 import RequestServiceSelector from "@/components/client/requests/RequestServiceSelector"
 
 type ClientRequest = {
@@ -23,200 +15,211 @@ type ClientRequest = {
   priority?: string | null
   timeline?: string | null
   price_notes?: string | null
-  
 
   quote_notes?: string | null
 
-  approved_quote_amount?: string | null
+  approved_quote_amount?: string | number | null
   approved_quote_currency?: string | null
   approved_quote_notes?: string | null
   approved_estimated_completion?: string | null
 
   created_at: string
-
-  // OSINT
-  investigation_objective?: string | null
-  investigation_depth?: string | null
-  confidentiality_level?: string | null
-  communication_channel?: string | null
-
-  // Cybersecurity Training
-training_organization_name?: string | null
-training_client_type?: string | null
-training_participant_count?: number | null
-training_skill_level?: string | null
-training_goal?: string | null
-training_topics?: string | null
-
-training_preferred_start_date?: string | null
-training_preferred_completion_date?: string | null
-training_timeline_flexible?: boolean | null
-
-training_additional_requirements?: string | null
-
-  // Communication
-  communication_method?: string | null
-  communication_email?: string | null
-  communication_phone?: string | null
-  client_country?: string | null
-  preferred_currency?: string | null
 }
 
 export default function ClientRequestsPage() {
   const [requests, setRequests] = useState<ClientRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [submittedRef, setSubmittedRef] = useState<string | null>(null)
-  const [selectedService, setSelectedService] = useState<
-  "osint" | "cybersecurity" | null
->(null)
-  const [showNewRequest, setShowNewRequest] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [showSelector, setShowSelector] = useState(false)
 
   async function load() {
-    const res = await fetch("/api/client/requests", { credentials: "include" })
-    if (res.ok) setRequests(await res.json())
-    setLoading(false)
+    try {
+      setLoading(true)
+
+      const res = await fetch("/api/client/requests", {
+        credentials: "include",
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to load requests")
+      }
+
+      const data = await res.json()
+
+      setRequests(data)
+    } catch (error) {
+      console.error("REQUEST LOAD ERROR:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
     load()
   }, [])
 
-  type RequestFormData =
-  | InvestigationFormData
-  | CybersecurityTrainingFormData
+  /*
+   * ==========================================================
+   * SERVICE SELECTOR
+   * ==========================================================
+   */
 
-  async function handleSubmit(data: RequestFormData) {
-    setSubmitting(true)
-    const res = await fetch("/api/client/requests", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    })
-    setSubmitting(false)
-    if (res.ok) {
-      const created = await res.json()
-      setSubmittedRef(created.case_number || created.id)
-      await load()
-    } else {
-      const err = await res.json()
-      alert(err.error || "Failed to submit request")
-    }
-  }
-
-  async function decide(id: string, body: Record<string, unknown>) {
-    const res = await fetch(`/api/client/requests/${id}/decision`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
-    if (res.ok) await load()
-  }
-
-  // Show success screen after submission
-  if (submittedRef) {
+  if (showSelector) {
     return (
-      <main className="space-y-6">
+      <div className="w-full space-y-6">
         <header className="border-b border-[#143b28] pb-6">
-          <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">Client Requests</p>
-          <h1 className="mt-2 text-3xl font-bold text-white">ShadowNode Request Dashboard</h1>
-          <p className="mt-2 max-w-3xl text-sm text-white/55">Submit new requests and track bureau review, quote, and activation status.</p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">
+                ShadowNode Operations
+              </p>
+
+              <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
+                Make a Request
+              </h1>
+
+              <p className="mt-2 max-w-3xl text-sm text-white/55">
+                Select the service you require.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowSelector(false)}
+              className="inline-flex shrink-0 items-center justify-center rounded border border-[#143b28] px-4 py-2 text-sm text-white/60 transition hover:border-[#20dc73] hover:text-[#20dc73]"
+            >
+              ← Back to Requests
+            </button>
+          </div>
         </header>
-        <RequestSubmitted referenceId={submittedRef} />
-      </main>
+
+        <section className="w-full rounded-md border border-[#143b28] bg-[#06110f] p-5 sm:p-6 lg:p-8">
+          <RequestServiceSelector
+            onSelect={(service) => {
+              if (service === "osint") {
+                window.location.href =
+                  "/dashboard/client/requests/osint"
+              }
+
+              if (service === "cybersecurity") {
+                window.location.href =
+                  "/dashboard/client/requests/cybersecurity"
+              }
+            }}
+          />
+        </section>
+      </div>
     )
   }
 
+  /*
+   * ==========================================================
+   * REQUEST DASHBOARD
+   * ==========================================================
+   */
+
   return (
-    <main className="space-y-6">
+    <div className="w-full space-y-6">
       <header className="border-b border-[#143b28] pb-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">Client Requests</p>
-        <h1 className="mt-2 text-3xl font-bold text-white">ShadowNode Request Dashboard</h1>
-        <p className="mt-2 max-w-3xl text-sm text-white/55">Submit new requests and track bureau review, quote, and activation status.</p>
+        <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">
+          ShadowNode Operations
+        </p>
+
+        <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
+          Client Requests
+        </h1>
+
+     <p className="mt-2 max-w-3xl text-sm text-white/55">
+  Submit new requests and access your investigation
+  workflow.
+</p>
       </header>
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_28rem]">
-        {/* Main: Request list or empty state */}
-        <section className="rounded-md border border-[#143b28] bg-[#06110f]">
-          <div className="flex items-center justify-between border-b border-[#143b28] px-5 py-4">
-            <h2 className="font-semibold text-white">Requests</h2>
-            <button onClick={load} className="inline-flex items-center gap-2 rounded border border-[#20dc73]/40 px-3 py-2 text-sm text-[#20dc73]"><RefreshCcw className="h-4 w-4" />Refresh</button>
+      <section className="w-full rounded-md border border-[#143b28] bg-[#06110f]">
+        <div className="flex flex-col gap-3 border-b border-[#143b28] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="font-semibold text-white">
+            Requests
+          </h2>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setShowSelector(true)}
+              className="inline-flex items-center justify-center gap-2 rounded bg-[#20dc73] px-4 py-2 text-sm font-bold text-black transition hover:bg-[#20dc73]/80"
+            >
+              + Make a new request
+            </button>
+<button
+  type="button"
+  onClick={load}
+  disabled={loading === true}
+  className="inline-flex items-center justify-center gap-2 rounded border border-[#20dc73]/40 px-3 py-2 text-sm text-[#20dc73] transition hover:bg-[#20dc73]/10 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  <RefreshCcw
+    className={`h-4 w-4 ${
+      loading ? "animate-spin" : ""
+    }`}
+  />
+  {loading ? "Refreshing..." : "Refresh"}
+</button>
           </div>
-          <div className="divide-y divide-[#143b28]">
-            {loading ? <p className="p-5 text-sm text-white/45">Loading requests...</p> : null}
-            {!loading && !requests.length ? (
-              <div className="flex flex-col items-center px-5 py-12 text-center">
-                <Search className="mb-4 h-12 w-12 text-white/20" />
-                <p className="text-lg font-semibold text-white/70">No active request yet</p>
-                <p className="mt-2 max-w-md text-sm text-white/45">
-                  make a request and ShadowNode officials will review your requirements.
-                </p>
-                <Link
-                  href="#new-request"
-                  onClick={() => document.getElementById("new-request")?.scrollIntoView({ behavior: "smooth" })}
-                  className="mt-6 inline-flex h-10 items-center gap-2 rounded bg-[#20dc73] px-5 text-sm font-bold text-black hover:bg-[#20dc73]/80"
-                >
-                  Make a request
-                </Link>
-              </div>
-            ) : null}
-            {requests.map((request) => (
-              <QuoteCard
-                key={request.id}
-                request={request}
-                onAccept={() => decide(request.id, { action: "accept" })}
-                onReview={(payload) => decide(request.id, { action: "review", ...payload })}
-                onDecline={() => decide(request.id, { action: "decline" })}
-              />
-            ))}
-          </div>
-        </section>
+        </div>
 
-        {/* Sidebar: New investigation form */}
-        {/* Sidebar: New investigation form */}
-       {/* Sidebar: Create New Request */}
-<aside id="new-request">
-  {selectedService === null && (
-    <RequestServiceSelector onSelect={setSelectedService} />
-  )}
+        <div className="divide-y divide-[#143b28]">
+          {loading && (
+            <p className="p-5 text-sm text-white/45">
+              Loading requests...
+            </p>
+          )}
 
-  {selectedService === "osint" && (
-    <>
-      <button
-        type="button"
-        onClick={() => setSelectedService(null)}
-        className="mb-4 inline-flex items-center gap-2 rounded border border-[#143b28] px-4 py-2 text-sm text-white/60 hover:border-[#20dc73] hover:text-[#20dc73]"
-      >
-        ← Back to Services
-      </button>
+          {!loading && requests.length === 0 && (
+            <div className="flex flex-col items-center px-5 py-16 text-center">
+              <Search className="mb-4 h-12 w-12 text-white/20" />
 
-      <OsintRequestForm
-        onSubmit={handleSubmit}
-        submitting={submitting}
-      />
-    </>
-  )}
+              <p className="text-lg font-semibold text-white/70">
+                No active request yet
+              </p>
 
-  {selectedService === "cybersecurity" && (
-    <>
-      <button
-        type="button"
-        onClick={() => setSelectedService(null)}
-        className="mb-4 inline-flex items-center gap-2 rounded border border-[#143b28] px-4 py-2 text-sm text-white/60 hover:border-[#20dc73] hover:text-[#20dc73]"
-      >
-        ← Back to Services
-      </button>
+              <p className="mt-2 max-w-md text-sm leading-6 text-white/45">
+                Make a request and ShadowNode officials
+                will review your requirements.
+              </p>
 
-      <CybersecurityTrainingForm
-        onSubmit={handleSubmit}
-        submitting={submitting}
-      />
-    </>
-  )}
-</aside>
+              <button
+                type="button"
+                onClick={() => setShowSelector(true)}
+                className="mt-6 inline-flex h-10 items-center gap-2 rounded bg-[#20dc73] px-5 text-sm font-bold text-black transition hover:bg-[#20dc73]/80"
+              >
+                Make a request
+              </button>
+            </div>
+          )}
+{requests.map((request) => (
+  <a
+    key={request.id}
+    href={`/dashboard/client/requests/${request.id}`}
+    className="group block px-5 py-5 transition hover:bg-[#20dc73]/5"
+  >
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <h3 className="break-words text-sm font-semibold text-white transition group-hover:text-[#20dc73]">
+          {request.title || "Investigation request"}
+        </h3>
+
+        <p className="mt-1 text-xs text-white/40">
+          {request.case_number || "No reference"}
+          {" · "}
+          {request.service_type || "service"}
+        </p>
+      </div>
+
+      <span className="shrink-0 text-white/30 transition group-hover:text-[#20dc73]">
+        →
+      </span>
+    </div>
+  </a>
+))}
+        </div>
       </section>
-    </main>
+    </div>
   )
 }

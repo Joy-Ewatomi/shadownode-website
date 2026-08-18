@@ -9,7 +9,14 @@ export async function GET() {
     if (!user) {
       return NextResponse.json(
         { error: "Unauthorized" },
-        { status: 401 }
+        { status: 401 },
+      )
+    }
+
+    if (user.role !== "client") {
+      return NextResponse.json(
+        { error: "Forbidden" },
+        { status: 403 },
       )
     }
 
@@ -21,38 +28,62 @@ export async function GET() {
         title,
         service_type,
         status,
+
+        /*
+         * =====================================================
+         * CLIENT-FACING QUOTE ONLY
+         * =====================================================
+         */
+
         approved_quote_amount,
         approved_quote_currency,
         approved_quote_notes,
         approved_estimated_completion,
-        ai_price_estimate,
-        ai_complexity,
-        ai_estimated_hours,
-        ai_reasoning,
-        created_at
+
+        quote_sent_at,
+        client_decision_at,
+        declined_reason,
+
+        created_at,
+        updated_at
+
       FROM requests
+
       WHERE user_id = $1
+
         AND (
           approved_quote_amount IS NOT NULL
+
           OR status IN (
             'quote_sent',
-            'negotiation_requested',
+            'awaiting_client_acceptance',
             'revised_quote_sent',
-            'accepted'
+            'negotiation_requested',
+            'accepted',
+            'declined',
+            'rejected'
           )
         )
+
       ORDER BY created_at DESC
       `,
-      [user.id]
+      [user.id],
     )
 
     return NextResponse.json(result.rows)
   } catch (error) {
-    console.error("CLIENT QUOTES ERROR", error)
+    console.error(
+      "CLIENT QUOTES ERROR",
+      error,
+    )
 
     return NextResponse.json(
-      { error: "Failed to load quotes" },
-      { status: 500 }
+      {
+        error: "Failed to load quotes",
+      },
+      {
+        status: 500,
+      },
     )
   }
 }

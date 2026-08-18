@@ -11,6 +11,8 @@ import TeamStatus from "@/components/mission-control/TeamStatus"
 import { useEffect, useState } from "react"
 
 type MissionControlData = {
+  user_role?: string
+
   statistics: {
     active_cases: number
     high_priority_cases: number
@@ -19,6 +21,7 @@ type MissionControlData = {
     investigators_online: number
     evidence_uploaded_today: number
   }
+
   recent_activity: any[]
   active_cases: any[]
   pending_requests: any[]
@@ -31,6 +34,8 @@ type MissionControlData = {
 }
 
 const emptyData: MissionControlData = {
+  user_role: undefined,
+
   statistics: {
     active_cases: 0,
     high_priority_cases: 0,
@@ -39,6 +44,7 @@ const emptyData: MissionControlData = {
     investigators_online: 0,
     evidence_uploaded_today: 0,
   },
+
   recent_activity: [],
   active_cases: [],
   pending_requests: [],

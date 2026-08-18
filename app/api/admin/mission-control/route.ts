@@ -76,14 +76,18 @@ export async function GET(request: NextRequest) {
           ) AS history
         FROM quote_negotiations qn
         JOIN requests r ON r.id=qn.request_id
-        LEFT JOIN app_users au ON au.id=qn.user_id
-        LEFT JOIN quote_negotiations history ON history.request_id=qn.request_id
+        LEFT JOIN app_users au ON au.id=qn.client_id
+        LEFT JOIN quote_negotiations history
+        ON history.request_id=qn.request_id
         WHERE qn.status IN ('requested', 'reviewing', 'approved')
         GROUP BY qn.id, r.id, au.email
         ORDER BY qn.created_at DESC
         LIMIT 10
         `,
-      ).catch(() => ({ rows: [] })),
+      ).catch((error) => {
+  console.error("MISSION CONTROL QUOTE NEGOTIATIONS ERROR", error)
+  throw error
+}),
       query(
         `
         SELECT
@@ -164,8 +168,10 @@ export async function GET(request: NextRequest) {
 
     await auditLog(user.id, "mission_control_viewed", request)
 
-    return NextResponse.json({
-      statistics: {
+ return NextResponse.json({
+  user_role: user.role,
+
+  statistics: {
         active_cases: activeCasesTotal,
         high_priority_cases: highPriorityCases,
         pending_client_requests: pendingClientRequests,

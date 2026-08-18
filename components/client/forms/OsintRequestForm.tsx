@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  ArrowRight,
   Building2,
   Calendar,
   CheckCircle2,
@@ -10,19 +9,16 @@ import {
   FileText,
   Globe,
   Loader2,
-  Link,
-  MapPin,
-  MessageSquareText,
-  Phone,
   Plus,
-  Search,
-  Shield,
   Trash2,
   Upload,
   User,
   X,
 } from "lucide-react"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useState } from "react"
+
+import CommunicationSection from "./cybersecurity-training/sections/CommunicationSection"
+
 
 /* ──────────── Service Definitions ──────────── */
 
@@ -111,8 +107,6 @@ const COUNTRY_CURRENCY_MAP: Record<string, string> = {
   "Poland": "PLN",
   "Turkey": "TRY",
 }
-
-const COUNTRY_OPTIONS = Object.keys(COUNTRY_CURRENCY_MAP).sort()
 
 function getCurrencyForCountry(country: string): string {
   return COUNTRY_CURRENCY_MAP[country] || "USD"
@@ -203,6 +197,8 @@ export type InvestigationFormData = {
   communication_signal: string
   client_country: string
   preferred_currency: string
+  custom_country: string
+  custom_description:string
 
   /* Step 8 — Authorization */
   authorization_confirmed: boolean
@@ -223,62 +219,79 @@ export type EvidenceFile = {
 
 /* ──────────── Empty Form ──────────── */
 
-const EMPTY_FORM: InvestigationFormData = {
-  title: "",
-  category: "osint",
-  service_type: "",
-  investigation_objective: "",
-  subject_type: "person",
-  subject_full_name: "",
-  subject_known_usernames: "",
-  subject_emails: "",
-  subject_phone_numbers: "",
-  subject_location: "",
-  subject_organization: "",
-  subject_websites: "",
-  subject_company_name: "",
-  subject_company_website: "",
-  subject_company_country: "",
-  subject_company_industry: "",
-  subject_domain: "",
-  subject_url: "",
-  subject_ip_address: "",
-  subject_platform: "",
-  show_additional_info: false,
-  subject_approximate_age: "",
-  subject_height: "",
-  subject_weight: "",
-  subject_hair_color: "",
-  subject_eye_color: "",
-  subject_skin_tone: "",
-  subject_distinguishing_marks: "",
-  subject_nationality: "",
-  subject_languages_spoken: "",
-  subject_last_known_address: "",
-  subject_last_known_occupation: "",
-  subject_additional_usernames: "",
-  subject_gaming_ids: "",
-  subject_cryptocurrency_wallets: "",
-  subject_domain_names: "",
-  subject_ip_addresses: "",
-  subject_vehicle_registration: "",
-  existing_information: "",
-  supporting_links: [],
-  additional_notes: "",
-  evidence_files: [],
-  investigation_depth: "standard",
-  urgency: "normal",
-  preferred_deadline: "",
-  communication_method: "portal_notification",
-  communication_email: "",
-  communication_country_code: "",
-  communication_phone: "",
-  communication_whatsapp: "",
-  communication_signal: "",
-  client_country: "",
-  preferred_currency: "",
-  authorization_confirmed: false,
-  description: "",
+function createEmptyForm(): InvestigationFormData {
+  return {
+    title: "",
+    category: "osint",
+    service_type: "",
+    investigation_objective: "",
+
+    subject_type: "person",
+    subject_full_name: "",
+    subject_known_usernames: "",
+    subject_emails: "",
+    subject_phone_numbers: "",
+    subject_location: "",
+    subject_organization: "",
+    subject_websites: "",
+
+    subject_company_name: "",
+    subject_company_website: "",
+    subject_company_country: "",
+    subject_company_industry: "",
+
+    subject_domain: "",
+    subject_url: "",
+    subject_ip_address: "",
+    subject_platform: "",
+
+    show_additional_info: false,
+
+    subject_approximate_age: "",
+    subject_height: "",
+    subject_weight: "",
+    subject_hair_color: "",
+    subject_eye_color: "",
+    subject_skin_tone: "",
+    subject_distinguishing_marks: "",
+    subject_nationality: "",
+    subject_languages_spoken: "",
+    subject_last_known_address: "",
+    subject_last_known_occupation: "",
+
+    subject_additional_usernames: "",
+    subject_gaming_ids: "",
+    subject_cryptocurrency_wallets: "",
+    subject_domain_names: "",
+    subject_ip_addresses: "",
+    subject_vehicle_registration: "",
+
+    existing_information: "",
+    supporting_links: [],
+    additional_notes: "",
+    evidence_files: [],
+
+    investigation_depth: "standard",
+
+    urgency: "normal",
+    preferred_deadline: "",
+
+    communication_method: "portal_notification",
+    communication_email: "",
+    communication_country_code: "",
+    communication_phone: "",
+    communication_whatsapp: "",
+    communication_signal: "",
+
+    client_country: "",
+    preferred_currency: "",
+    custom_country: "",
+
+    custom_description: "",
+    authorization_confirmed: false,
+
+    description: "",
+  }
 }
 
 /* ──────────── Step Definitions ──────────── */
@@ -337,7 +350,9 @@ function FormInput({
 }
 
 export default function InvestigationForm({ onSubmit, submitting }: Props) {
-  const [form, setForm] = useState<InvestigationFormData>(EMPTY_FORM)
+const [form, setForm] = useState<InvestigationFormData>(
+  createEmptyForm(),
+)
   const [step, setStep] = useState(1)
   const [supportingLinkInput, setSupportingLinkInput] = useState<SupportingLink>({ type: "Website", url: "" })
 
@@ -417,8 +432,16 @@ const services = OSINT_SERVICES
   /* ────────── Validation per step ────────── */
   function canProceed(): boolean {
   switch (step) {
-    case 1:
-      return Boolean(form.service_type)
+   case 1:
+  if (!form.service_type) {
+    return false
+  }
+
+  if (form.service_type === "custom") {
+    return form.custom_description.trim().length >= 10
+  }
+
+  return true
 
     case 2:
       return Boolean(
@@ -480,41 +503,46 @@ async function handleSubmit() {
     form.service_type.trim() ||
     "OSINT Investigation"
 
-  const description = [
-    `Service: ${form.service_type}`,
-    `Objective: ${form.investigation_objective}`,
-    `Subject Type: ${form.subject_type}`,
+const serviceDescription =
+  form.service_type === "custom"
+    ? `Custom Requirement: ${form.custom_description}`
+    : `Service: ${form.service_type}`
 
-    form.subject_full_name
-      ? `Subject Name: ${form.subject_full_name}`
-      : "",
+const description = [
+  serviceDescription,
+  `Objective: ${form.investigation_objective}`,
+  `Subject Type: ${form.subject_type}`,
 
-    form.subject_organization
-      ? `Organization: ${form.subject_organization}`
-      : "",
+  form.subject_full_name
+    ? `Subject Name: ${form.subject_full_name}`
+    : "",
 
-    form.subject_company_name
-      ? `Company: ${form.subject_company_name}`
-      : "",
+  form.subject_organization
+    ? `Organization: ${form.subject_organization}`
+    : "",
 
-    form.subject_domain
-      ? `Domain: ${form.subject_domain}`
-      : "",
+  form.subject_company_name
+    ? `Company: ${form.subject_company_name}`
+    : "",
 
-    form.subject_url
-      ? `URL: ${form.subject_url}`
-      : "",
+  form.subject_domain
+    ? `Domain: ${form.subject_domain}`
+    : "",
 
-    form.existing_information
-      ? `Supporting Intelligence: ${form.existing_information}`
-      : "",
+  form.subject_url
+    ? `URL: ${form.subject_url}`
+    : "",
 
-    form.additional_notes
-      ? `Additional Notes: ${form.additional_notes}`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n")
+  form.existing_information
+    ? `Supporting Intelligence: ${form.existing_information}`
+    : "",
+
+  form.additional_notes
+    ? `Additional Notes: ${form.additional_notes}`
+    : "",
+]
+  .filter(Boolean)
+  .join("\n")
 
   await onSubmit({
     ...form,
@@ -524,32 +552,94 @@ async function handleSubmit() {
 }
 
   /* ────────── Render: Step 1 — Service Selection ────────── */
-  function renderStep1() {
-    return (
-      <div className="space-y-5">             
-        {/* Services list */}
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">Select Service</label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {services.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => set({ service_type: s })}
-                className={`rounded-md border px-4 py-3 text-left text-sm transition ${
-                  form.service_type === s
-                    ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                    : "border-[#143b28] text-white/60 hover:border-white/20 hover:text-white"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+ function renderStep1() {
+  const isCustom = form.service_type === "custom"
+const canSubmit = canProceed()
+  return (
+    <div className="space-y-5">
+      <div>
+        <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
+          Select Service
+        </label>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          {services.map((service) => (
+            <button
+              key={service}
+              type="button"
+              onClick={() =>
+                set({
+                  service_type: service,
+                  custom_description: "",
+                })
+              }
+              className={`rounded-md border px-4 py-3 text-left text-sm transition ${
+                form.service_type === service
+                  ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
+                  : "border-[#143b28] text-white/60 hover:border-white/20 hover:text-white"
+              }`}
+            >
+              {service}
+            </button>
+          ))}
+
+          {/* CUSTOM SERVICE */}
+          <button
+            type="button"
+            onClick={() =>
+              set({
+                service_type: "custom",
+              })
+            }
+            className={`rounded-md border px-4 py-3 text-left text-sm transition ${
+              isCustom
+                ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
+                : "border-[#143b28] text-white/60 hover:border-white/20 hover:text-white"
+            }`}
+          >
+            Custom Requirement
+          </button>
         </div>
       </div>
-    )
-  }
+
+      {/* CUSTOM DESCRIPTION */}
+      {isCustom && (
+        <div>
+          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
+            Describe Your Custom Requirement
+          </label>
+
+          <textarea
+            value={form.custom_description}
+            onChange={(e) =>
+              set({
+                custom_description: e.target.value,
+              })
+            }
+            rows={5}
+            placeholder="Describe the investigation service you need..."
+            className="
+              w-full rounded-md
+              border border-[#143b28]
+              bg-black
+              p-4
+              text-sm
+              text-white
+              placeholder:text-white/30
+              outline-none
+              focus:border-[#20dc73]/50
+            "
+          />
+
+          <p className="mt-1 text-xs text-white/30">
+            Please describe what you want ShadowNode to investigate or analyze.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+  
 
   /* ────────── Render: Step 2 — Investigation Objective ────────── */
   function renderStep2() {
@@ -953,105 +1043,116 @@ function renderStep3() {
   /* ────────── Render: Step 7 — Communication Preferences ────────── */
   function renderStep7() {
     return (
-      <div className="space-y-5">
-        <p className="text-sm text-white/60">
-          Select your preferred communication method and provide your country for quotation purposes.
-        </p>
-
-        {/* Country */}
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-            <MapPin className="mr-1.5 inline h-3 w-3" />
-            Country
-          </label>
-          <select
-            value={form.client_country}
-            onChange={(e) => handleCountryChange(e.target.value)}
-            className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/50"
-          >
-            <option value="">Select your country</option>
-            {COUNTRY_OPTIONS.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-          {form.client_country && (
-            <p className="mt-1 text-xs text-[#20dc73]">
-              Quote currency: <strong>{form.preferred_currency}</strong>
-            </p>
-          )}
-        </div>
-
-        {/* Communication Method */}
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-            <MessageSquareText className="mr-1.5 inline h-3 w-3" />
-            Preferred Communication Method
-          </label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {[
-              { value: "portal_notification", label: "Secure Portal Notification", icon: Shield, desc: "Recommended — receive updates in your secure client portal" },
-              { value: "email", label: "Email", icon: MessageSquareText, desc: "Receive updates via email" },
-              { value: "phone", label: "Phone Call", icon: Phone, desc: "Direct phone consultation" },
-              { value: "whatsapp", label: "WhatsApp Business", icon: Phone, desc: "WhatsApp communication" },
-              { value: "signal", label: "Signal", icon: Phone, desc: "Encrypted Signal messaging" },
-            ].map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => set({ communication_method: m.value })}
-                className={`rounded-md border px-4 py-3 text-left transition ${
-                  form.communication_method === m.value
-                    ? "border-[#20dc73] bg-[#20dc73]/10"
-                    : "border-[#143b28] hover:border-white/20"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <m.icon className={`h-4 w-4 ${form.communication_method === m.value ? "text-[#20dc73]" : "text-white/50"}`} />
-                  <p className={`text-sm font-medium ${form.communication_method === m.value ? "text-[#20dc73]" : "text-white"}`}>
-                    {m.label}
-                  </p>
-                </div>
-                <p className="mt-1 text-[11px] text-white/40">{m.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Dynamic communication fields */}
-        {form.communication_method === "email" && (
-          <FormInput label="Email Address" value={form.communication_email} onChange={(v) => set({ communication_email: v })} placeholder="client@example.com" />
-        )}
-
-        {form.communication_method === "phone" && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormInput label="Country Code" value={form.communication_country_code} onChange={(v) => set({ communication_country_code: v })} placeholder="+234" />
-            <FormInput label="Phone Number" value={form.communication_phone} onChange={(v) => set({ communication_phone: v })} placeholder="8012345678" />
-          </div>
-        )}
-
-        {form.communication_method === "whatsapp" && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormInput label="Country Code" value={form.communication_country_code} onChange={(v) => set({ communication_country_code: v })} placeholder="+234" />
-            <FormInput label="WhatsApp Number" value={form.communication_whatsapp} onChange={(v) => set({ communication_whatsapp: v })} placeholder="8012345678" />
-          </div>
-        )}
-
-        {form.communication_method === "signal" && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormInput label="Country Code" value={form.communication_country_code} onChange={(v) => set({ communication_country_code: v })} placeholder="+234" />
-            <FormInput label="Signal Number" value={form.communication_signal} onChange={(v) => set({ communication_signal: v })} placeholder="8012345678" />
-          </div>
-        )}
-      </div>
+    
+    <div className="space-y-6">
+    
+    
+    <p className="text-sm text-white/60">
+    Provide your preferred communication details so our team can contact you.
+    </p>
+    
+    
+    <CommunicationSection
+    
+    country={form.client_country}
+    
+    customCountry={form.custom_country}
+    
+    
+    communicationMethod={
+    form.communication_method
+    }
+    
+    
+    email={
+    form.communication_email
+    }
+    
+    
+    whatsapp={
+    form.communication_whatsapp
+    }
+    
+    
+    signal={
+    form.communication_signal
+    }
+    
+    
+    onCountryChange={(value: string)=>{
+    
+    set({
+    client_country:value,
+    preferred_currency:value === "custom"
+    ? ""
+    : form.preferred_currency
+    })
+    
+    }}
+    
+    
+    
+    onCustomCountryChange={(value: any)=>
+    set({
+    custom_country:value
+    })
+    }
+    
+    
+    
+    onMethodChange={(value: any)=>
+    set({
+    communication_method:value
+    })
+    }
+    
+    
+    
+    onEmailChange={(value: any)=>
+    set({
+    communication_email:value
+    })
+    }
+    
+    
+    
+    onWhatsappChange={(value: any)=>
+    set({
+    communication_whatsapp:value
+    })
+    }
+    
+    
+    
+    onSignalChange={(value: any)=>
+    set({
+    communication_signal:value
+    })
+    }
+    
+    
+    
+    />
+    
+    
+    </div>
+    
     )
-  }
+    
+    }
 
   /* ────────── Render: Step 8 — Review & Legal Authorization ────────── */
 
   function getSummaryItems() {
     const items: { label: string; value: string }[] = [
       { label: "Division", value: form.category === "osint" ? "OSINT Operations" : "Cybersecurity Services" },
-      { label: "Service", value: form.service_type },
+      {
+  label: "Service",
+  value:
+    form.service_type === "custom"
+      ? form.custom_description || "Custom Requirement"
+      : form.service_type,
+},
       { label: "Objective", value: form.investigation_objective },
     ]
 
@@ -1185,7 +1286,7 @@ function renderStep3() {
         ))}
       </div>
 
-     <form
+<form
   onSubmit={(e) => {
     e.preventDefault()
 
@@ -1221,7 +1322,7 @@ function renderStep3() {
           )}
           <button
             type="submit"
-        disabled={Boolean(!canProceed() || submitting)}
+        disabled={submitting}
             className="inline-flex h-10 items-center gap-2 rounded bg-[#20dc73] px-6 text-sm font-bold text-black transition enabled:hover:bg-[#20dc73]/80 disabled:opacity-40"
           >
             {step < 8 ? (
