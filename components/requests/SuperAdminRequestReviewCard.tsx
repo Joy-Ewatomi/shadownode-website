@@ -209,7 +209,7 @@ export default function SuperAdminRequestReviewCard({
   }
 
   return (
-    <div className="space-y-6">
+   <div className="min-w-0 max-w-full space-y-6 overflow-hidden">
 
       {/* =====================================================
           ERROR / STATUS MESSAGE
@@ -262,7 +262,7 @@ export default function SuperAdminRequestReviewCard({
           FULL REQUEST DETAILS
       ===================================================== */}
 
-      <div className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] p-5">
 
         <div className="mb-5">
           <p className="text-xs uppercase tracking-[0.2em] text-[#20dc73]">
@@ -274,7 +274,7 @@ export default function SuperAdminRequestReviewCard({
           </h3>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid min-w-0 gap-5 md:grid-cols-2">
 
           <div>
             <p className="text-xs uppercase tracking-wider text-white/40">
@@ -337,7 +337,7 @@ export default function SuperAdminRequestReviewCard({
     </h3>
   </div>
 
-  <div className="grid gap-5 md:grid-cols-3">
+  <div className="grid min-w-0 gap-5 md:grid-cols-3">
 
     {/* AI ESTIMATE */}
     <div className="min-w-0">
@@ -382,11 +382,11 @@ export default function SuperAdminRequestReviewCard({
         AI Reasoning
       </p>
 
-      <div className="mt-2 w-full min-w-0 overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4">
-        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/70">
-          {request.ai_reasoning || "No AI reasoning available."}
-        </p>
-      </div>
+     <div className="mt-2 w-full min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4">
+  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-white/70">
+    {request.ai_reasoning || "No AI reasoning available."}
+  </p>
+</div>
     </div>
 
     {/* AI ANALYSIS */}
@@ -397,8 +397,7 @@ export default function SuperAdminRequestReviewCard({
         </p>
 
         <div className="mt-2 w-full min-w-0 overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4">
-          <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs leading-6 text-white/60">
-            {request.ai_analysis}
+          <pre className="w-full max-w-full overflow-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-xs leading-6 text-white/60">
           </pre>
         </div>
       </div>
@@ -467,17 +466,19 @@ export default function SuperAdminRequestReviewCard({
             </p>
           </div>
 
-          <div className="md:col-span-3">
-            <p className="text-xs uppercase tracking-wider text-white/40">
-              Administrator Reasoning
-            </p>
+      <div className="md:col-span-3 min-w-0 max-w-full">
+  <p className="text-xs uppercase tracking-wider text-white/40">
+    Administrator Reasoning
+  </p>
 
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">
-              {adminQuote?.reasoning ||
-                request.admin_quote_notes ||
-                "No administrator reasoning provided."}
-            </p>
-          </div>
+  <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4">
+    <p className="min-w-0 max-w-full whitespace-pre-wrap break-all text-sm leading-6 text-white/70">
+      {adminQuote?.reasoning ||
+        request.admin_quote_notes ||
+        "No administrator reasoning provided."}
+    </p>
+  </div>
+</div>
 
           <div className="md:col-span-3">
             <p className="text-xs uppercase tracking-wider text-white/40">
@@ -522,10 +523,10 @@ export default function SuperAdminRequestReviewCard({
           <div className="space-y-3">
 
             {quoteHistory.map((quote) => (
-              <div
-                key={quote.id}
-                className="rounded-md border border-[#143b28] bg-black/40 p-4"
-              >
+            <div
+  key={quote.id}
+  className="min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4"
+>
                 <div className="flex flex-wrap items-start justify-between gap-3">
 
                   <div>
@@ -558,28 +559,30 @@ export default function SuperAdminRequestReviewCard({
                 </div>
 
                 {quote.reasoning && (
-                  <div className="mt-4">
-                    <p className="text-xs uppercase tracking-wider text-white/40">
-                      Reasoning
-                    </p>
+  <div className="mt-4 min-w-0 max-w-full">
+    <p className="text-xs uppercase tracking-wider text-white/40">
+      Reasoning
+    </p>
 
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/70">
-                      {quote.reasoning}
-                    </p>
+                 <p className="mt-1 min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm text-white/70">
+  {quote.notes}
+</p>
                   </div>
                 )}
 
-                {quote.notes && (
-                  <div className="mt-3">
-                    <p className="text-xs uppercase tracking-wider text-white/40">
-                      Notes
-                    </p>
+             {quote.notes && (
+  <div className="mt-3 min-w-0 max-w-full">
+    <p className="text-xs uppercase tracking-wider text-white/40">
+      Notes
+    </p>
 
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/70">
-                      {quote.notes}
-                    </p>
-                  </div>
-                )}
+    <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-black/30 p-3">
+      <p className="min-w-0 max-w-full whitespace-pre-wrap break-all text-sm leading-6 text-white/70">
+        {quote.notes}
+      </p>
+    </div>
+  </div>
+)}
 
                 <div className="mt-3 flex flex-wrap gap-4 text-xs text-white/30">
                   {quote.estimated_completion && (
@@ -630,11 +633,10 @@ export default function SuperAdminRequestReviewCard({
 
             {negotiationHistory.map(
               (negotiation) => (
-                <div
-                  key={negotiation.id}
-                  className="rounded-md border border-[#143b28] bg-black/40 p-4"
-                >
-
+             <div
+  key={negotiation.id}
+  className="min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4"
+>
                   <div className="flex flex-wrap justify-between gap-3">
 
                     <div>
@@ -687,7 +689,7 @@ export default function SuperAdminRequestReviewCard({
                         Client Reason
                       </p>
 
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-white/70">
+                      <p className="mt-1 min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm text-white/70">
                         {negotiation.client_reason}
                       </p>
                     </div>
@@ -810,7 +812,7 @@ export default function SuperAdminRequestReviewCard({
                 </div>
 
                 {event.details != null && (
-                  <pre className="mt-3 overflow-x-auto rounded bg-black p-3 text-xs leading-5 text-white/50">
+                  <pre className="mt-3 w-full max-w-full overflow-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded bg-black p-3 text-xs leading-5 text-white/50">
                     {typeof event.details ===
                     "string"
                       ? event.details

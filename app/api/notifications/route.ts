@@ -15,7 +15,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const isSuperAdministrator = user.role === "super_administrator"
+    const isSuperAdministrator =
+      user.role === "super_administrator" ||
+      user.role === "super-administrator"
     const queryStartedAt = performance.now()
 
     const notifications = isSuperAdministrator
@@ -104,17 +106,6 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 },
-      )
-    }
-
-    // Super Administrator is strictly read-only.
-    if (user.role === "super_administrator") {
-      return NextResponse.json(
-        {
-          error:
-            "Super Administrator notifications are read-only",
-        },
-        { status: 403 },
       )
     }
 

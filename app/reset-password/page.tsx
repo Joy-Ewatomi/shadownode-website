@@ -32,7 +32,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-transparent px-4 text-white">
       <form
         onSubmit={submit}
         className="w-full max-w-md space-y-4 rounded border border-white/10 bg-[#08110c] p-6"
@@ -75,7 +75,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-black text-white">
+        <main className="flex min-h-screen items-center justify-center bg-transparent text-white">
           Loading...
         </main>
       }

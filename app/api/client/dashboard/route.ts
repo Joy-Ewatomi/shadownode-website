@@ -129,6 +129,7 @@ if (!profileId) {
         JOIN cases c
           ON c.id = r.case_id
         WHERE c.client_profile_id = $1
+          AND COALESCE(r.status, 'published') IN ('approved', 'delivered', 'final', 'published')
         ORDER BY r.created_at DESC
         LIMIT 6
         `,
@@ -191,11 +192,9 @@ if (!profileId) {
             FROM requests
             WHERE user_id = $1
               AND status IN (
-                'submitted',
-                'pending_review',
-                'pending_admin_review',
-                'admin_reviewed'
-              )
+  'pending_admin_review',
+  'pending_super_admin_review'
+)
           ) AS pending_requests,
 
 
@@ -220,6 +219,7 @@ if (!profileId) {
             JOIN cases c
               ON c.id = r.case_id
             WHERE c.client_profile_id = $2
+              AND COALESCE(r.status, 'published') IN ('approved', 'delivered', 'final', 'published')
           ) AS reports_available,
 
 

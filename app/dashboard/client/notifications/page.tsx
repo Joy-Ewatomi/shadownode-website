@@ -51,13 +51,14 @@ export default function ClientNotificationsPage() {
     }
   }
 
-  const typeIcon: Record<string, string> = {
-    case_update: "🔒",
-    report: "📋",
-    message: "💬",
-    alert: "⚠️",
-    system: "⚙️",
-  }
+const typeIcon: Record<string, string> = {
+  case_update: "🔒",
+  report: "📋",
+  message: "💬",
+  alert: "⚠️",
+  system: "⚙️",
+  quote_ready: "💰",
+}
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -100,57 +101,82 @@ export default function ClientNotificationsPage() {
         </div>
       ) : null}
 
-      {!loading && !notifications.length && !error ? (
-        <div className="rounded-md border border-[#143b28] bg-[#06110f] p-8 text-center">
-          <Bell className="mx-auto h-8 w-8 text-[#20dc73]" />
-          <p className="mt-3 text-sm text-white/45">No notifications yet.</p>
-          <p className="mt-1 text-xs text-white/30">
-            New notifications about your cases and requests will appear here.
+     {!loading && notifications.length ? (
+  <section className="space-y-2">
+    {notifications.map((notification) => {
+      const destination = getNotificationDestination(notification)
+
+      const content = (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="font-semibold text-white">
+              {notification.title}
+            </p>
+
+            {!notification.read ? (
+              <span className="h-2 w-2 rounded-full bg-[#20dc73]" />
+            ) : null}
+          </div>
+
+          <p className="mt-1 text-sm leading-6 text-white/55">
+            {notification.message}
           </p>
-        </div>
-      ) : null}
 
-      {!loading && notifications.length ? (
-        <section className="space-y-2">
-          {notifications.map((notification) => (
-            <div
-              key={notification.id}
-              className={`group flex items-start gap-4 rounded-md border p-5 transition ${
-                notification.read
-                  ? "border-[#143b28] bg-[#06110f]"
-                  : "border-[#20dc73]/20 bg-[#20dc73]/5"
-              }`}
+          <p className="mt-2 text-xs text-white/35">
+            {new Date(notification.created_at).toLocaleString()}
+          </p>
+        </>
+      )
+
+      return (
+        <div
+          key={notification.id}
+          className={`group flex items-start gap-4 rounded-md border p-5 transition ${
+            notification.read
+              ? "border-[#143b28] bg-[#06110f]"
+              : "border-[#20dc73]/20 bg-[#20dc73]/5"
+          }`}
+        >
+          <span
+            className="mt-0.5 text-lg"
+            role="img"
+            aria-label={notification.type}
+          >
+            {typeIcon[notification.type] || "🔔"}
+          </span>
+
+          {destination ? (
+            <Link
+              href={destination}
+              className="min-w-0 flex-1"
+              onClick={() => {
+                if (!notification.read) {
+                  markRead(notification.id)
+                }
+              }}
             >
-              <span className="mt-0.5 text-lg" role="img" aria-label={notification.type}>
-                {typeIcon[notification.type] || "🔔"}
-              </span>
-
-              <Link href={getNotificationDestination(notification)} className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="font-semibold text-white">{notification.title}</p>
-                  {!notification.read ? (
-                    <span className="h-2 w-2 rounded-full bg-[#20dc73]" />
-                  ) : null}
-                </div>
-                <p className="mt-1 text-sm leading-6 text-white/55">{notification.message}</p>
-                <p className="mt-2 text-xs text-white/35">
-                  {new Date(notification.created_at).toLocaleString()}
-                </p>
-              </Link>
-
-              {!notification.read ? (
-                <button
-                  onClick={() => markRead(notification.id)}
-                  className="shrink-0 rounded border border-[#143b28] bg-black/30 p-2 text-white/35 opacity-0 transition hover:border-[#20dc73]/30 hover:text-[#20dc73] group-hover:opacity-100"
-                  title="Mark as read"
-                >
-                  <CheckCheck className="h-4 w-4" />
-                </button>
-              ) : null}
+              {content}
+            </Link>
+          ) : (
+            <div className="min-w-0 flex-1">
+              {content}
             </div>
-          ))}
-        </section>
-      ) : null}
+          )}
+
+          {!notification.read ? (
+            <button
+              onClick={() => markRead(notification.id)}
+              className="shrink-0 rounded border border-[#143b28] bg-black/30 p-2 text-white/35 opacity-0 transition hover:border-[#20dc73]/30 hover:text-[#20dc73] group-hover:opacity-100"
+              title="Mark as read"
+            >
+              <CheckCheck className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+      )
+    })}
+  </section>
+) : null}
     </div>
   )
 }

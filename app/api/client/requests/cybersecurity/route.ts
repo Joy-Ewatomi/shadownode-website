@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auditLog, getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { createQuoteVersion } from "@/lib/services/quote-version-service"
-import { analyzeRequest } from "@/lib/services/request-analysis-service"
+import { analyzeCybersecurityTrainingRequest } from "@/lib/services/cybersecurity-training-analysis-service"
 import { notifyAdmins } from "@/lib/services/notification-service"
 import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
 
@@ -23,7 +23,18 @@ function nullableString(value: unknown): string | null {
 
 function nullableDate(value: unknown): string | null {
   const result = clean(value)
-  return result || null
+
+  if (!result) {
+    return null
+  }
+
+  const normalized = result.slice(0, 10)
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return null
+  }
+
+  return normalized
 }
 
 function nullableInteger(value: unknown): number | null {
@@ -69,6 +80,58 @@ function combineText(
     .join("\n")
 }
 
+function arrayOrEmpty(
+  value: unknown,
+): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter(
+      (item): item is string =>
+        typeof item === "string" &&
+        item.trim().length > 0,
+    )
+    .map((item) => item.trim())
+}
+
+// ============================================================
+// SERVICE TYPE NORMALIZATION
+// ============================================================
+
+/**
+ * The client-facing form may submit:
+ *
+ *   professional_training
+ *
+ * for cybersecurity training.
+ *
+ * The Administrator workflow already recognizes:
+ *
+ *   cybersecurity_training
+ *
+ * as a cybersecurity workflow.
+ *
+ * Therefore we normalize professional_training at the
+ * persistence boundary.
+ */
+function normalizeStoredServiceType(
+  value: string,
+): string {
+  const normalized =
+    value.trim().toLowerCase()
+
+  if (
+    normalized ===
+    "professional_training"
+  ) {
+    return "cybersecurity_training"
+  }
+
+  return value.trim()
+}
+
 // ============================================================
 // POST CLIENT CYBERSECURITY TRAINING REQUEST
 // ============================================================
@@ -109,7 +172,8 @@ export async function POST(
     // BODY
     // ========================================================
 
-    const body = await request.json()
+    const body =
+      await request.json()
 
     console.log(
       "=== CREATING CYBERSECURITY TRAINING REQUEST ===",
@@ -121,20 +185,45 @@ export async function POST(
     )
 
     // ========================================================
-    // SERVICE
+    // BASIC SERVICE INFORMATION
     // ========================================================
 
-    const category = clean(
-      body.category || "cybersecurity",
-    )
+    const category =
+      clean(
+        body.category ||
+          "cybersecurity",
+      )
 
-    const service_type = clean(
-      body.service_type,
-    )
+    const submittedServiceType =
+      clean(
+        body.service_type,
+      )
 
-    const custom_description = clean(
-      body.custom_description,
-    )
+    if (!submittedServiceType) {
+      return NextResponse.json(
+        {
+          error:
+            "Training service type is required",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Normalize professional_training to the canonical
+     * cybersecurity training workflow service type.
+     */
+    const service_type =
+      normalizeStoredServiceType(
+        submittedServiceType,
+      )
+
+    const custom_description =
+      clean(
+        body.custom_description,
+      )
 
     // ========================================================
     // TRAINING ORGANIZATION
@@ -163,20 +252,13 @@ export async function POST(
       )
 
     // ========================================================
-    // TRAINING AUDIENCE / INDUSTRY
-    //
-    // These do NOT have dedicated DB columns.
-    // We preserve them inside training_additional_requirements.
+    // TRAINING AUDIENCE
     // ========================================================
 
     const training_audience =
-      clean(body.training_audience)
-
-    const training_industry =
-      clean(body.training_industry)
-
-    const custom_industry =
-      clean(body.custom_industry)
+      clean(
+        body.training_audience,
+      )
 
     const custom_training_audience =
       clean(
@@ -188,20 +270,38 @@ export async function POST(
         ? custom_training_audience
         : training_audience
 
+    // ========================================================
+    // TRAINING INDUSTRY
+    // ========================================================
+
+    const training_industry =
+      clean(
+        body.training_industry,
+      )
+
+    const custom_industry =
+      clean(
+        body.custom_industry,
+      )
+
     const finalTrainingIndustry =
       training_industry === "custom"
         ? custom_industry
         : training_industry
 
     // ========================================================
-    // TRAINING GOALS
+    // TRAINING GOAL / OBJECTIVES
     // ========================================================
 
     const training_goal =
-      clean(body.training_goal)
+      clean(
+        body.training_goal,
+      )
 
     const training_objective =
-      clean(body.training_objective)
+      clean(
+        body.training_objective,
+      )
 
     const custom_training_objective =
       clean(
@@ -213,18 +313,18 @@ export async function POST(
         ? custom_training_objective
         : training_objective
 
+    const training_objectives =
+      arrayOrEmpty(
+        body.training_objectives,
+      )
+
     // ========================================================
-    // TOPICS
+    // TRAINING TOPICS
     // ========================================================
 
     const training_topics_selected =
-      arrayToText(
+      arrayOrEmpty(
         body.training_topics_selected,
-      )
-
-    const training_objectives =
-      arrayToText(
-        body.training_objectives,
       )
 
     const training_custom_topic =
@@ -232,28 +332,32 @@ export async function POST(
         body.training_custom_topic,
       )
 
-    const training_topics = combineText(
-      training_topics_selected,
-      training_custom_topic
-        ? `Custom topic: ${training_custom_topic}`
-        : "",
-      training_objectives
-        ? `Learning objectives: ${training_objectives}`
-        : "",
-    )
+    const training_topics =
+      combineText(
+        training_topics_selected.join(", "),
+
+        training_custom_topic
+          ? `Custom topic: ${training_custom_topic}`
+          : "",
+
+        training_objectives.length > 0
+          ? `Learning objectives: ${training_objectives.join(", ")}`
+          : "",
+      )
 
     // ========================================================
     // TRAINING FORMAT / DURATION
-    //
-    // These don't have dedicated DB columns.
-    // They are preserved in training_additional_requirements.
     // ========================================================
 
     const training_format =
-      clean(body.training_format)
+      clean(
+        body.training_format,
+      )
 
     const training_duration =
-      clean(body.training_duration)
+      clean(
+        body.training_duration,
+      )
 
     const custom_sessions_per_week =
       clean(
@@ -266,12 +370,14 @@ export async function POST(
       )
 
     const custom_training_days =
-      arrayToText(
+      arrayOrEmpty(
         body.custom_training_days,
       )
 
     const custom_session_time =
-      clean(body.custom_session_time)
+      clean(
+        body.custom_session_time,
+      )
 
     const custom_training_period =
       clean(
@@ -283,12 +389,12 @@ export async function POST(
     // ========================================================
 
     const training_materials =
-      arrayToText(
+      arrayOrEmpty(
         body.training_materials,
       )
 
     const training_compliance =
-      arrayToText(
+      arrayOrEmpty(
         body.training_compliance,
       )
 
@@ -298,7 +404,7 @@ export async function POST(
       )
 
     const training_expected_outcome =
-      arrayToText(
+      arrayOrEmpty(
         body.training_expected_outcome,
       )
 
@@ -312,15 +418,11 @@ export async function POST(
       true
 
     const training_labs_required =
-      body.training_labs_required === true
+      body.training_labs_required ===
+      true
 
     // ========================================================
     // TRAINING DATES
-    //
-    // DB has ONLY:
-    // training_preferred_dates
-    //
-    // It does NOT have separate start/completion columns.
     // ========================================================
 
     const training_preferred_start_date =
@@ -337,14 +439,25 @@ export async function POST(
       body.training_timeline_flexible ===
       true
 
+    /*
+     * IMPORTANT:
+     *
+     * These three values are now persisted into their
+     * dedicated database columns below.
+     *
+     * They are NOT only stored inside training_preferred_dates.
+     */
+
     const training_preferred_dates =
       combineText(
         training_preferred_start_date
           ? `Start date: ${training_preferred_start_date}`
           : "",
+
         training_preferred_completion_date
           ? `Completion date: ${training_preferred_completion_date}`
           : "",
+
         `Timeline flexible: ${
           training_timeline_flexible
             ? "Yes"
@@ -354,9 +467,6 @@ export async function POST(
 
     // ========================================================
     // ADDITIONAL REQUIREMENTS
-    //
-    // Several frontend fields don't have dedicated columns.
-    // We preserve them here instead of losing the information.
     // ========================================================
 
     const frontendAdditionalRequirements =
@@ -398,8 +508,8 @@ export async function POST(
           ? `Hours per session: ${custom_hours_per_session}`
           : "",
 
-        custom_training_days
-          ? `Training days: ${custom_training_days}`
+        custom_training_days.length > 0
+          ? `Training days: ${custom_training_days.join(", ")}`
           : "",
 
         custom_session_time
@@ -410,20 +520,20 @@ export async function POST(
           ? `Training period: ${custom_training_period}`
           : "",
 
-        training_materials
-          ? `Materials: ${training_materials}`
+        training_materials.length > 0
+          ? `Materials: ${training_materials.join(", ")}`
           : "",
 
-        training_compliance
-          ? `Compliance requirements: ${training_compliance}`
+        training_compliance.length > 0
+          ? `Compliance requirements: ${training_compliance.join(", ")}`
           : "",
 
         training_certificate
           ? `Certificate: ${training_certificate}`
           : "",
 
-        training_expected_outcome
-          ? `Expected outcomes: ${training_expected_outcome}`
+        training_expected_outcome.length > 0
+          ? `Expected outcomes: ${training_expected_outcome.join(", ")}`
           : "",
 
         custom_expected_outcome
@@ -447,32 +557,44 @@ export async function POST(
     // DESCRIPTION
     // ========================================================
 
-    const description = combineText(
-      training_goal
-        ? `Training goal: ${training_goal}`
-        : "",
+    const description =
+      combineText(
+        training_goal
+          ? `Training goal: ${training_goal}`
+          : "",
 
-      finalTrainingObjective
-        ? `Training objective: ${finalTrainingObjective}`
-        : "",
+        finalTrainingObjective
+          ? `Training objective: ${finalTrainingObjective}`
+          : "",
 
-      training_topics
-        ? `Training topics:\n${training_topics}`
-        : "",
+        training_topics
+          ? `Training topics:\n${training_topics}`
+          : "",
 
-      trainingAdditionalRequirements,
-    )
+        trainingAdditionalRequirements,
 
-    const title = clean(
-      body.title ||
-        custom_description ||
-        training_goal ||
-        "Cybersecurity Training Request",
-    )
+        custom_description
+          ? `Client description:\n${custom_description}`
+          : "",
+      )
 
-    const urgency = clean(
-      body.urgency || "normal",
-    )
+    const title =
+      clean(
+        body.title ||
+          custom_description ||
+          training_goal ||
+          "Cybersecurity Training Request",
+      )
+
+    // ========================================================
+    // GENERAL REQUEST INFORMATION
+    // ========================================================
+
+    const urgency =
+      clean(
+        body.urgency ||
+          "normal",
+      )
 
     const existing_information =
       clean(
@@ -499,12 +621,13 @@ export async function POST(
     // COMMUNICATION
     // ========================================================
 
-    const contact_method = clean(
-      body.contact_method ||
-        body.communication_method ||
-        body.communication_channel ||
-        "portal_notification",
-    )
+    const contact_method =
+      clean(
+        body.contact_method ||
+          body.communication_method ||
+          body.communication_channel ||
+          "portal_notification",
+      )
 
     const communication_method =
       clean(
@@ -543,16 +666,21 @@ export async function POST(
     // ========================================================
 
     let client_country =
-      clean(body.client_country)
+      clean(
+        body.client_country,
+      )
 
     const custom_country =
-      clean(body.custom_country)
+      clean(
+        body.custom_country,
+      )
 
     if (
       client_country === "custom" &&
       custom_country
     ) {
-      client_country = custom_country
+      client_country =
+        custom_country
     }
 
     const preferred_currency =
@@ -566,20 +694,9 @@ export async function POST(
     // VALIDATION
     // ========================================================
 
-    if (!service_type) {
-      return NextResponse.json(
-        {
-          error:
-            "Training service type is required",
-        },
-        {
-          status: 400,
-        },
-      )
-    }
-
     if (
-      description.trim().length < 20
+      description.trim().length <
+      20
     ) {
       return NextResponse.json(
         {
@@ -624,7 +741,8 @@ export async function POST(
     if (!client_country) {
       return NextResponse.json(
         {
-          error: "Country is required",
+          error:
+            "Country is required",
         },
         {
           status: 400,
@@ -645,7 +763,8 @@ export async function POST(
     }
 
     if (
-      communication_method === "email" &&
+      communication_method ===
+        "email" &&
       !communication_email
     ) {
       return NextResponse.json(
@@ -660,7 +779,8 @@ export async function POST(
     }
 
     if (
-      communication_method === "whatsapp" &&
+      communication_method ===
+        "whatsapp" &&
       !communication_whatsapp
     ) {
       return NextResponse.json(
@@ -675,7 +795,8 @@ export async function POST(
     }
 
     if (
-      communication_method === "signal" &&
+      communication_method ===
+        "signal" &&
       !communication_signal
     ) {
       return NextResponse.json(
@@ -726,7 +847,8 @@ export async function POST(
 
     const nextNumber =
       Number(
-        existing.rows[0]?.total || 0,
+        existing.rows[0]?.total ||
+          0,
       ) + 1
 
     const trackingNumber =
@@ -735,114 +857,265 @@ export async function POST(
       ).padStart(6, "0")}`
 
     // ========================================================
-    // AI ANALYSIS
+    // CYBERSECURITY TRAINING ANALYSIS
     // ========================================================
 
     const analysis =
-      analyzeRequest({
-        serviceType: service_type,
-        description,
-        urgency,
-        timeline:
-          training_preferred_completion_date
-            ? "deadline"
-            : urgency,
-        investigationDepth:
-          investigation_depth,
-        confidentialityLevel:
-          confidentiality_level,
-        subjectType:
-          "organization",
-      })
+      analyzeCybersecurityTrainingRequest(
+        {
+          serviceType:
+            service_type,
+
+          description,
+
+          organizationName:
+            training_organization_name,
+
+          clientType:
+            training_client_type,
+
+          participantCount:
+            training_participant_count,
+
+          skillLevel:
+            training_skill_level,
+
+          audience:
+            finalTrainingAudience,
+
+          industry:
+            finalTrainingIndustry,
+
+          goal:
+            training_goal,
+
+          objective:
+            finalTrainingObjective,
+
+          topics:
+            training_topics_selected,
+
+          objectives:
+            training_objectives,
+
+          customTopic:
+            training_custom_topic,
+
+          format:
+            training_format,
+
+          duration:
+            training_duration,
+
+          sessionsPerWeek:
+            custom_sessions_per_week,
+
+          hoursPerSession:
+            custom_hours_per_session,
+
+          trainingDays:
+            custom_training_days,
+
+          sessionTime:
+            custom_session_time,
+
+          trainingPeriod:
+            custom_training_period,
+
+          materials:
+            training_materials,
+
+          compliance:
+            training_compliance,
+
+          certificate:
+            training_certificate,
+
+          expectedOutcomes:
+            training_expected_outcome,
+
+          customExpectedOutcome:
+            custom_expected_outcome,
+
+          assessmentRequired:
+            training_assessment_required,
+
+          labsRequired:
+            training_labs_required,
+
+          startDate:
+            training_preferred_start_date,
+
+          completionDate:
+            training_preferred_completion_date,
+
+          timelineFlexible:
+            training_timeline_flexible,
+
+          urgency,
+
+          confidentialityLevel:
+            confidentiality_level,
+        },
+      )
+
+    /*
+     * The AI assessment is generated once at request
+     * creation and persisted. Opening the Administrator
+     * review page later does not re-run this analysis.
+     */
 
     const aiAnalysis =
-      JSON.stringify(analysis)
+      JSON.stringify(
+        analysis,
+      )
 
-    const aiStatus = "analyzed"
+    const aiStatus =
+      "analyzed"
+
+    // ========================================================
+    // REQUEST TIMELINE
+    // ========================================================
 
     const timeline =
-      training_preferred_completion_date
-        ? "deadline"
-        : urgency
+      training_timeline_flexible
+        ? "flexible"
+        : training_preferred_completion_date
+          ? "deadline"
+          : urgency
 
-// ========================================================
-// TRAINING DETAILS
-// ========================================================
+    // ========================================================
+    // FULL TRAINING DETAILS
+    // ========================================================
 
-const trainingDetails = {
-  audience:
-    body.training_audience ?? null,
+    const trainingDetails = {
+      audience:
+        training_audience || null,
 
-  custom_audience:
-    body.custom_training_audience ?? null,
+      custom_audience:
+        custom_training_audience ||
+        null,
 
-  industry:
-    body.training_industry ?? null,
+      final_audience:
+        finalTrainingAudience ||
+        null,
 
-  custom_industry:
-    body.custom_industry ?? null,
+      industry:
+        training_industry || null,
 
-  objective:
-    body.training_objective ?? null,
+      custom_industry:
+        custom_industry || null,
 
-  objectives:
-    body.training_objectives ?? [],
+      final_industry:
+        finalTrainingIndustry ||
+        null,
 
-  custom_objective:
-    body.custom_training_objective ?? null,
+      objective:
+        training_objective || null,
 
-  topics:
-    body.training_topics_selected ?? [],
+      objectives:
+        training_objectives,
 
-  custom_topic:
-    body.training_custom_topic ?? null,
+      final_objective:
+        finalTrainingObjective ||
+        null,
 
-  format:
-    body.training_format ?? null,
+      custom_objective:
+        custom_training_objective ||
+        null,
 
-  duration:
-    body.training_duration ?? null,
+      topics:
+        training_topics_selected,
 
-  custom_schedule: {
-    sessions_per_week:
-      body.custom_sessions_per_week ?? null,
+      custom_topic:
+        training_custom_topic ||
+        null,
 
-    hours_per_session:
-      body.custom_hours_per_session ?? null,
+      format:
+        training_format || null,
 
-    training_days:
-      body.custom_training_days ?? [],
+      duration:
+        training_duration || null,
 
-    session_time:
-      body.custom_session_time ?? null,
+      custom_schedule: {
+        sessions_per_week:
+          custom_sessions_per_week ||
+          null,
 
-    training_period:
-      body.custom_training_period ?? null,
-  },
+        hours_per_session:
+          custom_hours_per_session ||
+          null,
 
-  materials:
-    body.training_materials ?? [],
+        training_days:
+          custom_training_days,
 
-  compliance:
-    body.training_compliance ?? [],
+        session_time:
+          custom_session_time ||
+          null,
 
+        training_period:
+          custom_training_period ||
+          null,
+      },
 
-  expected_outcomes:
-    body.training_expected_outcome ?? [],
+      materials:
+        training_materials,
 
-  custom_expected_outcome:
-    body.custom_expected_outcome ?? null,
-}
+      compliance:
+        training_compliance,
 
-// ========================================================
-// JSONB
-// ========================================================
+      certificate:
+        training_certificate ||
+        null,
 
-const supportingLinks =
-  JSON.stringify(body.supporting_links ?? [])
+      expected_outcomes:
+        training_expected_outcome,
 
-const evidenceUploads =
-  JSON.stringify(body.evidence_files ?? [])
+      custom_expected_outcome:
+        custom_expected_outcome ||
+        null,
+
+      assessment_required:
+        training_assessment_required,
+
+      labs_required:
+        training_labs_required,
+
+      /*
+       * Keep the dates inside the JSON details as well.
+       * They are ALSO persisted in dedicated columns.
+       */
+
+      start_date:
+        training_preferred_start_date,
+
+      completion_date:
+        training_preferred_completion_date,
+
+      timeline_flexible:
+        training_timeline_flexible,
+    }
+
+    const trainingDetailsJson =
+      JSON.stringify(
+        trainingDetails,
+      )
+
+    // ========================================================
+    // JSONB
+    // ========================================================
+
+    const supportingLinks =
+      JSON.stringify(
+        body.supporting_links ??
+          [],
+      )
+
+    const evidenceUploads =
+      JSON.stringify(
+        body.evidence_files ??
+          [],
+      )
 
     // ========================================================
     // OPTIONAL FINANCIAL
@@ -853,361 +1126,410 @@ const evidenceUploads =
         undefined &&
       body.final_price !== null &&
       body.final_price !== ""
-        ? Number(body.final_price)
+        ? Number(
+            body.final_price,
+          )
         : null
 
     const priceNotes =
       nullableString(
         body.price_notes,
       )
-      
-    
 
     // ========================================================
-    // INSERT
-    //
-    // ONLY COLUMNS THAT EXIST IN YOUR
-    // CURRENT requests TABLE ARE USED.
+    // INSERT REQUEST
     // ========================================================
 
-   const inserted =
-  await query<{
-    id: string
-    case_number: string
-  }>(
-    `
-    INSERT INTO requests (
-      user_id,
-      client_email,
-      contact_method,
-      token,
-      is_anonymous,
-      case_number,
-
-      title,
-      description,
-      custom_description,
-      service_type,
-      status,
-
-      final_price,
-      price_notes,
-
-      ai_analysis,
-      ai_price_estimate,
-      ai_status,
-      ai_complexity,
-      ai_estimated_hours,
-      ai_suggested_service,
-      ai_suggested_priority,
-      ai_confidence,
-      ai_reasoning,
-
-      created_at,
-      updated_at,
-
-      currency,
-      priority,
-
-      preferred_deadline,
-
-      investigation_objective,
-      subject_type,
-
-      subject_company_name,
-      subject_company_country,
-      subject_company_industry,
-
-      existing_information,
-      investigation_depth,
-
-      confidentiality_level,
-      authorization_confirmed,
-
-      communication_method,
-      communication_email,
-      communication_country_code,
-      communication_phone,
-      communication_whatsapp,
-      communication_signal,
-
-      client_country,
-      preferred_currency,
-
-      supporting_links,
-      evidence_uploads,
-      additional_notes,
-
-      training_organization_name,
-      training_client_type,
-      training_participant_count,
-      training_skill_level,
-      training_goal,
-      training_topics,
-      training_preferred_dates,
-      training_additional_requirements,
-
-      timeline
-    )
-
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      false,
-      $5,
-
-      $6,
-      $7,
-      $8,
-      $9,
-      'pending_review',
-
-      $10,
-      $11,
-
-      $12,
-      $13,
-      $14,
-      $15,
-      $16,
-      $17,
-      $18,
-      $19,
-      $20,
-
-      NOW(),
-      NOW(),
-
-      $21,
-      $22,
-
-      $23,
-
-      $24,
-      $25,
-
-      $26,
-      $27,
-      $28,
-
-      $29,
-      $30,
-
-      $31,
-      $32,
-
-      $33,
-      $34,
-      $35,
-      $36,
-      $37,
-      $38,
-
-      $39,
-      $40,
-
-      $41,
-      $42,
-      $43,
-
-      $44,
-      $45,
-      $46,
-      $47,
-      $48,
-      $49,
-      $50,
-      $51,
-
-      $52
-    )
-
-    RETURNING id, case_number
-    `,
-    [
-      // ==================================================
-      // 1-9 BASIC REQUEST
-      // ==================================================
+    const inserted =
+      await query<{
+        id: string
+        case_number: string
+      }>(
+        `
+        INSERT INTO requests (
+          user_id,
+          client_email,
+          contact_method,
+          token,
+          is_anonymous,
+          case_number,
+
+          title,
+          description,
+          custom_description,
+          service_type,
+          status,
+
+          final_price,
+          price_notes,
+
+          ai_analysis,
+          ai_price_estimate,
+          ai_status,
+          ai_complexity,
+          ai_estimated_hours,
+          ai_suggested_service,
+          ai_suggested_priority,
+          ai_confidence,
+          ai_reasoning,
+
+          created_at,
+          updated_at,
+
+          currency,
+          priority,
+
+          preferred_deadline,
+
+          investigation_objective,
+          subject_type,
+
+          subject_company_name,
+          subject_company_country,
+          subject_company_industry,
+
+          existing_information,
+          investigation_depth,
+
+          confidentiality_level,
+          authorization_confirmed,
+
+          communication_method,
+          communication_email,
+          communication_country_code,
+          communication_phone,
+          communication_whatsapp,
+          communication_signal,
+
+          client_country,
+          preferred_currency,
+
+          supporting_links,
+          evidence_uploads,
+          additional_notes,
+
+          training_organization_name,
+          training_client_type,
+          training_participant_count,
+          training_skill_level,
+          training_goal,
+          training_topics,
+          training_preferred_dates,
+          training_additional_requirements,
+          training_details,
+
+          training_preferred_start_date,
+          training_preferred_completion_date,
+          training_timeline_flexible,
+
+          timeline
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          false,
+          $5,
+
+          $6,
+          $7,
+          $8,
+          $9,
+          'pending_admin_review',
+
+          $10,
+          $11,
+
+          $12,
+          $13,
+          $14,
+          $15,
+          $16,
+          $17,
+          $18,
+          $19,
+          $20,
+
+          NOW(),
+          NOW(),
+
+          $21,
+          $22,
+
+          $23,
 
-      user.id,
-      user.email,
-      contact_method,
-      nanoid(32),
-      trackingNumber,
+          $24,
+          $25,
+
+          $26,
+          $27,
+          $28,
 
-      title,
-      description,
-      nullableString(custom_description),
-      service_type,
+          $29,
+          $30,
 
-      // ==================================================
-      // 10-11 FINANCIAL
-      // ==================================================
+          $31,
+          $32,
 
-      finalPrice,
-      priceNotes,
+          $33,
+          $34,
+          $35,
+          $36,
+          $37,
+          $38,
 
-      // ==================================================
-      // 12-20 AI ANALYSIS
-      // ==================================================
+          $39,
+          $40,
 
-      aiAnalysis,
-      Number(analysis.suggestedPrice),
-      aiStatus,
-      analysis.complexity,
-      Number(analysis.estimatedHours),
-      analysis.suggestedService,
-      analysis.suggestedPriority,
-      Number(analysis.confidence),
-      analysis.reasoning,
+          $41,
+          $42,
+          $43,
 
-      // ==================================================
-      // 21-22 CURRENCY / PRIORITY
-      // ==================================================
+          $44,
+          $45,
+          $46,
+          $47,
+          $48,
+          $49,
+          $50,
+          $51,
+          $52,
 
-      preferred_currency,
-      analysis.suggestedPriority,
+          $53,
+          $54,
+          $55,
 
-      // ==================================================
-      // 23 DEADLINE
-      // ==================================================
+          $56
+        )
 
-      training_preferred_completion_date ||
-        training_preferred_start_date,
+        RETURNING id, case_number
+        `,
+        [
+          // ==================================================
+          // 1-9 BASIC REQUEST
+          // ==================================================
 
-      // ==================================================
-      // 24-25 INVESTIGATION
-      // ==================================================
+          user.id,
+          user.email,
+          contact_method,
+          nanoid(32),
+          trackingNumber,
 
-      nullableString(
-        training_goal ||
-          finalTrainingObjective,
-      ),
+          title,
+          description,
+          nullableString(
+            custom_description,
+          ),
+          service_type,
 
-      "organization",
+          // ==================================================
+          // 10-11 FINANCIAL
+          // ==================================================
 
-      // ==================================================
-      // 26-28 ORGANIZATION
-      // ==================================================
+          finalPrice,
+          priceNotes,
 
-      nullableString(
-        training_organization_name,
-      ),
+          // ==================================================
+          // 12-20 AI ANALYSIS
+          // ==================================================
 
-      client_country,
+          aiAnalysis,
 
-      finalTrainingIndustry || null,
+          Number(
+            analysis.suggestedPrice,
+          ),
 
-      // ==================================================
-      // 29-30 EXISTING INFORMATION
-      // ==================================================
+          aiStatus,
 
-      nullableString(
-        existing_information,
-      ),
+          analysis.complexity,
 
-      investigation_depth,
+          Number(
+            analysis.estimatedHours,
+          ),
 
-      // ==================================================
-      // 31-32 SECURITY
-      // ==================================================
+          analysis.suggestedService,
 
-      confidentiality_level,
+          analysis.suggestedPriority,
 
-      authorization_confirmed,
+          Number(
+            analysis.confidence,
+          ),
 
-      // ==================================================
-      // 33-38 COMMUNICATION
-      // ==================================================
+          analysis.reasoning,
 
-      communication_method,
+          // ==================================================
+          // 21-22 CURRENCY / PRIORITY
+          // ==================================================
 
-      nullableString(
-        communication_email,
-      ),
+          preferred_currency,
 
-      nullableString(
-        communication_country_code,
-      ),
+          analysis.suggestedPriority,
 
-      nullableString(
-        communication_phone,
-      ),
+          // ==================================================
+          // 23 DEADLINE
+          // ==================================================
 
-      nullableString(
-        communication_whatsapp,
-      ),
+          training_preferred_completion_date ||
+            training_preferred_start_date,
 
-      nullableString(
-        communication_signal,
-      ),
+          // ==================================================
+          // 24-25 INVESTIGATION
+          // ==================================================
 
-      // ==================================================
-      // 39-40 COUNTRY / CURRENCY
-      // ==================================================
+          nullableString(
+            training_goal ||
+              finalTrainingObjective,
+          ),
 
-      client_country,
+          "organization",
 
-      preferred_currency,
+          // ==================================================
+          // 26-28 ORGANIZATION
+          // ==================================================
 
-      // ==================================================
-      // 41-43 JSON / NOTES
-      // ==================================================
+          nullableString(
+            training_organization_name,
+          ),
 
-      supportingLinks,
+          client_country,
 
-      evidenceUploads,
+          nullableString(
+            finalTrainingIndustry,
+          ),
 
-      nullableString(
-        trainingAdditionalRequirements,
-      ),
+          // ==================================================
+          // 29-30 EXISTING INFORMATION
+          // ==================================================
 
-      // ==================================================
-      // 44-51 TRAINING
-      // ==================================================
+          nullableString(
+            existing_information,
+          ),
 
-      nullableString(
-        training_organization_name,
-      ),
+          investigation_depth,
 
-      nullableString(
-        training_client_type,
-      ),
+          // ==================================================
+          // 31-32 SECURITY
+          // ==================================================
 
-      training_participant_count,
+          confidentiality_level,
 
-      nullableString(
-        training_skill_level,
-      ),
+          authorization_confirmed,
 
-      nullableString(
-        training_goal,
-      ),
+          // ==================================================
+          // 33-38 COMMUNICATION
+          // ==================================================
 
-      nullableString(
-        training_topics,
-      ),
+          communication_method,
 
-      nullableString(
-        training_preferred_dates,
-      ),
+          nullableString(
+            communication_email,
+          ),
 
-      nullableString(
-        trainingAdditionalRequirements,
-      ),
+          nullableString(
+            communication_country_code,
+          ),
 
-      // ==================================================
-      // 52 TIMELINE
-      // ==================================================
+          nullableString(
+            communication_phone,
+          ),
 
-      timeline,
-    ],
-  )
+          nullableString(
+            communication_whatsapp,
+          ),
+
+          nullableString(
+            communication_signal,
+          ),
+
+          // ==================================================
+          // 39-40 COUNTRY / CURRENCY
+          // ==================================================
+
+          client_country,
+
+          preferred_currency,
+
+          // ==================================================
+          // 41-43 JSON / NOTES
+          // ==================================================
+
+          supportingLinks,
+
+          evidenceUploads,
+
+          nullableString(
+            trainingAdditionalRequirements,
+          ),
+
+          // ==================================================
+          // 44-52 TRAINING
+          // ==================================================
+
+          nullableString(
+            training_organization_name,
+          ),
+
+          nullableString(
+            training_client_type,
+          ),
+
+          training_participant_count,
+
+          nullableString(
+            training_skill_level,
+          ),
+
+          nullableString(
+            training_goal,
+          ),
+
+          nullableString(
+            training_topics,
+          ),
+
+          nullableString(
+            training_preferred_dates,
+          ),
+
+          nullableString(
+            trainingAdditionalRequirements,
+          ),
+
+          trainingDetailsJson,
+
+          // ==================================================
+          // 53-55 DEDICATED TRAINING DATE COLUMNS
+          // ==================================================
+
+          training_preferred_start_date,
+
+          training_preferred_completion_date,
+
+          training_timeline_flexible,
+
+          // ==================================================
+          // 56 TIMELINE
+          // ==================================================
+
+          timeline,
+        ],
+      )
+
     console.log(
       "=== CYBERSECURITY REQUEST INSERTED ===",
-      inserted.rows[0],
+      {
+        ...inserted.rows[0],
+
+        service_type,
+
+        training_preferred_start_date,
+
+        training_preferred_completion_date,
+
+        training_timeline_flexible,
+      },
     )
 
     // ========================================================
@@ -1223,19 +1545,29 @@ const evidenceUploads =
 
     await createQuoteVersion({
       requestId,
+
       userId: user.id,
+
       role: "ai",
+
       source: "ai",
+
       price: Number(
         analysis.suggestedPrice,
       ),
-      currency: preferred_currency,
+
+      currency:
+        preferred_currency,
+
       estimated_completion:
         training_preferred_completion_date ||
         training_preferred_start_date,
+
       reasoning:
         analysis.reasoning,
-      status: "generated",
+
+      status:
+        "generated",
     })
 
     // ========================================================
@@ -1243,7 +1575,8 @@ const evidenceUploads =
     // ========================================================
 
     await notifyAdmins({
-      type: "client_request",
+      type:
+        "client_request",
 
       title:
         "New cybersecurity training request",
@@ -1254,11 +1587,20 @@ const evidenceUploads =
         `${service_type}`,
 
       metadata: {
-        request_id: requestId,
+        request_id:
+          requestId,
+
         target_page:
           "admin_request_review",
-        action: "review_request",
-        category: "cybersecurity",
+
+        action:
+          "review_request",
+
+        category:
+          category,
+
+        service_type:
+          service_type,
       },
     })
 
@@ -1277,17 +1619,26 @@ const evidenceUploads =
         confidence:
           analysis.confidence,
 
-        category: "cybersecurity",
+        complexity:
+          analysis.complexity,
+
+        estimated_hours:
+          analysis.estimatedHours,
+
+        category,
+
         service_type,
+
+        training_preferred_start_date,
+
+        training_preferred_completion_date,
+
+        training_timeline_flexible,
       },
     )
 
     // ========================================================
     // AUDIT LOG
-    //
-    // IMPORTANT:
-    // auditLog expects the actual Request object,
-    // NOT requestId.
     // ========================================================
 
     await auditLog(
@@ -1295,100 +1646,139 @@ const evidenceUploads =
       "client_request_created",
       request,
       {
-        request_id: requestId,
+        request_id:
+          requestId,
+
         service_type,
-        category: "cybersecurity",
+
+        submitted_service_type:
+          submittedServiceType,
+
+        category,
+
+        tracking_number:
+          trackingNumber,
+
+        training_preferred_start_date,
+
+        training_preferred_completion_date,
+
+        training_timeline_flexible,
       },
     )
 
     // ========================================================
-    // RETURN CREATED REQUEST
+    // LOAD CREATED REQUEST
     // ========================================================
 
-const created = await query(
-  `
-  SELECT
-    id,
-    case_number,
-    title,
-    service_type,
-    description,
-    status,
-    priority,
-    timeline,
+    const created =
+      await query(
+        `
+        SELECT
+          id,
+          case_number,
+          title,
+          service_type,
+          description,
+          status,
+          priority,
+          timeline,
 
-    approved_quote_amount,
-    approved_quote_currency,
-    approved_quote_notes,
-    approved_estimated_completion,
+          approved_quote_amount,
+          approved_quote_currency,
+          approved_quote_notes,
+          approved_estimated_completion,
+          approved_estimated_start,
 
-    preferred_deadline,
+          preferred_deadline,
 
-    investigation_objective,
-    subject_type,
+          investigation_objective,
+          subject_type,
 
-    subject_company_name,
-    subject_company_website,
-    subject_company_country,
-    subject_company_industry,
+          subject_company_name,
+          subject_company_website,
+          subject_company_country,
+          subject_company_industry,
 
-    existing_information,
-    investigation_depth,
+          existing_information,
+          investigation_depth,
 
-    confidentiality_level,
-    authorization_confirmed,
+          confidentiality_level,
+          authorization_confirmed,
 
-    communication_method,
-    communication_email,
-    communication_country_code,
-    communication_phone,
-    communication_whatsapp,
-    communication_signal,
+          communication_method,
+          communication_email,
+          communication_country_code,
+          communication_phone,
+          communication_whatsapp,
+          communication_signal,
 
-    client_country,
-    preferred_currency,
+          client_country,
+          preferred_currency,
 
-    supporting_links,
-    evidence_uploads,
-    additional_notes,
+          supporting_links,
+          evidence_uploads,
+          additional_notes,
 
-    training_organization_name,
-    training_client_type,
-    training_participant_count,
-    training_skill_level,
-    training_goal,
-    training_topics,
-    training_preferred_dates,
-    training_additional_requirements,
-    training_details,
+          training_organization_name,
+          training_client_type,
+          training_participant_count,
+          training_skill_level,
+          training_goal,
+          training_topics,
+          training_preferred_dates,
+          training_preferred_start_date,
+          training_preferred_completion_date,
+          training_timeline_flexible,
+          training_additional_requirements,
+          training_details,
 
-    quote_sent_at,
-    client_decision_at,
-    declined_reason,
+          ai_analysis,
+          ai_price_estimate,
+          ai_status,
+          ai_complexity,
+          ai_estimated_hours,
+          ai_suggested_service,
+          ai_suggested_priority,
+          ai_confidence,
+          ai_reasoning,
 
-    created_at,
-    updated_at
+          quote_sent_at,
+          client_decision_at,
+          declined_reason,
 
-  FROM requests
+          created_at,
+          updated_at
 
-  WHERE id = $1
-    AND user_id = $2
+        FROM requests
 
-  LIMIT 1
-  `,
-  [requestId, user.id],
-)
+        WHERE id = $1
+          AND user_id = $2
 
-if (!created.rows[0]) {
-  throw new Error("Request was created but could not be loaded")
-}
+        LIMIT 1
+        `,
+        [
+          requestId,
+          user.id,
+        ],
+      )
 
-return NextResponse.json(
-  created.rows[0],
-  {
-    status: 201,
-  },
-)
+    if (!created.rows[0]) {
+      throw new Error(
+        "Request was created but could not be loaded",
+      )
+    }
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return NextResponse.json(
+      created.rows[0],
+      {
+        status: 201,
+      },
+    )
   } catch (error) {
     console.error(
       "CYBERSECURITY REQUEST POST ERROR",

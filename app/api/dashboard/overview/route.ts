@@ -20,132 +20,87 @@ export async function GET() {
       )
     }
 
-
-   const stats = await query(`
-  SELECT
-
-    /* =========================
-       SYSTEM HEALTH
-       ========================= */
-
-    'healthy' AS database_health,
-
-    /* =========================
-       USERS
-       ========================= */
-
-    (
-      SELECT COUNT(*)::int
-      FROM app_users
-    ) AS total_users,
-
-    (
-      SELECT COUNT(*)::int
-      FROM app_users
-      WHERE status = 'active'
-    ) AS active_users,
-
-    /* =========================
-       REQUESTS
-       ========================= */
-
-    (
-      SELECT COUNT(*)::int
+    /*
+     * Client Requests
+     *
+     * Every request currently in the request workflow.
+     */
+    const clientRequests = await query(`
+      SELECT COUNT(*)::int AS count
       FROM requests
-    ) AS total_requests,
-
-    (
-      SELECT COUNT(*)::int
-      FROM requests
-      WHERE status = 'active'
-    ) AS active_investigations,
-
-    (
-      SELECT COUNT(*)::int
-      FROM requests
-      WHERE status IN (
-        'submitted',
-        'pending_review',
-        'pending_super_admin_review'
-      )
-    ) AS pending_requests,
-
-    /* =========================
-       AUDIT
-       ========================= */
-
-    (
-      SELECT COUNT(*)::int
-      FROM request_audit_events
-    ) AS audit_events,
-
-    /* =========================
-       NOTIFICATIONS
-       ========================= */
-
-    (
-      SELECT COUNT(*)::int
-      FROM notifications
-      WHERE is_read = false
-    ) AS unread_notifications
-
-`)
-
-    const alerts = await query(`
-      SELECT COUNT(*)::int AS unresolved_alerts
-      FROM notifications
-      WHERE is_read = false
-      AND user_id = $1
-    `,[user.id])
-
-
-    const requests = await query(`
-      SELECT
-        r.*,
-
-        u.username AS client_username,
-        u.email AS client_email
-
-      FROM requests r
-
-      LEFT JOIN app_users u
-        ON u.id = r.user_id
-
-      ORDER BY r.created_at DESC
-
-      LIMIT 100
     `)
 
-    console.log("DASHBOARD REQUESTS:", requests.rows)
+    /*
+     * Active Investigations
+     *
+     * Actual cases, not requests.
+     */
+    const activeInvestigations = await query(`
+      SELECT COUNT(*)::int AS count
+      FROM cases
+      WHERE status IN (
+        'assigned',
+        'accepted',
+        'active',
+        'in_progress'
+      )
+    `)
 
-  return NextResponse.json({
-  database_health:
-    stats.rows[0]?.database_health ?? "unknown",
+    /*
+     * Team Workload
+     *
+     * Cases currently waiting for assignment.
+     *
+     * We use case_assignments rather than the old
+     * employees.assigned_case_count field because the
+     * assignment table is the authoritative source.
+     */
+    const pendingAssignments = await query(`
+      SELECT COUNT(*)::int AS count
+      FROM cases c
+      WHERE c.status IN (
+        'submitted',
+        'pending_assignment',
+        'pending_investigator',
+        'awaiting_assignment'
+      )
+      AND c.assigned_to IS NULL
+    `)
 
-  total_users:
-    stats.rows[0]?.total_users ?? 0,
+    /*
+     * Operational Alerts
+     *
+     * Only notifications belonging to the currently
+     * authenticated administrator.
+     */
+    const unresolvedAlerts = await query(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM notifications
+        WHERE user_id = $1
+          AND is_read = false
+      `,
+      [user.id]
+    )
 
-  active_users:
-    stats.rows[0]?.active_users ?? 0,
+    const stats = {
+      total_cases:
+        clientRequests.rows[0]?.count ?? 0,
 
-  total_requests:
-    stats.rows[0]?.total_requests ?? 0,
+      active_investigations:
+        activeInvestigations.rows[0]?.count ?? 0,
 
-  active_investigations:
-    stats.rows[0]?.active_investigations ?? 0,
+      pending_assignments:
+        pendingAssignments.rows[0]?.count ?? 0,
 
-  pending_requests:
-    stats.rows[0]?.pending_requests ?? 0,
+      unresolved_alerts:
+        unresolvedAlerts.rows[0]?.count ?? 0,
+    }
 
-  audit_events:
-    stats.rows[0]?.audit_events ?? 0,
+    console.log("ADMIN DASHBOARD STATS:", stats)
 
-  unread_notifications:
-    stats.rows[0]?.unread_notifications ?? 0,
-})
-
-  } catch(error){
-
+    return NextResponse.json(stats)
+  } catch (error) {
     console.error(
       "DASHBOARD OVERVIEW ERROR",
       error
@@ -153,10 +108,10 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:"Failed to load dashboard"
+        error: "Failed to load dashboard",
       },
       {
-        status:500
+        status: 500,
       }
     )
   }

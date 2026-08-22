@@ -23,12 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark scroll-smooth">
-      {/* FIX: Added an explicit background color (bg-[#050505] or bg-background) 
-        directly to the body tag. This acts as the steady foundation layer 
-        that allows the transparent canvas and Framer Motion routes to blend 
-        cleanly without causing layout-blinding artifacts.
-      */}
-      <body className="font-sans antialiased bg-[#050505] text-foreground min-h-screen relative overflow-x-hidden">
+      <body className="font-sans antialiased text-foreground min-h-screen relative overflow-x-hidden">
         
         {/* Global Particle Core Network Matrix */}
         <ThreatNodeNetwork />

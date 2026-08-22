@@ -110,7 +110,7 @@ router.push(
 
 return (
 
-<main className="min-h-screen bg-black text-white p-8">
+<main className="min-h-screen bg-transparent text-white p-8">
 
 
 <div className="max-w-xl mx-auto space-y-6">

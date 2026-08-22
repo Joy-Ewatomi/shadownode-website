@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       count("SELECT COUNT(*) AS total FROM cases WHERE status <> 'archived'"),
       count("SELECT COUNT(*) AS total FROM cases WHERE priority IN ('high', 'critical') AND status <> 'archived'"),
-      count("SELECT COUNT(*) AS total FROM requests WHERE status IN ('pending_review', 'reviewing', 'submitted')"),
+      count("SELECT COUNT(*) AS total FROM requests WHERE status = 'pending_admin_review'"),
       count("SELECT COUNT(*) AS total FROM case_reports"),
       count("SELECT COUNT(*) AS total FROM app_users WHERE role='investigator' AND status='active'"),
       count("SELECT COUNT(*) AS total FROM forensic_files WHERE created_at >= CURRENT_DATE"),
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
         `
         SELECT id, case_number, title, service_type, status, client_email, created_at
         FROM requests
-        WHERE status IN ('pending_review', 'reviewing', 'submitted')
+        WHERE status = 'pending_admin_review'
         ORDER BY created_at DESC
         LIMIT 10
         `,

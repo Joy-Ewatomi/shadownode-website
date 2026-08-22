@@ -8,11 +8,10 @@ import {
 
 import { query } from "@/lib/db"
 
-import { notifyUser } from "@/lib/services/notification-service"
-
 import {
   recordRequestAudit,
   reviewQuoteAsAdmin,
+  declineRequest,
 } from "@/lib/services/quote-workflow-service"
 
 /*
@@ -38,33 +37,295 @@ const allowedCurrencies = new Set([
 
 /*
  * =====================================================
- * REQUEST TYPE
+ * REQUEST TYPES
  * =====================================================
  */
+
+type RequestWorkflow =
+  | "professional_training"
+  | "cybersecurity_training"
+  | "security_assessment"
+  | "investigation"
 
 type RequestRow = {
   id: string
   user_id: string | null
+
   title: string | null
   description: string | null
   priority: string | null
   timeline: string | null
   service_type: string | null
+
   case_number: string | null
   converted_case_id: string | null
 
   preferred_currency: string | null
   preferred_deadline: string | null
 
+  /*
+   * Training-specific client dates.
+   */
+  training_preferred_start_date: string | null
+  training_preferred_completion_date: string | null
+  training_timeline_flexible: boolean | null
+
   status: string | null
 
   approved_quote_amount: number | null
   approved_quote_currency: string | null
   approved_quote_notes: string | null
+
   approved_estimated_completion: string | null
   approved_estimated_start: string | null
-  training_preferred_start_date: string | null
+
   admin_quote_action: string | null
+}
+
+/*
+ * =====================================================
+ * HELPERS
+ * =====================================================
+ */
+
+/**
+ * Normalize an arbitrary value to a trimmed string.
+ */
+function clean(value: unknown): string {
+  return typeof value === "string"
+    ? value.trim()
+    : ""
+}
+
+/**
+ * Normalize a date to YYYY-MM-DD.
+ *
+ * This intentionally does not construct a Date object,
+ * because doing so can introduce timezone-related shifts.
+ */
+function normalizeDate(
+  value: unknown,
+): string | null {
+  const result = clean(value)
+
+  if (!result) {
+    return null
+  }
+
+  const date =
+    result.length >= 10
+      ? result.slice(0, 10)
+      : result
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      date,
+    )
+  ) {
+    return null
+  }
+
+  /*
+   * Validate that the date is a real
+   * calendar date without timezone conversion.
+   */
+  const [year, month, day] =
+    date
+      .split("-")
+      .map(Number)
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return null
+  }
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return null
+  }
+
+  const check =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day,
+      ),
+    )
+
+  if (
+    check.getUTCFullYear() !==
+      year ||
+    check.getUTCMonth() !==
+      month - 1 ||
+    check.getUTCDate() !==
+      day
+  ) {
+    return null
+  }
+
+  return date
+}
+
+/**
+ * Validate a supplied optional date.
+ *
+ * undefined/null/empty means the field was not supplied.
+ * A supplied invalid value throws an error.
+ */
+function validateOptionalDate(
+  value: unknown,
+  fieldName: string,
+): string | null {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return null
+  }
+
+  const normalized =
+    normalizeDate(value)
+
+  if (!normalized) {
+    throw new Error(
+      `${fieldName} must be a valid date (YYYY-MM-DD).`,
+    )
+  }
+
+  return normalized
+}
+
+/**
+ * Normalize service_type.
+ */
+function normalizeServiceType(
+  serviceType: unknown,
+): string {
+  return clean(serviceType)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+}
+
+/**
+ * Determine the exact workflow for the request.
+ *
+ * IMPORTANT:
+ *
+ * professional_training and cybersecurity_training
+ * are training workflows and may use:
+ *
+ * - training_preferred_start_date
+ * - training_preferred_completion_date
+ * - training_timeline_flexible
+ *
+ * security_assessment is NOT a training workflow.
+ *
+ * OSINT/investigation requests must NEVER inherit
+ * training dates.
+ */
+function getRequestWorkflow(
+  serviceType: unknown,
+): RequestWorkflow {
+  const value =
+    normalizeServiceType(
+      serviceType,
+    )
+
+  /*
+   * =================================================
+   * PROFESSIONAL TRAINING
+   * =================================================
+   */
+
+  if (
+    value ===
+      "professional_training" ||
+    value ===
+      "professional_training_request" ||
+    value ===
+      "training" ||
+    value.includes(
+      "professional_training",
+    )
+  ) {
+    return "professional_training"
+  }
+
+  /*
+   * =================================================
+   * CYBERSECURITY TRAINING
+   * =================================================
+   */
+
+  if (
+    value ===
+      "cybersecurity_training" ||
+    value ===
+      "cyber_security_training" ||
+    value ===
+      "cybersecurity_training_request" ||
+    value.includes(
+      "cybersecurity_training",
+    ) ||
+    value.includes(
+      "cyber_security_training",
+    )
+  ) {
+    return "cybersecurity_training"
+  }
+
+  /*
+   * =================================================
+   * SECURITY ASSESSMENT
+   * =================================================
+   *
+   * A security assessment is cybersecurity-related,
+   * but it is NOT a training workflow.
+   */
+
+  if (
+    value ===
+      "security_assessment" ||
+    value ===
+      "cybersecurity_assessment" ||
+    value ===
+      "cyber_security_assessment"
+  ) {
+    return "security_assessment"
+  }
+
+  /*
+   * =================================================
+   * DEFAULT
+   * =================================================
+   *
+   * Everything else is treated as investigation/OSINT
+   * for date propagation purposes.
+   */
+  return "investigation"
+}
+
+/**
+ * Determine whether this request is a training request.
+ */
+function isTrainingRequest(
+  workflow: RequestWorkflow,
+): boolean {
+  return (
+    workflow ===
+      "professional_training" ||
+    workflow ===
+      "cybersecurity_training"
+  )
 }
 
 /*
@@ -74,11 +335,13 @@ type RequestRow = {
  */
 
 export async function PATCH(
-  request: NextRequest,
+  req: NextRequest,
   {
     params,
   }: {
-    params: Promise<{ id: string }>
+    params: Promise<{
+      id: string
+    }>
   },
 ) {
   try {
@@ -88,13 +351,18 @@ export async function PATCH(
      * =================================================
      */
 
-    const auth = await requireUser()
+    const auth =
+      await requireUser()
 
     if (!auth.user) {
       return auth.response
     }
 
-    if (!isAdminRole(auth.user.role)) {
+    if (
+      !isAdminRole(
+        auth.user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error: "Forbidden",
@@ -111,12 +379,14 @@ export async function PATCH(
      * =================================================
      */
 
-    const { id } = await params
+    const { id } =
+      await params
 
     if (!id) {
       return NextResponse.json(
         {
-          error: "Request id is required.",
+          error:
+            "Request id is required.",
         },
         {
           status: 400,
@@ -130,11 +400,29 @@ export async function PATCH(
      * =================================================
      */
 
-    const body = await request.json()
+    let body: Record<
+      string,
+      unknown
+    >
 
-    const action = String(body.action || "")
-      .trim()
-      .toLowerCase()
+    try {
+      body =
+        await req.json()
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid JSON request body.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    const action =
+      clean(body.action)
+        .toLowerCase()
 
     /*
      * =================================================
@@ -142,47 +430,57 @@ export async function PATCH(
      * =================================================
      */
 
-    const current = await query<RequestRow>(
-      `
-      SELECT
-        id,
-        user_id,
-        title,
-        description,
-        priority,
-        timeline,
-        service_type,
-        case_number,
-        converted_case_id,
+    const current =
+      await query<RequestRow>(
+        `
+          SELECT
+            id,
+            user_id,
 
-        preferred_currency,
-        preferred_deadline,
+            title,
+            description,
+            priority,
+            timeline,
+            service_type,
 
-        status,
+            case_number,
+            converted_case_id,
 
-        approved_quote_amount,
-        approved_quote_currency,
-        approved_quote_notes,
-        approved_estimated_start,
-        approved_estimated_completion,
+            preferred_currency,
+            preferred_deadline,
 
-        admin_quote_action
+            training_preferred_start_date,
+            training_preferred_completion_date,
+            training_timeline_flexible,
 
-      FROM requests
+            status,
 
-      WHERE id = $1
+            approved_quote_amount,
+            approved_quote_currency,
+            approved_quote_notes,
 
-      LIMIT 1
-      `,
-      [id],
-    )
+            approved_estimated_start,
+            approved_estimated_completion,
 
-    const item = current.rows[0]
+            admin_quote_action
+
+          FROM requests
+
+          WHERE id = $1
+
+          LIMIT 1
+        `,
+        [id],
+      )
+
+    const item =
+      current.rows[0]
 
     if (!item) {
       return NextResponse.json(
         {
-          error: "Request not found.",
+          error:
+            "Request not found.",
         },
         {
           status: 404,
@@ -192,30 +490,120 @@ export async function PATCH(
 
     /*
      * =================================================
-     * ADMINISTRATOR LOCK
+     * DETERMINE REQUEST WORKFLOW
      * =================================================
-     *
-     * Once the administrator sends the proposal to
-     * the Super Administrator, the administrator can
-     * no longer modify the request.
      */
 
-    const lockedStatuses = new Set([
-      "pending_super_admin_review",
-      "super_admin_approved",
-      "quote_final",
-      "final_quote_approved",
-    ])
+    const workflow =
+      getRequestWorkflow(
+        item.service_type,
+      )
+
+    const trainingRequest =
+      isTrainingRequest(
+        workflow,
+      )
+
+    /*
+     * =================================================
+     * CLIENT REQUESTED DATES
+     * =================================================
+     *
+     * Only training workflows may use these fields.
+     *
+     * OSINT/investigation and security assessment
+     * requests receive null here.
+     */
+
+    let clientTrainingStart:
+      string | null = null
+
+    let clientTrainingCompletion:
+      string | null = null
+
+    if (trainingRequest) {
+      clientTrainingStart =
+        normalizeDate(
+          item.training_preferred_start_date,
+        )
+
+      clientTrainingCompletion =
+        normalizeDate(
+          item.training_preferred_completion_date,
+        )
+    }
+
+    /*
+     * =================================================
+     * TRAINING DATE VALIDATION
+     * =================================================
+     */
+
+    if (
+      trainingRequest &&
+      item.training_preferred_start_date &&
+      !clientTrainingStart
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Client training start date is invalid.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    if (
+      trainingRequest &&
+      item.training_preferred_completion_date &&
+      !clientTrainingCompletion
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Client training completion date is invalid.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * =================================================
+     * ADMINISTRATOR WORKFLOW LOCK
+     * =================================================
+     *
+     * Once a request enters Super Administrator review
+     * or a final client-facing state, this endpoint must
+     * not modify it.
+     */
+
+    const lockedStatuses =
+      new Set([
+        "pending_super_admin_review",
+        "super_admin_approved",
+        "quote_sent",
+        "revised_quote_sent",
+        "quote_final",
+        "final_quote_approved",
+        "client_decision_pending",
+        "rejected",
+      ])
 
     if (
       lockedStatuses.has(
-        String(item.status || ""),
+        String(
+          item.status || "",
+        ),
       )
     ) {
       return NextResponse.json(
         {
           error:
-            "This request is read-only while awaiting or after Super Administrator review.",
+            "This request cannot be modified in its current workflow state.",
         },
         {
           status: 409,
@@ -229,52 +617,58 @@ export async function PATCH(
      * =================================================
      */
 
-    const negotiationId = body.negotiation_id
-      ? String(body.negotiation_id).trim()
-      : null
+    const negotiationId =
+      body.negotiation_id
+        ? clean(
+            body.negotiation_id,
+          )
+        : null
 
     /*
      * =================================================
      * CURRENCY
      * =================================================
-     *
-     * Priority:
-     *
-     * 1. Administrator-selected currency
-     * 2. Existing approved currency
-     * 3. Client preferred currency
-     * 4. USD fallback
-     *
-     * AI may calculate internally in USD.
-     *
-     * The currency below is the actual workflow
-     * currency used for the administrator proposal.
      */
 
-    const currency = String(
-      body.approved_quote_currency ||
-        item.approved_quote_currency ||
-        item.preferred_currency ||
-        "USD",
-    )
-      .trim()
-      .toUpperCase()
+    const currency =
+      clean(
+        body.approved_quote_currency ||
+          item.approved_quote_currency ||
+          "USD",
+      ).toUpperCase()
+
+    /*
+     * =================================================
+     * CURRENCY VALIDATION
+     * =================================================
+     */
+
+    if (
+      !allowedCurrencies.has(
+        currency,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Unsupported currency.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     /*
      * =================================================
      * CASE CREATION PROTECTION
      * =================================================
-     *
-     * Administrator cannot create a case.
-     *
-     * Case creation happens only after:
-     *
-     * Super Admin final approval
-     * +
-     * Client acceptance
      */
 
-    if (action === "convert_to_case") {
+    if (
+      action ===
+      "convert_to_case"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -288,13 +682,14 @@ export async function PATCH(
 
     /*
      * =================================================
-     * DIRECT CLIENT QUOTE BLOCK
+     * DIRECT CLIENT QUOTE PROTECTION
      * =================================================
-     *
-     * Administrator cannot bypass Super Admin.
      */
 
-    if (action === "send_quote") {
+    if (
+      action ===
+      "send_quote"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -310,51 +705,29 @@ export async function PATCH(
      * =================================================
      * ADJUST QUOTE
      * =================================================
-     *
-     * Administrator can prepare an adjustment.
-     *
-     * It still goes to Super Administrator.
-     *
-     * It does NOT go directly to the client.
      */
 
-    if (action === "adjust_quote") {
-      const amount = Number(
-        body.approved_quote_amount,
-      )
+    if (
+      action ===
+      "adjust_quote"
+    ) {
+      const amount =
+        Number(
+          body.approved_quote_amount,
+        )
 
-      const reason = String(
-        body.admin_quote_notes ||
-          body.quote_notes ||
-          body.reason ||
-          "",
-      ).trim()
-
-      const rawEstimatedStart =
-  body.approved_estimated_start ??
-  null
-
-const estimatedStart =
-  rawEstimatedStart
-    ? String(rawEstimatedStart).slice(0, 10)
-    : null
-
-      const rawEstimatedCompletion =
-        body.approved_estimated_completion ??
-        body.approved_completion_date ??
-        item.preferred_deadline ??
-        null
-
-      const estimatedCompletion =
-        rawEstimatedCompletion
-          ? String(rawEstimatedCompletion).slice(0, 10)
-          : null
-      /*
-       * Validate amount
-       */
+      const reason =
+        clean(
+          body.admin_quote_notes ||
+            body.quote_notes ||
+            body.reason ||
+            "",
+        )
 
       if (
-        !Number.isFinite(amount) ||
+        !Number.isFinite(
+          amount,
+        ) ||
         amount <= 0
       ) {
         return NextResponse.json(
@@ -367,10 +740,6 @@ const estimatedStart =
           },
         )
       }
-
-      /*
-       * Validate reason
-       */
 
       if (!reason) {
         return NextResponse.json(
@@ -385,51 +754,80 @@ const estimatedStart =
       }
 
       /*
-       * Validate currency
+       * =================================================
+       * ESTIMATED DATES
+       * =================================================
+       *
+       * Training:
+       *   estimated start defaults to client start
+       *   estimated completion defaults to client completion
+       *
+       * Non-training:
+       *   estimated start is always null
+       *   estimated completion may use preferred deadline
        */
 
-      if (!allowedCurrencies.has(currency)) {
-        return NextResponse.json(
-          {
-            error: "Unsupported currency.",
-          },
-          {
-            status: 400,
-          },
-        )
-      }
+      let estimatedStart:
+        string | null = null
 
-      /*
-       * Validate completion date
-       */
-     
-      if (
-  estimatedStart &&
-  !/^\d{4}-\d{2}-\d{2}$/.test(
-    estimatedStart,
-  )
-) {
-  return NextResponse.json(
-    {
-      error:
-        "Estimated start must be a valid date (YYYY-MM-DD).",
-    },
-    {
-      status: 400,
-    },
-  )
-}
+      let estimatedCompletion:
+        string | null = null
 
-      if (
-        estimatedCompletion &&
-        !/^\d{4}-\d{2}-\d{2}$/.test(
-          estimatedCompletion,
-        )
-      ) {
+      try {
+        if (trainingRequest) {
+          const suppliedStart =
+            validateOptionalDate(
+              body.approved_estimated_start,
+              "Estimated start",
+            )
+
+          const suppliedCompletion =
+            validateOptionalDate(
+              body.approved_estimated_completion ??
+                body.approved_completion_date,
+              "Estimated completion",
+            )
+
+          estimatedStart =
+            suppliedStart ??
+            clientTrainingStart
+
+          estimatedCompletion =
+            suppliedCompletion ??
+            clientTrainingCompletion
+        } else {
+          const suppliedCompletion =
+            validateOptionalDate(
+              body.approved_estimated_completion ??
+                body.approved_completion_date,
+              "Estimated completion",
+            )
+
+          /*
+           * Only the preferred deadline may act as
+           * an automatic completion date for a
+           * non-training request.
+           */
+
+          const clientPreferredDeadline =
+            normalizeDate(
+              item.preferred_deadline,
+            )
+
+          estimatedStart =
+            null
+
+          estimatedCompletion =
+            suppliedCompletion ??
+            clientPreferredDeadline
+        }
+      } catch (error) {
         return NextResponse.json(
           {
             error:
-              "Estimated completion must be a valid date (YYYY-MM-DD).",
+              error instanceof Error
+                ? error.message
+                : "Invalid date.",
           },
           {
             status: 400,
@@ -438,54 +836,71 @@ const estimatedStart =
       }
 
       /*
-       * Central quote workflow
+       * =================================================
+       * CENTRAL QUOTE WORKFLOW
+       * =================================================
        */
 
-const reviewed =
-  await reviewQuoteAsAdmin({
-    requestId: id,
-    actorUserId: auth.user.id,
-    actorRole: auth.user.role,
+      const reviewed =
+        await reviewQuoteAsAdmin({
+          requestId: id,
 
-    action: "adjust",
+          actorUserId:
+            auth.user.id,
 
-    amount,
-    currency,
+          actorRole:
+            auth.user.role,
 
-    notes: reason,
-    reason,
+          action: "adjust",
 
-    estimated_completion:
-      estimatedCompletion,
-  })
+          amount,
 
-      /*
-       * Audit administrator adjustment
-       */
+          currency,
 
-     await auditLog(
-  auth.user.id,
-  "request_quote_adjusted_for_super_admin_review",
-  request,
-  {
-    request_id: id,
-    approved_quote_amount: amount,
-    approved_quote_currency: currency,
-    negotiation_id: negotiationId,
-  },
-)
+          notes: reason,
 
-      await recordRequestAudit(
-        id,
-        auth.user.id,
-        "request_quote_adjusted_for_super_admin_review",
-        {
-          approved_quote_amount: amount,
-          approved_quote_currency: currency,
+          reason,
+
+          estimated_start:
+            estimatedStart,
+
           estimated_completion:
             estimatedCompletion,
-          negotiation_id: negotiationId,
-          reason,
+        })
+
+      /*
+       * =================================================
+       * AUDIT
+       * =================================================
+       */
+
+      await auditLog(
+        auth.user.id,
+        "request_quote_adjusted_for_super_admin_review",
+        req,
+        {
+          request_id:
+            id,
+
+          approved_quote_amount:
+            amount,
+
+          approved_quote_currency:
+            currency,
+
+          estimated_start:
+            estimatedStart,
+
+          estimated_completion:
+            estimatedCompletion,
+
+          workflow,
+
+          training_request:
+            trainingRequest,
+
+          negotiation_id:
+            negotiationId,
         },
       )
 
@@ -497,6 +912,8 @@ const reviewed =
         status:
           "pending_super_admin_review",
 
+        workflow,
+
         request: reviewed,
       })
     }
@@ -505,18 +922,19 @@ const reviewed =
      * =================================================
      * REJECT REQUEST
      * =================================================
-     *
-     * Administrator can reject before final quote
-     * workflow.
      */
 
-    if (action === "reject") {
-      const reason = String(
-        body.reason ||
-          body.admin_quote_notes ||
-          body.quote_notes ||
-          "",
-      ).trim()
+    if (
+      action ===
+      "reject"
+    ) {
+      const reason =
+        clean(
+          body.reason ||
+            body.admin_quote_notes ||
+            body.quote_notes ||
+            "",
+        )
 
       if (!reason) {
         return NextResponse.json(
@@ -530,180 +948,61 @@ const reviewed =
         )
       }
 
-      /*
-       * Update request
-       */
-
-      const updated = await query(
-        `
-        UPDATE requests
-
-        SET
-          status = 'rejected',
-
-          declined_reason = $2,
-
-          admin_quote_action = 'rejected',
-
-          admin_quote_notes = $2,
-
-          admin_reviewed_by = $3,
-
-          admin_reviewed_at = NOW(),
-
-          updated_at = NOW()
-
-        WHERE id = $1
-
-        RETURNING *
-        `,
-        [
+      const updated =
+        await declineRequest(
           id,
-          reason,
           auth.user.id,
-        ],
-      )
-
-      /*
-       * Audit
-       */
+          reason,
+        )
 
       await auditLog(
         auth.user.id,
         "request_rejected",
-        request,
+        req,
         {
-          request_id: id,
-        },
-      )
+          request_id:
+            id,
 
-      await recordRequestAudit(
-        id,
-        auth.user.id,
-        "request_rejected",
-        {
           reason,
+
+          workflow,
         },
       )
 
-      /*
-       * Notify client
-       */
+      return NextResponse.json({
+        success: true,
 
-      if (item.user_id) {
-        await notifyUser(
-          item.user_id,
-          {
-            type: "quote_rejected",
-
-            title: "Request rejected",
-
-            message:
-              item.title ||
-              "Your investigation request was rejected.",
-
-            metadata: {
-              request_id: id,
-
-              target_page:
-                "client_quote_review",
-
-              action: "view_request",
-            },
-          },
-        )
-      }
-
-      return NextResponse.json(
-        updated.rows[0],
-      )
+        request: updated,
+      })
     }
 
     /*
      * =================================================
      * SUBMIT FOR SUPER ADMIN REVIEW
      * =================================================
-     *
-     * MAIN ADMINISTRATOR ACTION
-     *
-     * Client
-     *   ↓
-     * pending_review
-     *
-     * Administrator
-     *   ↓
-     * submit_for_super_admin_review
-     *
-     * pending_super_admin_review
-     *
-     *   ↓
-     *
-     * Super Administrator
-     *
-     * Client receives NOTHING at this stage.
      */
 
     if (
       action ===
       "submit_for_super_admin_review"
     ) {
-      /*
-       * =================================================
-       * AMOUNT
-       * =================================================
-       */
+      const amount =
+        Number(
+          body.approved_quote_amount,
+        )
 
-      const amount = Number(
-        body.approved_quote_amount,
-      )
-
-      /*
-       * =================================================
-       * ADMIN REASON
-       * =================================================
-       */
-
-      const reason = String(
-        body.reason ||
-          body.admin_quote_notes ||
-          body.quote_notes ||
-          "",
-      ).trim()
-
-      /*
-       * =================================================
-       * ESTIMATED COMPLETION
-       * =================================================
-       */
-
-const rawEstimatedStart =
-  body.approved_estimated_start ??
-  null
-
-const estimatedStart =
-  rawEstimatedStart
-    ? String(rawEstimatedStart).slice(0, 10)
-    : null
-
-      const rawEstimatedCompletion =
-        body.approved_completion_date ??
-        body.approved_estimated_completion ??
-        item.preferred_deadline ??
-        null
-
-      const estimatedCompletion =
-        rawEstimatedCompletion
-          ? String(rawEstimatedCompletion).slice(0, 10)
-          : null
-
-      /*
-       * =================================================
-       * VALIDATE AMOUNT
-       * =================================================
-       */
+      const reason =
+        clean(
+          body.reason ||
+            body.admin_quote_notes ||
+            body.quote_notes ||
+            "",
+        )
 
       if (
-        !Number.isFinite(amount) ||
+        !Number.isFinite(
+          amount,
+        ) ||
         amount <= 0
       ) {
         return NextResponse.json(
@@ -716,12 +1015,6 @@ const estimatedStart =
           },
         )
       }
-
-      /*
-       * =================================================
-       * VALIDATE ADMIN NOTE
-       * =================================================
-       */
 
       if (!reason) {
         return NextResponse.json(
@@ -737,54 +1030,89 @@ const estimatedStart =
 
       /*
        * =================================================
-       * VALIDATE DATE
+       * ESTIMATED DATES
        * =================================================
        */
 
-      if (
-  estimatedStart &&
-  !/^\d{4}-\d{2}-\d{2}$/.test(
-    estimatedStart,
-  )
-) {
-  return NextResponse.json(
-    {
-      error:
-        "Estimated start must be a valid date (YYYY-MM-DD).",
-    },
-    {
-      status: 400,
-    },
-  )
-}
+      let estimatedStart:
+        string | null = null
 
-      if (
-        estimatedCompletion &&
-        !/^\d{4}-\d{2}-\d{2}$/.test(
-          estimatedCompletion,
-        )
-      ) {
+      let estimatedCompletion:
+        string | null = null
+
+      try {
+        if (trainingRequest) {
+          /*
+           * =================================================
+           * TRAINING WORKFLOW
+           * =================================================
+           *
+           * Both professional_training and
+           * cybersecurity_training use the client's
+           * persisted training dates.
+           */
+
+          const suppliedStart =
+            validateOptionalDate(
+              body.approved_estimated_start,
+              "Estimated start",
+            )
+
+          const suppliedCompletion =
+            validateOptionalDate(
+              body.approved_estimated_completion ??
+                body.approved_completion_date,
+              "Estimated completion",
+            )
+
+          estimatedStart =
+            suppliedStart ??
+            clientTrainingStart
+
+          estimatedCompletion =
+            suppliedCompletion ??
+            clientTrainingCompletion
+        } else {
+          /*
+           * =================================================
+           * NON-TRAINING WORKFLOW
+           * =================================================
+           *
+           * This includes:
+           *
+           * - OSINT
+           * - investigations
+           * - security assessments
+           *
+           * Training dates are NEVER used here.
+           */
+
+          const suppliedCompletion =
+            validateOptionalDate(
+              body.approved_estimated_completion ??
+                body.approved_completion_date,
+              "Estimated completion",
+            )
+
+          const clientPreferredDeadline =
+            normalizeDate(
+              item.preferred_deadline,
+            )
+
+          estimatedStart =
+            null
+
+          estimatedCompletion =
+            suppliedCompletion ??
+            clientPreferredDeadline
+        }
+      } catch (error) {
         return NextResponse.json(
           {
             error:
-              "Estimated completion must be a valid date (YYYY-MM-DD).",
-          },
-          {
-            status: 400,
-          },
-        )
-      }
-
-      /*
-       * =================================================
-       * VALIDATE CURRENCY
-       * =================================================
-       */
-
-      if (!allowedCurrencies.has(currency)) {
-        return NextResponse.json(
-          {
-            error: "Unsupported currency.",
+              error instanceof Error
+                ? error.message
+                : "Invalid date.",
           },
           {
             status: 400,
@@ -802,17 +1130,20 @@ const estimatedStart =
         const negotiationCheck =
           await query<{
             id: string
+            status: string
           }>(
             `
-            SELECT id
+              SELECT
+                id,
+                status
 
-            FROM quote_negotiations
+              FROM quote_negotiations
 
-            WHERE id = $1
+              WHERE id = $1
 
-              AND request_id = $2
+                AND request_id = $2
 
-            LIMIT 1
+              LIMIT 1
             `,
             [
               negotiationId,
@@ -820,9 +1151,11 @@ const estimatedStart =
             ],
           )
 
-        if (
-          !negotiationCheck.rows[0]
-        ) {
+        const negotiation =
+          negotiationCheck
+            .rows[0]
+
+        if (!negotiation) {
           return NextResponse.json(
             {
               error:
@@ -833,80 +1166,114 @@ const estimatedStart =
             },
           )
         }
+
+        /*
+         * Only active negotiation states may be
+         * responded to by the Administrator.
+         */
+
+        const validNegotiationStatuses =
+          new Set([
+            "requested",
+            "reviewing",
+            "pending_super_admin_review",
+          ])
+
+        if (
+          !validNegotiationStatuses.has(
+            negotiation.status,
+          )
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "This negotiation is no longer available for administrator response.",
+            },
+            {
+              status: 409,
+            },
+          )
+        }
       }
 
       /*
        * =================================================
        * CENTRAL QUOTE WORKFLOW
        * =================================================
-       *
-       * reviewQuoteAsAdmin handles:
-       *
-       * - administrator validation
-       * - internal AI quote retrieval
-       * - administrator quote
-       * - quote version
-       * - request status
-       * - audit
-       * - Super Admin notification
-       *
-       * AI estimate remains INTERNAL.
        */
-const reviewed =
-  await reviewQuoteAsAdmin({
-    requestId: id,
-    actorUserId: auth.user.id,
-    actorRole: auth.user.role,
 
-    action: "adjust",
+      const reviewed =
+        await reviewQuoteAsAdmin({
+          requestId: id,
 
-    amount,
-    currency,
+          actorUserId:
+            auth.user.id,
 
-    notes: reason,
-    reason,
+          actorRole:
+            auth.user.role,
 
-    estimated_start:
-  estimatedStart,
+          action: "submit",
 
-    estimated_completion:
-      estimatedCompletion,
-  })
+          amount,
+
+          currency,
+
+          notes: reason,
+
+          reason,
+
+          estimated_start:
+            estimatedStart,
+
+          estimated_completion:
+            estimatedCompletion,
+        })
+
       /*
        * =================================================
        * UPDATE NEGOTIATION
        * =================================================
        */
 
-      if (negotiationId) {
+      if (
+        negotiationId
+      ) {
         await query(
           `
-          UPDATE quote_negotiations
+            UPDATE quote_negotiations
 
-          SET
-            administrator_recommendation = $3,
+            SET
+              administrator_recommendation = $3,
 
-            revised_quote_amount = $4,
+              revised_quote_amount = $4,
 
-            status =
-              'pending_super_admin_review'
+              status =
+                'pending_super_admin_review',
 
-          WHERE id = $1
+              updated_at = NOW()
 
-            AND request_id = $2
+            WHERE id = $1
+
+              AND request_id = $2
           `,
           [
             negotiationId,
+
             id,
+
             reason,
+
             amount,
           ],
         )
 
         await recordRequestAudit(
           id,
+
           auth.user.id,
+
           "administrator_responded_to_negotiation",
+
           {
             negotiation_id:
               negotiationId,
@@ -918,6 +1285,8 @@ const reviewed =
 
             recommendation:
               reason,
+
+            workflow,
           },
         )
       }
@@ -927,22 +1296,47 @@ const reviewed =
        * AUDIT
        * =================================================
        */
-await auditLog(
-  auth.user.id,
-  "request_submitted_for_super_admin_review",
-  request,
-  {
-    request_id: id,
-    approved_quote_amount: amount,
-    approved_quote_currency: currency,
-    negotiation_id: negotiationId,
-  },
-)
+
+      await auditLog(
+        auth.user.id,
+
+        "request_submitted_for_super_admin_review",
+
+        req,
+
+        {
+          request_id:
+            id,
+
+          approved_quote_amount:
+            amount,
+
+          approved_quote_currency:
+            currency,
+
+          estimated_start:
+            estimatedStart,
+
+          estimated_completion:
+            estimatedCompletion,
+
+          workflow,
+
+          training_request:
+            trainingRequest,
+
+          negotiation_id:
+            negotiationId,
+        },
+      )
 
       await recordRequestAudit(
         id,
+
         auth.user.id,
+
         "request_submitted_for_super_admin_review",
+
         {
           approved_quote_amount:
             amount,
@@ -950,8 +1344,16 @@ await auditLog(
           approved_quote_currency:
             currency,
 
+          estimated_start:
+            estimatedStart,
+
           estimated_completion:
             estimatedCompletion,
+
+          workflow,
+
+          training_request:
+            trainingRequest,
 
           negotiation_id:
             negotiationId,
@@ -962,12 +1364,8 @@ await auditLog(
 
       /*
        * =================================================
-       * RESPONSE
+       * SAFE RESPONSE
        * =================================================
-       *
-       * Do NOT expose AI quote.
-       *
-       * Only administrator proposal is returned.
        */
 
       return NextResponse.json({
@@ -978,12 +1376,17 @@ await auditLog(
         status:
           "pending_super_admin_review",
 
+        workflow,
+
         request: {
-          id: reviewed.id,
+          id:
+            reviewed.id,
 
-          title: reviewed.title,
+          title:
+            reviewed.title,
 
-          status: reviewed.status,
+          status:
+            reviewed.status,
 
           approved_quote_amount:
             reviewed.approved_quote_amount,
@@ -994,9 +1397,16 @@ await auditLog(
           approved_quote_notes:
             reviewed.approved_quote_notes,
 
+          approved_estimated_start:
+            reviewed.approved_estimated_start,
+
           approved_estimated_completion:
             reviewed.approved_estimated_completion,
 
+          workflow,
+
+          training_request:
+            trainingRequest,
         },
       })
     }
@@ -1025,10 +1435,12 @@ await auditLog(
 
     return NextResponse.json(
       {
-        error: "Failed to update request.",
+        error:
+          "Failed to update request.",
 
         details:
-          process.env.NODE_ENV === "development"
+          process.env.NODE_ENV ===
+          "development"
             ? error instanceof Error
               ? error.message
               : String(error)

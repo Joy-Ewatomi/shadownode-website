@@ -1,6 +1,7 @@
 import {getCurrentUser} from "@/lib/auth"
 import {redirect,notFound} from "next/navigation"
 import {query} from "@/lib/db"
+import {canUseInvestigationWorkspace, resolveCaseId} from "@/lib/investigation-workspace"
 type CaseUpdate = {
   id:string
   title:string
@@ -31,6 +32,16 @@ redirect("/login")
 
 
 const {id}=await params
+const caseId =
+await resolveCaseId(id)
+
+if(!caseId){
+notFound()
+}
+
+if(!(await canUseInvestigationWorkspace(user.id,user.role,caseId))){
+redirect("/dashboard")
+}
 
 
 
@@ -53,7 +64,7 @@ ORDER BY created_at DESC
 
 `,
 [
-id
+caseId
 ]
 )
 

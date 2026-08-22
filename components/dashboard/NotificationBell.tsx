@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, Search, Volume2, VolumeX, X } from "lucide-react"
+import { Bell, Volume2, VolumeX, X } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { getNotificationDestination } from "@/lib/notification-routing"
@@ -42,29 +42,39 @@ type RoleFilter =
   | "administrators"
   | "super_administrators"
 
-function formatNotificationType(type: string | null | undefined) {
+function formatNotificationType(
+  type: string | null | undefined,
+) {
   const normalized = (type || "system").replace(/_/g, " ")
 
-  return normalized.replace(/\b\w/g, (char) => char.toUpperCase())
+  return normalized.replace(/\b\w/g, (char) =>
+    char.toUpperCase(),
+  )
 }
 
-function formatRole(value: string | null | undefined) {
+function formatRole(
+  value: string | null | undefined,
+) {
   if (!value) return "Unknown"
 
   return value
     .split("_")
     .map(
       (part) =>
-        part.charAt(0).toUpperCase() + part.slice(1),
+        part.charAt(0).toUpperCase() +
+        part.slice(1),
     )
     .join(" ")
 }
 
-function getCaseNumber(notification: Notification) {
-  const metadata = (notification.metadata || {}) as Record<
-    string,
-    unknown
-  >
+function getCaseNumber(
+  notification: Notification,
+) {
+  const metadata =
+    (notification.metadata || {}) as Record<
+      string,
+      unknown
+    >
 
   const candidates = [
     metadata.case_number,
@@ -76,7 +86,8 @@ function getCaseNumber(notification: Notification) {
 
   const found = candidates.find(
     (value) =>
-      typeof value === "string" && value.trim(),
+      typeof value === "string" &&
+      value.trim(),
   )
 
   return found ? String(found) : "—"
@@ -85,7 +96,9 @@ function getCaseNumber(notification: Notification) {
 function getCategoryFilter(
   type: string | null | undefined,
 ): CategoryFilter {
-  const normalized = (type || "").toLowerCase()
+  const normalized = (
+    type || ""
+  ).toLowerCase()
 
   if (
     [
@@ -135,77 +148,60 @@ function getCategoryFilter(
 }
 
 /**
- * For Super Administrator:
+ * Determines whether a notification belongs to the
+ * currently authenticated user.
  *
- * They can SEE every notification.
+ * For normal users, the API already returns only their
+ * notifications.
  *
- * But the bell unread count only considers notifications
- * belonging to the Super Administrator themselves.
- *
- * This prevents:
- *
- * Admin A receives notification
- * Admin B receives notification
- *
- * from making the Super Admin bell show "2 unread"
- * when those notifications are not actionable/readable
- * by the Super Administrator.
+ * For Super Administrator, the API returns the bureau-wide
+ * notification stream, so we must distinguish their own
+ * notifications from everyone else's.
  */
 function isOwnNotification(
   notification: Notification,
   user: User | null,
 ) {
-  if (!user) return false
-
-  if (user.role !== "super_administrator") {
-    return true
-  }
-
-  if (!user.id) {
-    return false
-  }
+  if (!user?.id) return false
 
   return notification.recipient_id === user.id
 }
 
 export default function NotificationBell() {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] =
+    useState<User | null>(null)
 
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] =
+    useState(false)
 
-  const [notifications, setNotifications] = useState<
-    Notification[]
-  >([])
+  const [notifications, setNotifications] =
+    useState<Notification[]>([])
 
-  const [soundEnabled, setSoundEnabled] = useState(false)
+  const [soundEnabled, setSoundEnabled] =
+    useState(false)
 
-  const [searchTerm, setSearchTerm] = useState("")
+  const notificationsRef =
+    useRef<Notification[]>([])
 
-  const [statusFilter, setStatusFilter] =
-    useState<StatusFilter>("all")
-
-  const [categoryFilter, setCategoryFilter] =
-    useState<CategoryFilter>("all")
-
-  const [roleFilter, setRoleFilter] =
-    useState<RoleFilter>("all")
-
-  const notificationsRef = useRef<Notification[]>([])
-
-  const soundEnabledRef = useRef(false)
+  const soundEnabledRef =
+    useRef(false)
 
   /**
    * ---------------------------------------------------------
    * LOAD CURRENT USER
    * ---------------------------------------------------------
    */
+
   useEffect(() => {
     async function loadUser() {
       try {
-        const res = await fetch("/api/auth/me", {
-          credentials: "include",
-          cache: "no-store",
-        })
+        const res = await fetch(
+          "/api/auth/me",
+          {
+            credentials: "include",
+            cache: "no-store",
+          },
+        )
 
         if (!res.ok) return
 
@@ -213,7 +209,10 @@ export default function NotificationBell() {
 
         setUser(data.user)
       } catch (error) {
-        console.error("USER LOAD ERROR", error)
+        console.error(
+          "USER LOAD ERROR",
+          error,
+        )
       }
     }
 
@@ -225,42 +224,43 @@ export default function NotificationBell() {
    * LOAD NOTIFICATIONS
    * ---------------------------------------------------------
    */
+
   async function loadNotifications() {
     try {
-      const res = await fetch("/api/notifications", {
-        credentials: "include",
-        cache: "no-store",
-      })
+      const res = await fetch(
+        "/api/notifications",
+        {
+          credentials: "include",
+          cache: "no-store",
+        },
+      )
 
       if (!res.ok) return
 
-      const next: Notification[] = await res.json()
+      const next: Notification[] =
+        await res.json()
 
-      const previous = notificationsRef.current
+      const previous =
+        notificationsRef.current
 
-      /**
-       * For the Super Administrator:
-       *
-       * Only THEIR OWN notifications are considered unread.
-       *
-       * Everyone else's notifications are visible,
-       * but they do not ring the bell.
-       */
-      const previousUnread = previous.filter(
-        (item) =>
-          !item.read &&
-          isOwnNotification(item, user),
-      ).length
+      const previousUnread =
+        previous.filter(
+          (item) =>
+            !item.read &&
+            isOwnNotification(item, user),
+        ).length
 
-      const nextUnread = next.filter(
-        (item) =>
-          !item.read &&
-          isOwnNotification(item, user),
-      ).length
+      const nextUnread =
+        next.filter(
+          (item) =>
+            !item.read &&
+            isOwnNotification(item, user),
+        ).length
 
       /**
-       * Only ring when a notification belonging to the
-       * current user becomes newly unread.
+       * Only play the sound when a new unread
+       * notification belonging to the current
+       * user appears.
        */
       if (
         soundEnabledRef.current &&
@@ -277,64 +277,148 @@ export default function NotificationBell() {
 
       setNotifications(next)
     } catch (error) {
-      console.error("NOTIFICATION LOAD ERROR", error)
+      console.error(
+        "NOTIFICATION LOAD ERROR",
+        error,
+      )
     }
   }
+
+  /**
+   * ---------------------------------------------------------
+   * POLLING
+   * ---------------------------------------------------------
+   */
+
+  useEffect(() => {
+    void loadNotifications()
+
+    const timer =
+      window.setInterval(() => {
+        void loadNotifications()
+      }, 5000)
+
+    return () =>
+      window.clearInterval(timer)
+  }, [user])
+
+  const isSuperAdministrator =
+    user?.role === "super_administrator" ||
+    user?.role === "super-administrator"
+
+  /**
+   * ---------------------------------------------------------
+   * UNREAD COUNT
+   * ---------------------------------------------------------
+   *
+   * This is what appears on the bell badge.
+   *
+   * Only unread notifications belonging to the
+   * current user count.
+   */
+
+  const unread = useMemo(() => {
+    return notifications.filter(
+      (item) =>
+        !item.read &&
+        isOwnNotification(item, user),
+    ).length
+  }, [notifications, user])
+
+  /**
+   * ---------------------------------------------------------
+   * BELL NOTIFICATIONS
+   * ---------------------------------------------------------
+   *
+   * IMPORTANT:
+   *
+   * The bell ONLY displays unread notifications.
+   *
+   * Read notifications remain available through
+   * the full Notifications page/sidebar.
+   */
+
+  const bellNotifications = useMemo(() => {
+    return notifications
+      .filter(
+        (item) =>
+          !item.read &&
+          isOwnNotification(item, user),
+      )
+      .sort(
+        (left, right) =>
+          new Date(
+            right.created_at,
+          ).getTime() -
+          new Date(
+            left.created_at,
+          ).getTime(),
+      )
+  }, [notifications, user])
 
   /**
    * ---------------------------------------------------------
    * MARK READ
    * ---------------------------------------------------------
-   *
-   * Super Administrator notifications are read-only.
-   *
-   * Therefore we DO NOT call PATCH for them.
    */
-  async function markRead(id: string) {
-    if (user?.role === "super_administrator") {
-      return
-    }
 
-    try {
-      const res = await fetch("/api/notifications", {
+async function markRead(id: string) {
+  try {
+    const res = await fetch(
+      `/api/notifications/${id}`,
+      {
         method: "PATCH",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id }),
-      })
+      },
+    )
 
-      if (!res.ok) return
-
-      setNotifications((items) => {
-        const next = items.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                read: true,
-              }
-            : item,
-        )
-
-        notificationsRef.current = next
-
-        return next
-      })
-    } catch (error) {
-      console.error("NOTIFICATION MARK READ ERROR", error)
+    if (!res.ok) {
+      console.error(
+        "NOTIFICATION MARK READ FAILED",
+        await res.text(),
+      )
+      return false
     }
+
+    setNotifications((items) => {
+      const next = items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              read: true,
+            }
+          : item,
+      )
+
+      notificationsRef.current = next
+
+      return next
+    })
+
+    return true
+  } catch (error) {
+    console.error(
+      "NOTIFICATION MARK READ ERROR",
+      error,
+    )
+
+    return false
   }
+}
 
   /**
    * ---------------------------------------------------------
    * DELETE
    * ---------------------------------------------------------
-   *
-   * Super Administrator is read-only as well.
    */
-  async function deleteNotification(id: string) {
-    if (user?.role === "super_administrator") {
+
+  async function deleteNotification(
+    id: string,
+  ) {
+    if (isSuperAdministrator) {
       return
     }
 
@@ -354,7 +438,8 @@ export default function NotificationBell() {
           (item) => item.id !== id,
         )
 
-        notificationsRef.current = next
+        notificationsRef.current =
+          next
 
         return next
       })
@@ -368,128 +453,14 @@ export default function NotificationBell() {
 
   /**
    * ---------------------------------------------------------
-   * POLLING
+   * TYPE STYLING
    * ---------------------------------------------------------
    */
-  useEffect(() => {
-    void loadNotifications()
 
-    const timer = window.setInterval(() => {
-      void loadNotifications()
-    }, 5000)
-
-    return () => window.clearInterval(timer)
-  }, [user])
-
-  const isSuperAdministrator =
-    user?.role === "super_administrator"
-
-  /**
-   * ---------------------------------------------------------
-   * BELL UNREAD COUNT
-   * ---------------------------------------------------------
-   *
-   * IMPORTANT:
-   *
-   * Super Administrator:
-   *   only their own unread notifications count.
-   *
-   * Normal users:
-   *   all returned notifications belong to them,
-   *   therefore all unread notifications count.
-   */
-  const unread = useMemo(() => {
-    return notifications.filter(
-      (item) =>
-        !item.read &&
-        isOwnNotification(item, user),
-    ).length
-  }, [notifications, user])
-
-  /**
-   * ---------------------------------------------------------
-   * FILTERED NOTIFICATIONS
-   * ---------------------------------------------------------
-   */
-  const visibleNotifications = useMemo(() => {
-    const sorted = [...notifications].sort(
-      (left, right) =>
-        new Date(right.created_at).getTime() -
-        new Date(left.created_at).getTime(),
-    )
-
-    const searchValue = searchTerm
-      .trim()
-      .toLowerCase()
-
-    return sorted.filter((item) => {
-      const matchesSearch =
-        !searchValue ||
-        [
-          item.title,
-          item.message,
-          item.type,
-          item.recipient_name,
-          item.recipient_email,
-          item.recipient_role,
-          getCaseNumber(item),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(searchValue)
-
-      /**
-       * Super Admin can still filter/read ALL notifications.
-       *
-       * Status filtering here is about the actual database
-       * notification status, not bell eligibility.
-       */
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "unread"
-          ? !item.read
-          : item.read)
-
-      const matchesCategory =
-        categoryFilter === "all" ||
-        getCategoryFilter(item.type) ===
-          categoryFilter
-
-      const normalizedRecipientRole = (
-        item.recipient_role || ""
-      ).toLowerCase()
-
-      const matchesRole =
-        !isSuperAdministrator ||
-        roleFilter === "all" ||
-        (roleFilter === "clients" &&
-          normalizedRecipientRole === "client") ||
-        (roleFilter === "administrators" &&
-          normalizedRecipientRole ===
-            "administrator") ||
-        (roleFilter ===
-          "super_administrators" &&
-          normalizedRecipientRole ===
-            "super_administrator")
-
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesCategory &&
-        matchesRole
-      )
-    })
-  }, [
-    categoryFilter,
-    notifications,
-    roleFilter,
-    searchTerm,
-    statusFilter,
-    isSuperAdministrator,
-  ])
-
-  const typeClass: Record<string, string> = {
+  const typeClass: Record<
+    string,
+    string
+  > = {
     assignment:
       "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
 
@@ -526,8 +497,14 @@ export default function NotificationBell() {
 
   return (
     <div className="relative">
+      {/* =====================================================
+          BELL
+      ===================================================== */}
+
       <button
-        onClick={() => setOpen((value) => !value)}
+        onClick={() =>
+          setOpen((value) => !value)
+        }
         className="relative flex h-10 w-10 items-center justify-center rounded-md border border-[#143b28] bg-[#06110f] text-white/75 hover:border-[#20dc73]/50 hover:text-[#20dc73]"
         aria-label="Notifications"
       >
@@ -540,34 +517,41 @@ export default function NotificationBell() {
         ) : null}
       </button>
 
+      {/* =====================================================
+          BELL DROPDOWN
+      ===================================================== */}
+
       {open ? (
         <div className="absolute right-0 z-50 mt-2 w-[26rem] overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] shadow-2xl">
+
           {/* HEADER */}
+
           <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
             <div>
               <p className="font-semibold text-white">
                 Notifications
               </p>
 
-              {isSuperAdministrator ? (
-                <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-white/35">
-                  Bureau-wide view • read only
-                </p>
-              ) : null}
+              <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-white/35">
+                Unread notifications
+              </p>
             </div>
 
             <div className="flex items-center gap-2">
               {!isSuperAdministrator ? (
                 <button
                   onClick={() => {
-                    setSoundEnabled((value) => {
-                      const next = !value
+                    setSoundEnabled(
+                      (value) => {
+                        const next =
+                          !value
 
-                      soundEnabledRef.current =
-                        next
+                        soundEnabledRef.current =
+                          next
 
-                      return next
-                    })
+                        return next
+                      },
+                    )
                   }}
                   className="rounded p-1 text-white/45 hover:bg-white/5 hover:text-white"
                   aria-label={
@@ -590,282 +574,177 @@ export default function NotificationBell() {
             </div>
           </div>
 
-          {/* FILTERS */}
-          <div className="border-b border-[#143b28] px-4 py-3">
-            <div className="flex items-center gap-2 rounded-md border border-[#143b28] bg-black/20 px-3 py-2">
-              <Search className="h-4 w-4 text-white/45" />
+          {/* =================================================
+              UNREAD NOTIFICATIONS ONLY
+          ================================================= */}
 
-              <input
-                value={searchTerm}
-                onChange={(event) =>
-                  setSearchTerm(event.target.value)
-                }
-                placeholder="Search case, recipient, email, title, message"
-                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
-              />
-
-              {searchTerm ? (
-                <button
-                  onClick={() =>
-                    setSearchTerm("")
-                  }
-                  className="text-white/45 hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
-
-            {/* STATUS */}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(
-                ["all", "unread", "read"] as StatusFilter[]
-              ).map((value) => (
-                <button
-                  key={value}
-                  onClick={() =>
-                    setStatusFilter(value)
-                  }
-                  className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.12em] ${
-                    statusFilter === value
-                      ? "border-[#20dc73]/40 bg-[#20dc73]/15 text-[#20dc73]"
-                      : "border-[#143b28] text-white/55 hover:border-[#20dc73]/30 hover:text-white"
-                  }`}
-                >
-                  {value === "all"
-                    ? "All"
-                    : value === "unread"
-                      ? "Unread"
-                      : "Read"}
-                </button>
-              ))}
-            </div>
-
-            {/* CATEGORY */}
-            <div className="mt-2 flex flex-wrap gap-2">
-              {(
-                [
-                  "all",
-                  "requests",
-                  "quotes",
-                  "payments",
-                  "cases",
-                  "system",
-                ] as CategoryFilter[]
-              ).map((value) => (
-                <button
-                  key={value}
-                  onClick={() =>
-                    setCategoryFilter(value)
-                  }
-                  className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.12em] ${
-                    categoryFilter === value
-                      ? "border-[#20dc73]/40 bg-[#20dc73]/15 text-[#20dc73]"
-                      : "border-[#143b28] text-white/55 hover:border-[#20dc73]/30 hover:text-white"
-                  }`}
-                >
-                  {value === "all"
-                    ? "All"
-                    : value.charAt(0).toUpperCase() +
-                      value.slice(1)}
-                </button>
-              ))}
-            </div>
-
-            {/* SUPER ADMIN ROLE FILTER */}
-            {isSuperAdministrator ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(
-                  [
-                    "all",
-                    "clients",
-                    "administrators",
-                    "super_administrators",
-                  ] as RoleFilter[]
-                ).map((value) => (
-                  <button
-                    key={value}
-                    onClick={() =>
-                      setRoleFilter(value)
-                    }
-                    className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.12em] ${
-                      roleFilter === value
-                        ? "border-[#20dc73]/40 bg-[#20dc73]/15 text-[#20dc73]"
-                        : "border-[#143b28] text-white/55 hover:border-[#20dc73]/30 hover:text-white"
-                    }`}
-                  >
-                    {value === "all"
-                      ? "All"
-                      : value === "clients"
-                        ? "Clients"
-                        : value === "administrators"
-                          ? "Administrators"
-                          : "Super Administrators"}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          {/* NOTIFICATIONS */}
           <div className="max-h-[28rem] overflow-y-auto">
-            {visibleNotifications.length ? (
-              visibleNotifications.map((item) => {
-                const notificationHref = `${
-                  getNotificationDestination(item)
-                }${
-                  item.id
-                    ? `?notificationId=${item.id}`
-                    : ""
-                }`
-
-                const recipientLabel =
-                  item.recipient_name ||
-                  item.recipient_email ||
-                  formatRole(item.recipient_role)
-
-                const ownNotification =
-                  isOwnNotification(item, user)
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`border-b border-[#143b28] px-4 py-3 transition hover:bg-white/5 ${
-                      item.read
-                        ? "opacity-65"
+            {bellNotifications.length ? (
+              bellNotifications.map(
+                (item) => {
+                  const notificationHref =
+                    `${getNotificationDestination(
+                      item,
+                    )}${
+                      item.id
+                        ? `?notificationId=${item.id}`
                         : ""
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Link
-                        href={notificationHref}
-                        onClick={() => {
-                          setOpen(false)
+                    }`
 
-                          /**
-                           * Super Admin notifications are
-                           * strictly read-only.
-                           *
-                           * We also don't mark notifications
-                           * belonging to other users as read.
-                           */
-                          if (
-                            !isSuperAdministrator &&
-                            !item.read
-                          ) {
-                            void markRead(item.id)
-                          }
+                  const recipientLabel =
+                    item.recipient_name ||
+                    item.recipient_email ||
+                    formatRole(
+                      item.recipient_role,
+                    )
 
-                          /**
-                           * For a Super Admin's own notification:
-                           * still keep it read-only.
-                           */
-                          if (
-                            isSuperAdministrator &&
-                            ownNotification
-                          ) {
-                            return
-                          }
-                        }}
-                        className="flex-1"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-white">
-                              {item.title}
-                            </p>
+                  return (
+                    <div
+                      key={item.id}
+                      className="border-b border-[#143b28] px-4 py-4 transition hover:bg-white/5"
+                    >
+                  {isSuperAdministrator && !isOwnNotification(item, user) ? (
+  <div className="block cursor-default">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white">
+          {item.title}
+        </p>
 
-                            <p className="mt-1 text-[11px] text-white/55">
-                              Recipient: {recipientLabel}
-                            </p>
+        <p className="mt-1 text-[11px] text-white/55">
+          {item.message || "No message provided."}
+        </p>
 
-                            <p className="mt-1 text-[11px] text-white/55">
-                              Type:{" "}
-                              {formatNotificationType(
-                                item.type,
-                              )}
-                            </p>
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
+          <span>
+            Type: {formatNotificationType(item.type)}
+          </span>
 
-                            <p className="mt-1 text-[11px] text-white/55">
-                              Message:{" "}
-                              {item.message ||
-                                "No message provided."}
-                            </p>
+          <span>
+            Case: {getCaseNumber(item)}
+          </span>
+        </div>
 
-                            <p className="mt-1 text-[11px] text-white/55">
-                              Case:{" "}
-                              {getCaseNumber(item)}
-                            </p>
+        <p className="mt-1 text-[10px] text-white/30">
+          Recipient: {recipientLabel}
+        </p>
 
-                            <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-white/35">
-                              {new Date(
-                                item.created_at,
-                              ).toLocaleString()}
-                            </p>
+        <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
+          {new Date(item.created_at).toLocaleString()}
+        </p>
 
-                            <p className="mt-1 text-[11px] text-white/45">
-                              Status:{" "}
-                              {item.read
-                                ? "Read"
-                                : "Unread"}
-                            </p>
+        <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/25">
+          Bureau record • Not assigned to you
+        </p>
+      </div>
 
-                            {isSuperAdministrator &&
-                            !ownNotification ? (
-                              <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-white/30">
-                                Bureau notification • does
-                                not affect bell
-                              </p>
-                            ) : null}
-                          </div>
+      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/20" />
+    </div>
 
-                          {!item.read &&
-                          ownNotification ? (
-                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#20dc73]" />
-                          ) : null}
-                        </div>
+    <span
+      className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
+        typeClass[item.type] || typeClass.system
+      }`}
+    >
+      {formatNotificationType(item.type)}
+    </span>
+  </div>
+) : (
+  <Link
+    href={notificationHref}
+  onClick={async (event) => {
+  event.preventDefault()
 
-                        <span
-                          className={`mt-2 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
-                            typeClass[item.type] ||
-                            typeClass.system
-                          }`}
-                        >
-                          {formatNotificationType(
-                            item.type,
-                          )}
-                        </span>
-                      </Link>
+  setOpen(false)
 
-                      {/* 
-                        Normal users may delete their notifications.
-                        Super Administrator cannot.
-                      */}
-                      {!isSuperAdministrator ? (
-                        <button
-                          onClick={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
+  const success = await markRead(item.id)
 
-                            void deleteNotification(
-                              item.id,
-                            )
-                          }}
-                          className="rounded border border-[#143b28] px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-white/60 hover:border-[#20dc73]/40 hover:text-white"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
+  if (success) {
+    window.location.href = notificationHref
+  }
+}}
+    className="block"
+  >
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white">
+          {item.title}
+        </p>
+
+        <p className="mt-1 text-[11px] text-white/55">
+          {item.message || "No message provided."}
+        </p>
+
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
+          <span>
+            Type: {formatNotificationType(item.type)}
+          </span>
+
+          <span>
+            Case: {getCaseNumber(item)}
+          </span>
+        </div>
+
+        {isSuperAdministrator ? (
+          <p className="mt-1 text-[10px] text-white/30">
+            Recipient: {recipientLabel}
+          </p>
+        ) : null}
+
+        <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
+          {new Date(item.created_at).toLocaleString()}
+        </p>
+      </div>
+
+      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#20dc73]" />
+    </div>
+
+    <span
+      className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
+        typeClass[item.type] || typeClass.system
+      }`}
+    >
+      {formatNotificationType(item.type)}
+    </span>
+  </Link>
+)}
                     </div>
-                  </div>
-                )
-              })
+                  )
+                },
+              )
             ) : (
-              <div className="px-4 py-8 text-center text-sm text-white/45">
-                No notifications match the current
-                filters.
+              <div className="px-4 py-10 text-center">
+                <Bell className="mx-auto h-7 w-7 text-white/20" />
+
+                <p className="mt-3 text-sm text-white/45">
+                  No unread notifications
+                </p>
+
+                <p className="mt-1 text-xs text-white/25">
+                  You&apos;re all caught up.
+                </p>
               </div>
             )}
+          </div>
+
+          {/* =================================================
+              VIEW ALL
+          ================================================= */}
+
+          <div className="border-t border-[#143b28] px-4 py-3">
+            <Link
+              href="/dashboard/notifications"
+              onClick={() =>
+                setOpen(false)
+              }
+              className="flex items-center justify-between text-xs uppercase tracking-[0.12em] text-[#20dc73] hover:text-white"
+            >
+              <span>
+                View all notifications
+              </span>
+
+              <span>→</span>
+            </Link>
           </div>
         </div>
       ) : null}

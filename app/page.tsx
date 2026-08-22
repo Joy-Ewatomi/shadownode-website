@@ -113,13 +113,7 @@ export default function Home() {
 
   return (
     <PageTransition>
-      <main className="relative min-h-screen overflow-x-hidden bg-transparent text-foreground">
-        {/* Background tint sits above the global canvas without hiding the node network. */}
-        <div className="fixed inset-0 z-0 pointer-events-none">
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.2)_92%)]" />
-          <div className="absolute inset-x-0 top-24 h-px bg-primary/10" />
-        </div>
-
+      <main className="relative min-h-screen overflow-x-hidden text-foreground">
         {/* Global Navigation Bar */}
         <nav className="relative sticky top-0 z-30 border-b border-primary/10 bg-background/82 backdrop-blur-xl">
           <div className="mx-auto flex h-24 max-w-[1480px] items-center justify-between px-5 sm:px-8 lg:px-16">

@@ -33,14 +33,11 @@ export async function GET() {
             'user_id', u.id,
             'username', u.username,
             'user_role', u.role,
-            'assignment_role', COALESCE(ca.assignment_role, u.role, 'investigator'),
-            'status', COALESCE(ca.status, 'assigned'),
+            'assignment_role', COALESCE(u.role, 'investigator'),
+            'status', CASE WHEN ca.removed_at IS NULL THEN 'assigned' ELSE 'removed' END,
             'assigned_by', ca.assigned_by,
-            'accepted_at', ca.accepted_at,
-            'rejected_at', ca.rejected_at,
-            'rejection_reason', ca.rejection_reason,
-            'deadline', ca.deadline,
-            'notes', ca.notes
+            'assigned_at', ca.assigned_at,
+            'removed_at', ca.removed_at
           )
         ) FILTER (WHERE ca.id IS NOT NULL) AS assignments
       FROM cases c
@@ -97,12 +94,12 @@ export async function POST(req: NextRequest) {
     const assignment = await query(
       `
       INSERT INTO case_assignments
-        (case_id, assigned_to, assignment_role, status, assigned_by, deadline, notes)
+        (case_id, assigned_to, assigned_by)
       VALUES
-        ($1, $2, $3, 'assigned', $4, $5, $6)
+        ($1, $2, $3)
       RETURNING id
       `,
-      [case_id, profile.rows[0].id, assignment_role || "investigator", auth.user?.id || null, deadline || null, notes || null],
+      [case_id, profile.rows[0].id, auth.user?.id || null],
     )
 
     await query(
@@ -115,13 +112,12 @@ export async function POST(req: NextRequest) {
 
     await query(
       `
-      INSERT INTO notifications (user_id, case_id, assignment_id, type, title, message, metadata)
-      VALUES ($1, $2, $3, 'case_assignment', 'New case assignment', $4, $5::jsonb)
+      INSERT INTO notifications (user_id, case_id, type, title, message, metadata)
+      VALUES ($1, $2, 'case_assignment', 'New case assignment', $3, $4::jsonb)
       `,
       [
         user_id,
         case_id,
-        assignment.rows[0].id,
         `You have been assigned as ${assignment_role || "investigator"}.`,
         JSON.stringify({ assignment_role: assignment_role || "investigator", deadline, assigned_by: auth.user?.id }),
       ],

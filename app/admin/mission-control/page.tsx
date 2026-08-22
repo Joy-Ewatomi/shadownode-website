@@ -84,7 +84,7 @@ export default function MissionControlPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#020604] p-6 text-white">
+    <main className="min-h-screen bg-transparent p-6 text-white">
       <header className="mb-6 border-b border-[#143b28] pb-6">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">Mission Control</p>
         <h1 className="mt-2 text-3xl font-bold">ShadowNode Operations Bureau</h1>

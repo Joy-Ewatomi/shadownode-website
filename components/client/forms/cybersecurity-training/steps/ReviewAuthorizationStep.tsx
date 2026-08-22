@@ -141,7 +141,6 @@ export default function ReviewAuthorizationStep({
         .join(" · ") || "Custom duration not provided"
     : form.training_duration?.trim() || "Not selected"
 
-
   const contact =
     form.communication_email?.trim() ||
     form.communication_whatsapp?.trim() ||
@@ -153,9 +152,23 @@ export default function ReviewAuthorizationStep({
     form.training_additional_requirements?.trim() ||
     "None provided"
 
+  /*
+   * IMPORTANT:
+   *
+   * break-words + [overflow-wrap:anywhere]
+   * prevents long unbroken user input from
+   * escaping the summary container.
+   */
+  const valueClass =
+    "min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-white"
+
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6 min-w-0">
+      {/* =====================================================
+          HEADER
+      ====================================================== */}
+
+      <div className="min-w-0">
         <h2 className="text-lg font-semibold text-white">
           Review & Authorization
         </h2>
@@ -165,175 +178,241 @@ export default function ReviewAuthorizationStep({
         </p>
       </div>
 
-      <div className="space-y-5 rounded-md border border-[#143b28] bg-black p-5">
-        <div className="flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 text-[#20dc73]" />
+      {/* =====================================================
+          SUMMARY
+      ====================================================== */}
 
-          <h3 className="font-semibold text-white">
+      <div className="min-w-0 space-y-5 rounded-md border border-[#143b28] bg-black p-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-[#20dc73]" />
+
+          <h3 className="min-w-0 font-semibold text-white">
             Training Request Summary
           </h3>
         </div>
 
-        <div className="grid gap-5 text-sm">
+        <div className="grid min-w-0 gap-5 text-sm">
 
-          <div>
-            <p className="text-white/40">Service</p>
-            <p className="whitespace-pre-wrap text-white">
+          {/* SERVICE */}
+
+          <div className="min-w-0">
+            <p className="text-white/40">
+              Service
+            </p>
+
+            <p className={valueClass}>
               {service}
             </p>
           </div>
 
-          <div>
-            <p className="text-white/40">Organization</p>
-            <p className="text-white">
+          {/* ORGANIZATION */}
+
+          <div className="min-w-0">
+            <p className="text-white/40">
+              Organization
+            </p>
+
+            <p className={valueClass}>
               {form.training_organization_name?.trim() ||
                 "Not provided"}
             </p>
           </div>
 
-          <div>
+          {/* PARTICIPANTS */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Expected Learners
             </p>
-            <p className="text-white">
+
+            <p className={valueClass}>
               {form.training_participant_count ||
                 "Not provided"}
             </p>
           </div>
 
-          <div>
+          {/* SKILL LEVEL */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Skill Level
             </p>
-            <p className="capitalize text-white">
+
+            <p className="break-words capitalize text-white">
               {skillLevel}
             </p>
           </div>
 
-          <div>
+          {/* AUDIENCE */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Training Audience
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {audience}
             </p>
           </div>
 
-          <div>
-            <p className="text-white/40">Industry</p>
-            <p className="whitespace-pre-wrap text-white">
+          {/* INDUSTRY */}
+
+          <div className="min-w-0">
+            <p className="text-white/40">
+              Industry
+            </p>
+
+            <p className={valueClass}>
               {industry}
             </p>
           </div>
 
-          <div>
+          {/* =================================================
+              TRAINING GOAL
+              ================================================= */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Training Goal
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {goal}
             </p>
           </div>
 
-          <div>
+          {/* OBJECTIVES */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Training Objectives
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {objectives}
             </p>
           </div>
 
-          <div>
+          {/* TOPICS */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Training Topics
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {topics}
             </p>
           </div>
 
-          <div>
+          {/* FORMAT */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Training Format
             </p>
-            <p className="text-white">
+
+            <p className={valueClass}>
               {format}
             </p>
           </div>
 
-          <div>
+          {/* DURATION */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Training Duration
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {duration}
             </p>
           </div>
 
-          <div>
+          {/* EXPECTED OUTCOME */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Expected Outcome
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {outcomes}
             </p>
           </div>
 
-          <div>
+          {/* MATERIALS */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Training Materials
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {materials}
             </p>
           </div>
 
-          <div>
+          {/* START DATE */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Preferred Start Date
             </p>
-            <p className="text-white">
+
+            <p className="break-words text-white">
               {form.training_preferred_start_date ||
                 "Not provided"}
             </p>
           </div>
 
-          <div>
+          {/* COMPLETION DATE */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Preferred Completion Date
             </p>
-            <p className="text-white">
+
+            <p className="break-words text-white">
               {form.training_preferred_completion_date ||
                 "Not provided"}
             </p>
           </div>
 
-          <div>
+          {/* TIMELINE */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Timeline Flexible
             </p>
-            <p className="text-white">
+
+            <p className="break-words text-white">
               {form.training_timeline_flexible
                 ? "Yes"
                 : "No"}
             </p>
           </div>
 
-          <div>
+          {/* ADDITIONAL REQUIREMENTS */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Additional Requirements
             </p>
-            <p className="whitespace-pre-wrap text-white">
+
+            <p className={valueClass}>
               {additionalRequirements}
             </p>
           </div>
 
-          <div>
+          {/* COUNTRY */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Client Country
             </p>
-            <p className="text-white">
+
+            <p className={valueClass}>
               {isCustom(form.client_country)
                 ? form.custom_country?.trim() ||
                   "Custom country not provided"
@@ -342,34 +421,47 @@ export default function ReviewAuthorizationStep({
             </p>
           </div>
 
-          <div>
+          {/* CURRENCY */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Preferred Currency
             </p>
-            <p className="text-white">
+
+            <p className="break-words text-white">
               {form.preferred_currency?.trim() ||
                 "Not selected"}
             </p>
           </div>
 
-          <div>
+          {/* CONTACT */}
+
+          <div className="min-w-0">
             <p className="text-white/40">
               Contact
             </p>
-            <p className="text-white">
+
+            <p className={valueClass}>
               {contact}
             </p>
           </div>
-
         </div>
       </div>
 
+      {/* =====================================================
+          AUTHORIZATION
+      ====================================================== */}
+
       <label
         className="
-          flex cursor-pointer
-          items-start gap-3
+          flex
+          min-w-0
+          cursor-pointer
+          items-start
+          gap-3
           rounded-md
-          border border-[#143b28]
+          border
+          border-[#143b28]
           p-4
         "
       >
@@ -384,12 +476,23 @@ export default function ReviewAuthorizationStep({
           }
           className="
             mt-1
-            h-4 w-4
+            h-4
+            w-4
+            shrink-0
             accent-[#20dc73]
           "
         />
 
-        <span className="text-sm text-white/70">
+        <span
+          className="
+            min-w-0
+            break-words
+            [overflow-wrap:anywhere]
+            text-sm
+            leading-6
+            text-white/70
+          "
+        >
           I confirm that the information provided is accurate
           and I authorize ShadowNode Intelligence Bureau to
           review this cybersecurity training request.

@@ -87,8 +87,8 @@ export default function QuoteCard({
 <div className="shrink-0">
   <RequestStatusBadge
     status={
-      request.status ||
-      "pending_review"
+   request.status ||
+  "pending_admin_review"
     }
   />
 </div>

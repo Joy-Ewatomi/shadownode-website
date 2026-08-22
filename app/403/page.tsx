@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function ForbiddenPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-6 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-transparent px-6 text-white">
       <div className="max-w-md text-center">
         <p className="text-sm uppercase tracking-[0.35em] text-[#7bf69f]">Access denied</p>
         <h1 className="mt-4 text-4xl font-semibold">403</h1>

@@ -184,9 +184,10 @@ export type InvestigationFormData = {
   /* Step 5 — Investigation Scope */
   investigation_depth: string
 
-  /* Step 6 — Priority & Timeline */
-  urgency: string
-  preferred_deadline: string
+
+ /* Step 6 — Priority & OSINT Completion Date */
+urgency: string
+osint_completion_date: string
 
   /* Step 7 — Communication & Country */
   communication_method: string
@@ -274,7 +275,7 @@ function createEmptyForm(): InvestigationFormData {
     investigation_depth: "standard",
 
     urgency: "normal",
-    preferred_deadline: "",
+   osint_completion_date: "",
 
     communication_method: "portal_notification",
     communication_email: "",
@@ -1023,19 +1024,28 @@ function renderStep3() {
           </div>
         </div>
 
-        {/* Preferred Deadline */}
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-            <Calendar className="mr-1.5 inline h-3 w-3" />
-            Preferred Deadline (optional)
-          </label>
-          <input
-            type="date"
-            value={form.preferred_deadline}
-            onChange={(e) => set({ preferred_deadline: e.target.value })}
-            className="h-10 w-full rounded-md border border-[#143b28] bg-black px-4 text-sm text-white outline-none focus:border-[#20dc73]/50"
-          />
-        </div>
+     {/* OSINT Completion Date */}
+<div>
+  <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
+    <Calendar className="mr-1.5 inline h-3 w-3" />
+    OSINT Completion Date (optional)
+  </label>
+
+  <input
+    type="date"
+    value={form.osint_completion_date}
+    onChange={(e) =>
+      set({
+        osint_completion_date: e.target.value,
+      })
+    }
+    className="h-10 w-full rounded-md border border-[#143b28] bg-black px-4 text-sm text-white outline-none focus:border-[#20dc73]/50"
+  />
+
+  <p className="mt-1 text-xs text-white/30">
+    The date by which you would ideally like the OSINT investigation completed.
+  </p>
+</div>
       </div>
     )
   }

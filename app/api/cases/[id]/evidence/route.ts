@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auditLog } from "@/lib/auth"
 import {
   optionalText,
+  profileIdForUser,
   recordInvestigationTimeline,
   requireInvestigationWorkspace,
 } from "@/lib/investigation-workspace"
@@ -53,8 +54,10 @@ export async function GET(
         ff.updated_at,
         au.username AS uploaded_by
       FROM forensic_files ff
+      LEFT JOIN user_profiles up
+        ON up.id = ff.uploaded_by
       LEFT JOIN app_users au
-        ON au.id = ff.uploaded_by
+        ON au.id = up.user_id
       WHERE ff.case_id=$1
       ORDER BY ff.created_at DESC
       `,
@@ -125,15 +128,24 @@ export async function POST(
       For now we only store the path.
     */
 
-   
-const storagePath =
-`${access.caseId}/${Date.now()}-${uploaded.name}`
+    const storagePath =
+      `${access.caseId}/${Date.now()}-${uploaded.name}`
 
-await uploadEvidenceFile(
-    storagePath,
-    buffer,
-    uploaded.type || "application/octet-stream"
-)
+    await uploadEvidenceFile(
+      storagePath,
+      buffer,
+      uploaded.type || "application/octet-stream"
+    )
+
+    const uploaderProfileId =
+      await profileIdForUser(access.user.id)
+
+    if (!uploaderProfileId) {
+      return NextResponse.json(
+        { error: "User profile missing" },
+        { status: 500 }
+      )
+    }
 
     const custody = [
       {
@@ -175,7 +187,7 @@ await uploadEvidenceFile(
         uploaded.size,
         uploaded.type || "application/octet-stream",
         hash,
-        access.user.id,
+        uploaderProfileId,
         storagePath,
         evidenceType,
         description,

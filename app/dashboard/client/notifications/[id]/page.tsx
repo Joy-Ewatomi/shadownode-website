@@ -173,8 +173,11 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
   </div>
 )}
           <div className="flex flex-wrap gap-3">
-            <Link
-  href={getNotificationDestination(notification)}
+<Link
+  href={
+    getNotificationDestination(notification) ||
+    "/dashboard/client/notifications"
+  }
   className="rounded bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black"
 >
   Open workflow page

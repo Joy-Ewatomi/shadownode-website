@@ -58,7 +58,7 @@ export default function RequestStatusBadge({
   status: string
 }) {
   const normalizedStatus =
-    status || "pending_review"
+    status || "pending_admin_review"
 
   const label =
     STATUS_LABELS[

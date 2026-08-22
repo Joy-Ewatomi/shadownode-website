@@ -264,7 +264,7 @@ if(s.training_timeline_flexible){
   }
 
   return (
-    <main className="min-h-screen bg-[#000604] p-6 text-white">
+    <main className="min-h-screen bg-transparent p-6 text-white">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[#143b28] pb-5">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">Admin Review</p>

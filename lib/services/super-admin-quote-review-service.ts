@@ -472,6 +472,34 @@ const finalQuote =
       finalCompletion,
   })
 
+
+const requestCurrencyResult = await query<{
+  preferred_currency: string | null
+}>(
+  `
+    SELECT preferred_currency
+    FROM requests
+    WHERE id = $1
+    LIMIT 1
+  `,
+  [input.requestId],
+)
+
+const clientCurrency =
+  requestCurrencyResult.rows[0]?.preferred_currency
+    ?.trim()
+    .toUpperCase() || "USD"
+
+const sourceCurrency =
+  String(
+    input.currency ??
+      adminQuote?.currency ??
+      request.approved_quote_currency ??
+      "USD",
+  )
+    .trim()
+    .toUpperCase()
+
   /*
    * =========================================================
    * SAVE SUPER ADMIN REVIEW METADATA

@@ -1,4 +1,5 @@
 import { query } from "@/lib/db"
+import { notifySuperAdmins, notifyUser } from "@/lib/services/notification-service"
 
 type PaystackTransaction = {
   id?: number
@@ -366,6 +367,55 @@ export async function verifyAndCompletePaystackPayment(
     )
 
     await query("COMMIT")
+
+    const caseInfo =
+      await query<{
+        case_number: string | null
+        title: string | null
+        client_user_id: string | null
+      }>(
+        `
+        SELECT
+          c.case_number,
+          c.title,
+          up.user_id AS client_user_id
+        FROM cases c
+        LEFT JOIN user_profiles up
+          ON up.id = c.client_profile_id
+        WHERE c.id = $1
+        LIMIT 1
+        `,
+        [current.case_id],
+      ).catch(() => ({ rows: [] }))
+
+    const caseRow = caseInfo.rows[0]
+
+    await notifyUser(caseRow?.client_user_id, {
+      caseId: current.case_id,
+      type: "payment_confirmed",
+      title: "Payment confirmed",
+      message: "Your payment has been confirmed and your investigation is now active.",
+      metadata: {
+        request_id: current.request_id,
+        case_id: current.case_id,
+        payment_id: current.id,
+        target_page: "case",
+        action: "open_case",
+      },
+    })
+
+    await notifySuperAdmins({
+      type: "case_ready_for_assignment",
+      title: "Case ready for assignment",
+      message: `${caseRow?.case_number || "A case"} is paid and ready for investigator assignment.`,
+      metadata: {
+        request_id: current.request_id,
+        case_id: current.case_id,
+        payment_id: current.id,
+        target_page: "case_assignment",
+        action: "assign_investigator",
+      },
+    })
 
     return {
       success: true,

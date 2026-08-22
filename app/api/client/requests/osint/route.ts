@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     /*
      * ========================================================
-     * OSINT ONLY
+     * BASIC OSINT REQUEST
      * ========================================================
      */
 
@@ -96,8 +96,26 @@ export async function POST(request: NextRequest) {
       body.additional_notes,
     )
 
-    const preferred_deadline =
-      nullableDate(body.preferred_deadline)
+    /*
+     * ========================================================
+     * OSINT COMPLETION DATE
+     * ========================================================
+     *
+     * This is the date requested by the CLIENT.
+     *
+     * It is intentionally separate from:
+     *
+     * approved_estimated_completion
+     *
+     * which is the final date approved by the
+     * administrator/super administrator.
+     *
+     * preferred_deadline is kept as a backward-compatible
+     * fallback for older clients/forms.
+     */
+
+   const osint_completion_date =
+  nullableDate(body.osint_completion_date)
 
     /*
      * ========================================================
@@ -137,6 +155,12 @@ export async function POST(request: NextRequest) {
     const communication_signal = clean(
       body.communication_signal,
     )
+
+    /*
+     * ========================================================
+     * CLIENT
+     * ========================================================
+     */
 
     const client_country = clean(
       body.client_country,
@@ -243,10 +267,10 @@ export async function POST(request: NextRequest) {
       description:
         `${investigation_objective} ${description}`,
       urgency,
-      timeline:
-        preferred_deadline
-          ? "deadline"
-          : urgency,
+     timeline:
+  osint_completion_date
+    ? "completion_date"
+    : urgency,
       investigationDepth:
         investigation_depth,
       confidentialityLevel:
@@ -255,15 +279,45 @@ export async function POST(request: NextRequest) {
         subject_type,
     })
 
+    /*
+     * IMPORTANT:
+     * Persist BOTH the complete JSON analysis AND
+     * the individual AI fields used by the admin UI.
+     */
+
     const aiAnalysis =
       JSON.stringify(analysis)
 
-    const aiStatus = "analyzed"
+    const aiPriceEstimate =
+      Number(analysis.suggestedPrice || 0)
 
-    const timeline =
-      preferred_deadline
-        ? "deadline"
-        : urgency
+    const aiStatus =
+      "analyzed"
+
+    const aiComplexity =
+      analysis.complexity || null
+
+    const aiEstimatedHours =
+      Number(analysis.estimatedHours || 0)
+
+    const aiSuggestedService =
+      analysis.suggestedService || null
+
+    const aiSuggestedPriority =
+      analysis.suggestedPriority ||
+      urgency ||
+      "normal"
+
+    const aiConfidence =
+      Number(analysis.confidence || 0)
+
+    const aiReasoning =
+      analysis.reasoning || null
+
+   const timeline =
+  osint_completion_date
+    ? "completion_date"
+    : urgency
 
     /*
      * ========================================================
@@ -299,311 +353,346 @@ export async function POST(request: NextRequest) {
 
     /*
      * ========================================================
-     * INSERT OSINT REQUEST
+     * INSERT
      * ========================================================
      */
 
-   const inserted = await query<{
-  id: string
-  case_number: string
-}>(
-  `
-    INSERT INTO requests (
-      user_id,
-      client_email,
-      contact_method,
-      token,
-      is_anonymous,
-      case_number,
+    const inserted = await query<{
+      id: string
+      case_number: string
+    }>(
+      `
+      INSERT INTO requests (
+        user_id,
+        client_email,
+        contact_method,
+        token,
+        is_anonymous,
+        case_number,
 
-      title,
-      description,
-      custom_description,
-      service_type,
-      status,
+        title,
+        description,
+        custom_description,
+        service_type,
+        status,
 
-      final_price,
-      price_notes,
-      ai_analysis,
+        final_price,
+        price_notes,
 
-      created_at,
-      updated_at,
+        ai_analysis,
+        ai_price_estimate,
+        ai_status,
+        ai_complexity,
+        ai_estimated_hours,
+        ai_suggested_service,
+        ai_suggested_priority,
+        ai_confidence,
+        ai_reasoning,
 
-      currency,
-      priority,
+        created_at,
+        updated_at,
 
-      approved_quote_amount,
-      approved_quote_currency,
-      approved_quote_notes,
-      approved_estimated_completion,
+        currency,
+        priority,
 
-      quote_sent_at,
-      client_decision_at,
-      declined_reason,
+        approved_quote_amount,
+        approved_quote_currency,
+        approved_quote_notes,
+        approved_estimated_completion,
 
-      preferred_deadline,
+        quote_sent_at,
+        client_decision_at,
+        declined_reason,
 
-      investigation_objective,
-      subject_type,
+        osint_completion_date,
 
-      subject_full_name,
-      subject_known_usernames,
-      subject_emails,
-      subject_phone_numbers,
-      subject_location,
-      subject_organization,
-      subject_websites,
+        investigation_objective,
+        subject_type,
 
-      subject_company_name,
-      subject_company_website,
-      subject_company_country,
-      subject_company_industry,
+        subject_full_name,
+        subject_known_usernames,
+        subject_emails,
+        subject_phone_numbers,
+        subject_location,
+        subject_organization,
+        subject_websites,
 
-      subject_domain,
-      subject_url,
-      subject_ip_address,
-      subject_platform,
+        subject_company_name,
+        subject_company_website,
+        subject_company_country,
+        subject_company_industry,
 
-      existing_information,
-      investigation_depth,
+        subject_domain,
+        subject_url,
+        subject_ip_address,
+        subject_platform,
 
-      confidentiality_level,
-      authorization_confirmed,
+        existing_information,
+        investigation_depth,
 
-      communication_method,
-      communication_email,
-      communication_country_code,
-      communication_phone,
-      communication_whatsapp,
-      communication_signal,
+        confidentiality_level,
+        authorization_confirmed,
 
-      client_country,
-      preferred_currency,
+        communication_method,
+        communication_email,
+        communication_country_code,
+        communication_phone,
+        communication_whatsapp,
+        communication_signal,
 
-      supporting_links,
-      evidence_uploads,
-      additional_notes,
+        client_country,
+        preferred_currency,
 
-      subject_approximate_age,
-      subject_height,
-      subject_weight,
-      subject_hair_color,
-      subject_eye_color,
-      subject_skin_tone,
-      subject_distinguishing_marks,
-      subject_nationality,
-      subject_languages_spoken,
-      subject_last_known_address,
-      subject_last_known_occupation,
-      subject_additional_usernames,
-      subject_gaming_ids,
-      subject_cryptocurrency_wallets,
-      subject_domain_names,
-      subject_ip_addresses,
-      subject_vehicle_registration,
+        supporting_links,
+        evidence_uploads,
+        additional_notes,
 
-      timeline
+        subject_approximate_age,
+        subject_height,
+        subject_weight,
+        subject_hair_color,
+        subject_eye_color,
+        subject_skin_tone,
+        subject_distinguishing_marks,
+        subject_nationality,
+        subject_languages_spoken,
+        subject_last_known_address,
+        subject_last_known_occupation,
+        subject_additional_usernames,
+        subject_gaming_ids,
+        subject_cryptocurrency_wallets,
+        subject_domain_names,
+        subject_ip_addresses,
+        subject_vehicle_registration,
+
+        timeline
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        false,
+        $5,
+
+        $6,
+        $7,
+        $8,
+        $9,
+        'pending_admin_review',
+
+        $10,
+        $11,
+
+        $12,
+        $13,
+        $14,
+        $15,
+        $16,
+        $17,
+        $18,
+        $19,
+        $20,
+
+        NOW(),
+        NOW(),
+
+        $21,
+        $22,
+
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+
+        NULL,
+        NULL,
+        NULL,
+
+        $23,
+
+        $24,
+        $25,
+
+        $26,
+        $27,
+        $28,
+        $29,
+        $30,
+        $31,
+        $32,
+
+        $33,
+        $34,
+        $35,
+        $36,
+
+        $37,
+        $38,
+        $39,
+        $40,
+
+        $41,
+        $42,
+
+        $43,
+        $44,
+
+        $45,
+        $46,
+        $47,
+        $48,
+        $49,
+        $50,
+
+        $51,
+        $52,
+
+        $53,
+        $54,
+        $55,
+
+        $56,
+        $57,
+        $58,
+        $59,
+        $60,
+        $61,
+        $62,
+        $63,
+        $64,
+        $65,
+        $66,
+        $67,
+        $68,
+        $69,
+        $70,
+        $71,
+        $72,
+
+        $73
+      )
+
+      RETURNING
+        id,
+        case_number
+      `,
+      [
+        // 1-5
+        user.id,
+        user.email,
+        contact_method,
+        nanoid(32),
+        trackingNumber,
+
+        // 6-9
+        title,
+        description,
+        nullableString(custom_description),
+        service_type,
+
+        // 10-11
+        finalPrice,
+        priceNotes,
+
+        // 12-20 AI
+        aiAnalysis,
+        aiPriceEstimate,
+        aiStatus,
+        aiComplexity,
+        aiEstimatedHours,
+        aiSuggestedService,
+        aiSuggestedPriority,
+        aiConfidence,
+        aiReasoning,
+
+        // 21-22
+        preferred_currency,
+        aiSuggestedPriority,
+
+        // 23
+        osint_completion_date,
+
+        // 24-25
+        nullableString(investigation_objective),
+        nullableString(subject_type),
+
+        // 26-32 SUBJECT
+        nullableString(body.subject_full_name),
+        nullableString(body.subject_known_usernames),
+        nullableString(body.subject_emails),
+        nullableString(body.subject_phone_numbers),
+        nullableString(body.subject_location),
+        nullableString(body.subject_organization),
+        nullableString(body.subject_websites),
+
+        // 33-36 COMPANY
+        nullableString(body.subject_company_name),
+        nullableString(body.subject_company_website),
+        nullableString(body.subject_company_country),
+        nullableString(body.subject_company_industry),
+
+        // 37-40 TECHNICAL SUBJECT
+        nullableString(body.subject_domain),
+        nullableString(body.subject_url),
+        nullableString(body.subject_ip_address),
+        nullableString(body.subject_platform),
+
+        // 41-42 INVESTIGATION
+        nullableString(existing_information),
+        investigation_depth,
+
+        // 43-44 SECURITY
+        confidentiality_level,
+        authorization_confirmed,
+
+        // 45-50 COMMUNICATION
+        communication_method,
+        nullableString(communication_email),
+        nullableString(communication_country_code),
+        nullableString(communication_phone),
+        nullableString(communication_whatsapp),
+        nullableString(communication_signal),
+
+        // 51-52 CLIENT
+        client_country,
+        preferred_currency,
+
+        // 53-55 JSON / NOTES
+        supportingLinks,
+        evidenceUploads,
+        nullableString(additional_notes),
+
+        // 56-72 SUBJECT DETAILS
+        nullableString(body.subject_approximate_age),
+        nullableString(body.subject_height),
+        nullableString(body.subject_weight),
+        nullableString(body.subject_hair_color),
+        nullableString(body.subject_eye_color),
+        nullableString(body.subject_skin_tone),
+        nullableString(body.subject_distinguishing_marks),
+        nullableString(body.subject_nationality),
+        nullableString(body.subject_languages_spoken),
+        nullableString(body.subject_last_known_address),
+        nullableString(body.subject_last_known_occupation),
+        nullableString(body.subject_additional_usernames),
+        nullableString(body.subject_gaming_ids),
+        nullableString(body.subject_cryptocurrency_wallets),
+        nullableString(body.subject_domain_names),
+        nullableString(body.subject_ip_addresses),
+        nullableString(body.subject_vehicle_registration),
+
+        // 73
+        timeline,
+      ],
     )
 
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      false,
-      $5,
-
-      $6,
-      $7,
-      $8,
-      $9,
-      'pending_review',
-
-      NULL,
-      $10,
-      $11,
-
-      NOW(),
-      NOW(),
-
-      $12,
-      $13,
-
-      NULL,
-      NULL,
-      NULL,
-      NULL,
-
-      NULL,
-      NULL,
-      NULL,
-
-      $14,
-
-      $15,
-      $16,
-
-      $17,
-      $18,
-      $19,
-      $20,
-      $21,
-      $22,
-      $23,
-
-      $24,
-      $25,
-      $26,
-      $27,
-
-      $28,
-      $29,
-      $30,
-      $31,
-
-      $32,
-      $33,
-
-      $34,
-      $35,
-
-      $36,
-      $37,
-      $38,
-      $39,
-      $40,
-      $41,
-
-      $42,
-      $43,
-
-      $44,
-      $45,
-      $46,
-
-      $47,
-      $48,
-      $49,
-      $50,
-      $51,
-      $52,
-      $53,
-      $54,
-      $55,
-      $56,
-      $57,
-      $58,
-      $59,
-      $60,
-      $61,
-      $62,
-      $63,
-
-      $64
-    )
-
-    RETURNING
-      id,
-      case_number
-  `,
-  [
-    // 1-5
-    user.id,
-    user.email,
-    contact_method,
-    nanoid(32),
-    trackingNumber,
-
-    // 6-9
-    title,
-    description,
-    nullableString(custom_description),
-    service_type,
-
-    // 10-11
-    priceNotes,
-    aiAnalysis,
-
-    // 12-13
-    preferred_currency,
-    analysis.suggestedPriority,
-
-    // 14
-    preferred_deadline,
-
-    // 15-16
-    nullableString(investigation_objective),
-    nullableString(subject_type),
-
-    // 17-23 SUBJECT
-    nullableString(body.subject_full_name),
-    nullableString(body.subject_known_usernames),
-    nullableString(body.subject_emails),
-    nullableString(body.subject_phone_numbers),
-    nullableString(body.subject_location),
-    nullableString(body.subject_organization),
-    nullableString(body.subject_websites),
-
-    // 24-27 COMPANY
-    nullableString(body.subject_company_name),
-    nullableString(body.subject_company_website),
-    nullableString(body.subject_company_country),
-    nullableString(body.subject_company_industry),
-
-    // 28-31 TECHNICAL SUBJECT
-    nullableString(body.subject_domain),
-    nullableString(body.subject_url),
-    nullableString(body.subject_ip_address),
-    nullableString(body.subject_platform),
-
-    // 32-33 INVESTIGATION
-    nullableString(existing_information),
-    investigation_depth,
-
-    // 34-35 SECURITY
-    confidentiality_level,
-    authorization_confirmed,
-
-    // 36-41 COMMUNICATION
-    communication_method,
-    nullableString(communication_email),
-    nullableString(communication_country_code),
-    nullableString(communication_phone),
-    nullableString(communication_whatsapp),
-    nullableString(communication_signal),
-
-    // 42-43 CLIENT
-    client_country,
-    preferred_currency,
-
-    // 44-46 JSON / NOTES
-    supportingLinks,
-    evidenceUploads,
-    nullableString(additional_notes),
-
-    // 47-63 SUBJECT DETAILS
-    nullableString(body.subject_approximate_age),
-    nullableString(body.subject_height),
-    nullableString(body.subject_weight),
-    nullableString(body.subject_hair_color),
-    nullableString(body.subject_eye_color),
-    nullableString(body.subject_skin_tone),
-    nullableString(body.subject_distinguishing_marks),
-    nullableString(body.subject_nationality),
-    nullableString(body.subject_languages_spoken),
-    nullableString(body.subject_last_known_address),
-    nullableString(body.subject_last_known_occupation),
-    nullableString(body.subject_additional_usernames),
-    nullableString(body.subject_gaming_ids),
-    nullableString(body.subject_cryptocurrency_wallets),
-    nullableString(body.subject_domain_names),
-    nullableString(body.subject_ip_addresses),
-    nullableString(body.subject_vehicle_registration),
-
-    // 64
-    timeline,
-  ],
-)
+    /*
+     * ========================================================
+     * REQUEST ID
+     * ========================================================
+     */
 
     const requestId =
       inserted.rows[0].id
@@ -619,10 +708,11 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       role: "ai",
       source: "ai",
-      price: Number(analysis.suggestedPrice),
+      price: aiPriceEstimate,
       currency: preferred_currency,
-      estimated_completion: preferred_deadline,
-      reasoning: analysis.reasoning,
+      estimated_completion:
+        osint_completion_date,
+      reasoning: aiReasoning,
       status: "generated",
     })
 
@@ -634,20 +724,23 @@ export async function POST(request: NextRequest) {
 
     await notifyAdmins({
       type: "client_request",
-      title: "New OSINT investigation request",
+      title:
+        "New OSINT investigation request",
       message:
         `${user.username || user.email} submitted ` +
         `${title} (${trackingNumber}) - ${service_type}`,
       metadata: {
         request_id: requestId,
-        target_page: "admin_request_review",
-        action: "review_request",
+        target_page:
+          "admin_request_review",
+        action:
+          "review_request",
       },
     })
 
     /*
      * ========================================================
-     * AUDIT
+     * REQUEST AUDIT
      * ========================================================
      */
 
@@ -657,232 +750,432 @@ export async function POST(request: NextRequest) {
       "ai_estimate_generated",
       {
         suggested_price:
-          analysis.suggestedPrice,
+          aiPriceEstimate,
         confidence:
-          analysis.confidence,
+          aiConfidence,
+        complexity:
+          aiComplexity,
+        estimated_hours:
+          aiEstimatedHours,
+        suggested_service:
+          aiSuggestedService,
+        suggested_priority:
+          aiSuggestedPriority,
       },
     )
 
- await auditLog(
-  user.id,
-  "client_request_created",
-  request,
-  {
-    request_id: requestId,
-    service_type,
-    category: "osint",
-  },
-)
-
     /*
      * ========================================================
-     * RETURN
+     * AUDIT LOG
      * ========================================================
      */
 
- const created = await query(
-  `
-  SELECT
-    id,
-    case_number,
-    title,
-    service_type,
-    description,
-    status,
-    priority,
-    timeline,
+    await auditLog(
+      user.id,
+      "client_request_created",
+      request,
+      {
+        request_id: requestId,
+        service_type,
+        category: "osint",
+      },
+    )
 
-    approved_quote_amount,
-    approved_quote_currency,
-    approved_quote_notes,
-    approved_estimated_completion,
+    /*
+     * ========================================================
+     * RETURN CREATED REQUEST
+     * ========================================================
+     */
 
-    preferred_deadline,
+    const created = await query(
+      `
+      SELECT
+        id,
+        case_number,
+        title,
+        description,
+        custom_description,
+        service_type,
+        status,
 
-    investigation_objective,
-    subject_type,
+        final_price,
+        price_notes,
 
-    subject_full_name,
-    subject_known_usernames,
-    subject_emails,
-    subject_phone_numbers,
-    subject_location,
-    subject_organization,
-    subject_websites,
+        ai_analysis,
+        ai_price_estimate,
+        ai_status,
+        ai_complexity,
+        ai_estimated_hours,
+        ai_suggested_service,
+        ai_suggested_priority,
+        ai_confidence,
+        ai_reasoning,
 
-    subject_company_name,
-    subject_company_website,
-    subject_company_country,
-    subject_company_industry,
+        currency,
+        priority,
+        timeline,
 
-    subject_domain,
-    subject_url,
-    subject_ip_address,
-    subject_platform,
+        approved_quote_amount,
+        approved_quote_currency,
+        approved_quote_notes,
+        approved_estimated_completion,
 
-    existing_information,
-    investigation_depth,
+        osint_completion_date,
 
-    confidentiality_level,
-    authorization_confirmed,
+        investigation_objective,
+        subject_type,
 
-    communication_method,
-    communication_email,
-    communication_country_code,
-    communication_phone,
-    communication_whatsapp,
-    communication_signal,
+        subject_full_name,
+        subject_known_usernames,
+        subject_emails,
+        subject_phone_numbers,
+        subject_location,
+        subject_organization,
+        subject_websites,
 
-    client_country,
-    preferred_currency,
+        subject_company_name,
+        subject_company_website,
+        subject_company_country,
+        subject_company_industry,
 
-    supporting_links,
-    evidence_uploads,
-    additional_notes,
+        subject_domain,
+        subject_url,
+        subject_ip_address,
+        subject_platform,
 
-    subject_approximate_age,
-    subject_height,
-    subject_weight,
-    subject_hair_color,
-    subject_eye_color,
-    subject_skin_tone,
-    subject_distinguishing_marks,
-    subject_nationality,
-    subject_languages_spoken,
-    subject_last_known_address,
-    subject_last_known_occupation,
-    subject_additional_usernames,
-    subject_gaming_ids,
-    subject_cryptocurrency_wallets,
-    subject_domain_names,
-    subject_ip_addresses,
-    subject_vehicle_registration,
+        existing_information,
+        investigation_depth,
 
-    quote_sent_at,
-    client_decision_at,
-    declined_reason,
+        confidentiality_level,
+        authorization_confirmed,
 
-    created_at,
-    updated_at
+        communication_method,
+        communication_email,
+        communication_country_code,
+        communication_phone,
+        communication_whatsapp,
+        communication_signal,
 
-  FROM requests
+        client_country,
+        preferred_currency,
 
-  WHERE id = $1
-    AND user_id = $2
+        supporting_links,
+        evidence_uploads,
+        additional_notes,
 
-  LIMIT 1
-  `,
-  [requestId, user.id],
-)
+        subject_approximate_age,
+        subject_height,
+        subject_weight,
+        subject_hair_color,
+        subject_eye_color,
+        subject_skin_tone,
+        subject_distinguishing_marks,
+        subject_nationality,
+        subject_languages_spoken,
+        subject_last_known_address,
+        subject_last_known_occupation,
+        subject_additional_usernames,
+        subject_gaming_ids,
+        subject_cryptocurrency_wallets,
+        subject_domain_names,
+        subject_ip_addresses,
+        subject_vehicle_registration,
 
-if (!created.rows[0]) {
-  throw new Error("Request was created but could not be loaded")
-}
+        quote_sent_at,
+        client_decision_at,
+        declined_reason,
 
-const row = created.rows[0]
+        created_at,
+        updated_at
 
-const clientRequest = {
-  id: row.id,
-  case_number: row.case_number ?? null,
-  title: row.title ?? null,
-  description: row.description ?? null,
-  custom_description: row.custom_description ?? null,
-  service_type: row.service_type ?? null,
-  status: row.status ?? "pending_review",
+      FROM requests
 
-  currency: row.currency ?? null,
-  priority: row.priority ?? null,
+      WHERE id = $1
+        AND user_id = $2
 
-  preferred_deadline:
-    row.preferred_deadline ?? null,
+      LIMIT 1
+      `,
+      [requestId, user.id],
+    )
 
-  investigation_objective:
-    row.investigation_objective ?? null,
+    if (!created.rows[0]) {
+      throw new Error(
+        "Request was created but could not be loaded",
+      )
+    }
 
-  evidence_uploads:
-    row.evidence_uploads ?? null,
+    const row = created.rows[0]
 
-  additional_notes:
-    row.additional_notes ?? null,
+    return NextResponse.json(
+      {
+        id: row.id,
 
-  subject_approximate_age:
-    row.subject_approximate_age ?? null,
+        case_number:
+          row.case_number ?? null,
 
-  subject_height:
-    row.subject_height ?? null,
+        title:
+          row.title ?? null,
 
-  subject_weight:
-    row.subject_weight ?? null,
+        description:
+          row.description ?? null,
 
-  subject_hair_color:
-    row.subject_hair_color ?? null,
+        custom_description:
+          row.custom_description ?? null,
 
-  subject_eye_color:
-    row.subject_eye_color ?? null,
+        service_type:
+          row.service_type ?? null,
 
-  subject_skin_tone:
-    row.subject_skin_tone ?? null,
+        status:
+          row.status ?? "pending_admin_review",
 
-  subject_distinguishing_marks:
-    row.subject_distinguishing_marks ?? null,
+        final_price:
+          row.final_price ?? null,
 
-  subject_nationality:
-    row.subject_nationality ?? null,
+        price_notes:
+          row.price_notes ?? null,
 
-  subject_languages_spoken:
-    row.subject_languages_spoken ?? null,
+        ai_analysis:
+          row.ai_analysis ?? null,
 
-  subject_last_known_address:
-    row.subject_last_known_address ?? null,
+        ai_price_estimate:
+          row.ai_price_estimate ?? 0,
 
-  subject_last_known_occupation:
-    row.subject_last_known_occupation ?? null,
+        ai_status:
+          row.ai_status ?? "pending",
 
-  subject_additional_usernames:
-    row.subject_additional_usernames ?? null,
+        ai_complexity:
+          row.ai_complexity ?? null,
 
-  subject_gaming_ids:
-    row.subject_gaming_ids ?? null,
+        ai_estimated_hours:
+          row.ai_estimated_hours ?? 0,
 
-  subject_cryptocurrency_wallets:
-    row.subject_cryptocurrency_wallets ?? null,
+        ai_suggested_service:
+          row.ai_suggested_service ?? null,
 
-  subject_domain_names:
-    row.subject_domain_names ?? null,
+        ai_suggested_priority:
+          row.ai_suggested_priority ?? null,
 
-  subject_ip_addresses:
-    row.subject_ip_addresses ?? null,
+        ai_confidence:
+          row.ai_confidence ?? 0,
 
-  subject_vehicle_registration:
-    row.subject_vehicle_registration ?? null,
+        ai_reasoning:
+          row.ai_reasoning ?? null,
 
-  quote_sent_at:
-    row.quote_sent_at ?? null,
+        currency:
+          row.currency ?? null,
 
-  client_decision_at:
-    row.client_decision_at ?? null,
+        priority:
+          row.priority ?? null,
 
-  declined_reason:
-    row.declined_reason ?? null,
+        timeline:
+          row.timeline ?? null,
 
-  created_at: row.created_at,
-  updated_at: row.updated_at,
-}
+        approved_quote_amount:
+          row.approved_quote_amount ?? null,
 
-return NextResponse.json(
-  clientRequest,
-  { status: 201 },
-)
+        approved_quote_currency:
+          row.approved_quote_currency ?? null,
 
+        approved_quote_notes:
+          row.approved_quote_notes ?? null,
+
+        approved_estimated_completion:
+          row.approved_estimated_completion ?? null,
+
+        osint_completion_date:
+          row.osint_completion_date ?? null,
+
+        /*
+         * Backward compatibility for older
+         * frontend code that still expects
+         * preferred_deadline.
+         */
+        preferred_deadline:
+          row.osint_completion_date ?? null,
+
+        investigation_objective:
+          row.investigation_objective ?? null,
+
+        subject_type:
+          row.subject_type ?? null,
+
+        subject_full_name:
+          row.subject_full_name ?? null,
+
+        subject_known_usernames:
+          row.subject_known_usernames ?? null,
+
+        subject_emails:
+          row.subject_emails ?? null,
+
+        subject_phone_numbers:
+          row.subject_phone_numbers ?? null,
+
+        subject_location:
+          row.subject_location ?? null,
+
+        subject_organization:
+          row.subject_organization ?? null,
+
+        subject_websites:
+          row.subject_websites ?? null,
+
+        subject_company_name:
+          row.subject_company_name ?? null,
+
+        subject_company_website:
+          row.subject_company_website ?? null,
+
+        subject_company_country:
+          row.subject_company_country ?? null,
+
+        subject_company_industry:
+          row.subject_company_industry ?? null,
+
+        subject_domain:
+          row.subject_domain ?? null,
+
+        subject_url:
+          row.subject_url ?? null,
+
+        subject_ip_address:
+          row.subject_ip_address ?? null,
+
+        subject_platform:
+          row.subject_platform ?? null,
+
+        existing_information:
+          row.existing_information ?? null,
+
+        investigation_depth:
+          row.investigation_depth ?? null,
+
+        confidentiality_level:
+          row.confidentiality_level ?? null,
+
+        authorization_confirmed:
+          row.authorization_confirmed ?? false,
+
+        communication_method:
+          row.communication_method ?? null,
+
+        communication_email:
+          row.communication_email ?? null,
+
+        communication_country_code:
+          row.communication_country_code ?? null,
+
+        communication_phone:
+          row.communication_phone ?? null,
+
+        communication_whatsapp:
+          row.communication_whatsapp ?? null,
+
+        communication_signal:
+          row.communication_signal ?? null,
+
+        client_country:
+          row.client_country ?? null,
+
+        preferred_currency:
+          row.preferred_currency ?? null,
+
+        supporting_links:
+          row.supporting_links ?? null,
+
+        evidence_uploads:
+          row.evidence_uploads ?? null,
+
+        additional_notes:
+          row.additional_notes ?? null,
+
+        subject_approximate_age:
+          row.subject_approximate_age ?? null,
+
+        subject_height:
+          row.subject_height ?? null,
+
+        subject_weight:
+          row.subject_weight ?? null,
+
+        subject_hair_color:
+          row.subject_hair_color ?? null,
+
+        subject_skin_tone:
+          row.subject_skin_tone ?? null,
+
+        subject_distinguishing_marks:
+          row.subject_distinguishing_marks ?? null,
+
+        subject_nationality:
+          row.subject_nationality ?? null,
+
+        subject_languages_spoken:
+          row.subject_languages_spoken ?? null,
+
+        subject_last_known_address:
+          row.subject_last_known_address ?? null,
+
+        subject_last_known_occupation:
+          row.subject_last_known_occupation ?? null,
+
+        subject_additional_usernames:
+          row.subject_additional_usernames ?? null,
+
+        subject_gaming_ids:
+          row.subject_gaming_ids ?? null,
+
+       subject_cryptocurrency_wallets:
+          row.subject_cryptocurrency_wallets ?? null,  
+
+        subject_domain_names:
+          row.subject_domain_names ?? null,
+
+        subject_ip_addresses:
+          row.subject_ip_addresses ?? null,
+
+        subject_vehicle_registration:
+          row.subject_vehicle_registration ?? null,
+
+        quote_sent_at:
+          row.quote_sent_at ?? null,
+
+        client_decision_at:
+          row.client_decision_at ?? null,
+
+        declined_reason:
+          row.declined_reason ?? null,
+
+        created_at:
+          row.created_at,
+
+        updated_at:
+          row.updated_at,
+      },
+      { status: 201 },
+    )
   } catch (error) {
     console.error(
       "OSINT REQUEST POST ERROR",
       error,
     )
 
+    if (error instanceof Error) {
+      console.error(
+        "MESSAGE:",
+        error.message,
+      )
+
+      console.error(
+        "STACK:",
+        error.stack,
+      )
+    }
+
     return NextResponse.json(
       {
-        error: "Failed to create OSINT request",
+        error:
+          "Failed to create OSINT request",
         details:
           error instanceof Error
             ? error.message

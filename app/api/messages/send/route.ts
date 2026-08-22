@@ -1,10 +1,80 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
+import { query } from "@/lib/db"
+import { profileIdForUser } from "@/lib/investigation-workspace"
 
-export async function GET() {
-  return NextResponse.json(
-    {
-      success: true,
-      message: "Endpoint is available"
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getCurrentUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const profileId = await profileIdForUser(user.id)
+    if (!profileId) return NextResponse.json({ error: "User profile not found" }, { status: 400 })
+
+    const body = await request.json()
+    const message = String(body.message || body.content || "").trim()
+    const caseId = body.case_id ? String(body.case_id) : null
+    let conversationId = body.conversation_id ? String(body.conversation_id) : null
+
+    if (!message || (!caseId && !conversationId)) {
+      return NextResponse.json({ error: "Message and conversation or case required" }, { status: 400 })
     }
-  )
+
+    let messageCaseId = caseId
+
+    if (conversationId) {
+      const allowed = await query<{ case_id: string | null }>(
+        `
+        SELECT c.case_id
+        FROM conversations c
+        JOIN conversation_members cm ON cm.conversation_id = c.id
+        WHERE c.id = $1 AND cm.user_id = $2
+        LIMIT 1
+        `,
+        [conversationId, user.id],
+      )
+
+      const conversation = allowed.rows[0]
+      if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+      messageCaseId = messageCaseId || conversation.case_id
+    } else {
+      const created = await query<{ id: string }>(
+        `
+        INSERT INTO conversations (case_id)
+        VALUES ($1)
+        RETURNING id
+        `,
+        [messageCaseId],
+      )
+
+      conversationId = created.rows[0].id
+
+      await query(
+        `
+        INSERT INTO conversation_members (conversation_id, user_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        `,
+        [conversationId, user.id],
+      )
+    }
+
+    if (!messageCaseId) {
+      return NextResponse.json({ error: "Conversation is not attached to a case" }, { status: 400 })
+    }
+
+    const inserted = await query(
+      `
+      INSERT INTO messages (conversation_id, case_id, sender_id, sender_type, encrypted_content, message)
+      VALUES ($1, $2, $3, $4, $5, $5)
+      RETURNING id, conversation_id, case_id, sender_id, message, created_at, read_at
+      `,
+      [conversationId, messageCaseId, profileId, user.role, message],
+    )
+
+    return NextResponse.json(inserted.rows[0], { status: 201 })
+  } catch (error) {
+    console.error("MESSAGE SEND ERROR", error)
+    return NextResponse.json({ error: "Failed to send message" }, { status: 500 })
+  }
 }

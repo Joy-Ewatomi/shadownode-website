@@ -4,6 +4,7 @@ export type NotificationLike = {
   type?: string | null
   metadata?: NotificationMetadata
   case_id?: string | null
+  bureau_notification?: boolean | null
 }
 
 function asString(value: unknown): string | null {
@@ -22,7 +23,7 @@ function asString(value: unknown): string | null {
 
 export function getNotificationDestination(
   notification: NotificationLike
-) {
+): string | null {
 
   const metadata = notification.metadata || {}
 

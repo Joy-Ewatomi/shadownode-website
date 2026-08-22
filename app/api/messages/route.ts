@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { profileIdForUser } from "@/lib/investigation-workspace"
 
 async function userConversation(userId: string, conversationId: string) {
-  const result = await query(
+  const result = await query<{ id: string; case_id: string | null }>(
     `
     SELECT c.id, c.case_id
     FROM conversations c
@@ -20,6 +21,8 @@ export async function GET() {
   try {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const profileId = await profileIdForUser(user.id)
+    if (!profileId) return NextResponse.json({ error: "User profile missing" }, { status: 500 })
 
     const conversations = await query(
       `
@@ -47,7 +50,7 @@ export async function GET() {
           SELECT COUNT(*)::int
           FROM messages m
           WHERE m.conversation_id = c.id
-            AND m.sender_id <> $1
+            AND m.sender_id <> $2
             AND m.read_at IS NULL
         ) AS unread_count,
         COALESCE(
@@ -55,7 +58,7 @@ export async function GET() {
             json_build_object(
               'id', m.id,
               'sender_id', m.sender_id,
-              'sender_name', u.username,
+              'sender_name', su.username,
               'message', m.message,
               'created_at', m.created_at,
               'read_at', m.read_at
@@ -68,12 +71,13 @@ export async function GET() {
       JOIN conversation_members cm ON cm.conversation_id = c.id
       LEFT JOIN cases ON cases.id = c.case_id
       LEFT JOIN messages m ON m.conversation_id = c.id
-      LEFT JOIN app_users u ON u.id = m.sender_id
+      LEFT JOIN user_profiles sp ON sp.id = m.sender_id
+      LEFT JOIN app_users su ON su.id = sp.user_id
       WHERE cm.user_id = $1
       GROUP BY c.id, cases.case_number, cases.title
       ORDER BY COALESCE(MAX(m.created_at), c.created_at) DESC
       `,
-      [user.id],
+      [user.id, profileId],
     )
 
     return NextResponse.json(conversations.rows)
@@ -87,6 +91,8 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const profileId = await profileIdForUser(user.id)
+    if (!profileId) return NextResponse.json({ error: "User profile missing" }, { status: 500 })
 
     const { conversation_id, case_id, message } = await req.json()
     if (!message || (!conversation_id && !case_id)) {
@@ -94,10 +100,12 @@ export async function POST(req: NextRequest) {
     }
 
     let conversationId = conversation_id as string | undefined
+    let messageCaseId = case_id as string | null | undefined
 
     if (conversationId) {
       const allowed = await userConversation(user.id, conversationId)
       if (!allowed) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+      messageCaseId = allowed.case_id
     } else {
       const created = await query<{ id: string }>(
         `
@@ -125,7 +133,7 @@ export async function POST(req: NextRequest) {
       VALUES ($1, $2, $3, $4, $5, $5)
       RETURNING id, conversation_id, sender_id, message, created_at, read_at
       `,
-      [conversationId, case_id || null, user.id, user.role, message],
+      [conversationId, messageCaseId || null, profileId, user.role, message],
     )
 
     return NextResponse.json(inserted.rows[0], { status: 201 })
@@ -139,6 +147,8 @@ export async function PATCH(req: NextRequest) {
   try {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const profileId = await profileIdForUser(user.id)
+    if (!profileId) return NextResponse.json({ error: "User profile missing" }, { status: 500 })
 
     const { conversation_id, message_id } = await req.json()
     if (!conversation_id && !message_id) return NextResponse.json({ error: "Missing target" }, { status: 400 })
@@ -156,7 +166,7 @@ export async function PATCH(req: NextRequest) {
         AND ($2::uuid IS NULL OR conversation_id = $2::uuid)
         AND ($3::uuid IS NULL OR id = $3::uuid)
       `,
-      [user.id, conversation_id || null, message_id || null],
+      [profileId, conversation_id || null, message_id || null],
     )
 
     return NextResponse.json({ success: true })

@@ -9,6 +9,9 @@ declare module "pg" {
   }
 
   export class Pool {
+    connect() {
+      throw new Error("Method not implemented.");
+    }
     constructor(config?: Record<string, unknown>);
     query<R extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<R>>;
   }

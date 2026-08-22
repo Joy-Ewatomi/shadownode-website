@@ -82,9 +82,9 @@ export default function DashboardMessagesPage() {
           {conversations.map((conversation) => (
             <button key={conversation.id} onClick={() => setSelectedId(conversation.id)} className={`block w-full p-4 text-left transition hover:bg-white/5 ${selected?.id === conversation.id ? "bg-[#20dc73]/10" : ""}`}>
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium text-white">{conversation.case_number || "General Conversation"}</p>
-                  <p className="mt-1 text-xs text-white/45">{conversation.case_title || conversation.last_message || "No messages yet"}</p>
+                <div className="min-w-0">
+                  <p className="break-all font-medium text-white">{conversation.case_number || "General Conversation"}</p>
+                  <p className="mt-1 break-words text-xs text-white/45">{conversation.case_title || conversation.last_message || "No messages yet"}</p>
                 </div>
                 {conversation.unread_count ? <span className="rounded-full bg-[#20dc73] px-2 py-0.5 text-xs font-bold text-black">{conversation.unread_count}</span> : null}
               </div>
@@ -97,9 +97,9 @@ export default function DashboardMessagesPage() {
         {selected ? (
           <>
             <div className="flex items-center justify-between border-b border-[#143b28] px-5 py-4">
-              <div>
-                <h2 className="font-semibold text-white">{selected.case_number || "Conversation"}</h2>
-                <p className="text-sm text-white/45">{selected.case_title || "Secure bureau channel"}</p>
+              <div className="min-w-0">
+                <h2 className="break-all font-semibold text-white">{selected.case_number || "Conversation"}</h2>
+                <p className="break-words text-sm text-white/45">{selected.case_title || "Secure bureau channel"}</p>
               </div>
               {selected.case_id ? <Link href={`/cases/${selected.case_id}`} className="rounded border border-[#20dc73]/40 px-3 py-2 text-sm text-[#20dc73]">Open Case</Link> : null}
             </div>
@@ -110,7 +110,7 @@ export default function DashboardMessagesPage() {
                     <span>{message.sender_name || "Operator"}</span>
                     <time>{new Date(message.created_at).toLocaleString()}</time>
                   </div>
-                  <p className="mt-2 text-sm text-white/80">{message.message}</p>
+                  <p className="mt-2 whitespace-normal break-words text-sm text-white/80">{message.message}</p>
                 </div>
               ))}
               {!selected.messages.length ? <p className="text-sm text-white/45">No messages in this conversation.</p> : null}

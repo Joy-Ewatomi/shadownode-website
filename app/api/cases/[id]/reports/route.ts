@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auditLog } from "@/lib/auth"
-import { optionalText, recordInvestigationTimeline, requireInvestigationWorkspace } from "@/lib/investigation-workspace"
+import { optionalText, profileIdForUser, recordInvestigationTimeline, requireInvestigationWorkspace } from "@/lib/investigation-workspace"
 import { query } from "@/lib/db"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 
@@ -26,7 +26,8 @@ export async function GET(
           cr.created_at,
           au.username AS created_by_username
         FROM case_reports cr
-        LEFT JOIN app_users au ON au.id = cr.created_by
+        LEFT JOIN user_profiles up ON up.id = cr.created_by
+        LEFT JOIN app_users au ON au.id = up.user_id
         WHERE cr.case_id = $1
         ORDER BY cr.created_at DESC
         `,
@@ -88,6 +89,8 @@ export async function POST(
     const body = await request.json()
     const title = optionalText(body.title)
     if (!title) return NextResponse.json({ error: "Report title required" }, { status: 400 })
+    const creatorProfileId = await profileIdForUser(access.user.id)
+    if (!creatorProfileId) return NextResponse.json({ error: "User profile missing" }, { status: 500 })
 
     const inserted = await query<{ id: string; title: string | null; summary: string | null }>(
       `
@@ -102,7 +105,7 @@ export async function POST(
         title,
         optionalText(body.file_url),
         optionalText(body.summary) ?? optionalText(body.executive_summary),
-        access.user.id,
+        creatorProfileId,
       ],
     )
 

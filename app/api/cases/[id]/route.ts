@@ -55,12 +55,14 @@ export async function GET(
         c.created_at,
         c.updated_at,
 
-        up.username AS investigator_username
+        au.username AS investigator_username
 
       FROM cases c
 
       LEFT JOIN user_profiles up
         ON up.id = c.assigned_to
+      LEFT JOIN app_users au
+        ON au.id = up.user_id
 
       WHERE c.id=$1
 

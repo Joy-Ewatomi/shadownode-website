@@ -101,7 +101,7 @@ export async function GET() {
       title: row.title ?? null,
       service_type: row.service_type ?? null,
       description: row.description ?? null,
-      status: row.status ?? "pending_review",
+      status: row.status ?? "pending_admin_review",
       priority: row.priority ?? null,
       timeline: row.timeline ?? null,
 

@@ -150,9 +150,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const currency = String(
-      item.approved_quote_currency || "NGN",
-    ).trim().toUpperCase()
+const currency =
+  item.approved_quote_currency
+    ?.trim()
+    .toUpperCase()
+
+if (!currency) {
+  return NextResponse.json(
+    {
+      error:
+        "Approved quote currency is missing",
+    },
+    { status: 400 },
+  )
+}
 
     /*
      * Verify that the case belongs to this client

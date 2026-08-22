@@ -20,22 +20,6 @@ export async function PATCH(
       )
     }
 
-    /*
-     * Super Administrator notifications are read-only.
-     *
-     * The Super Administrator sees the complete bureau stream,
-     * but does not mutate read state.
-     */
-    if (user.role === "super_administrator") {
-      return NextResponse.json(
-        {
-          error:
-            "Super Administrator notifications are read-only",
-        },
-        { status: 403 },
-      )
-    }
-
     const { id } = await params
 
     const updated = await query(

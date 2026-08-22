@@ -15,8 +15,7 @@ export default function DashboardShell({
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-[#020604] text-white">
-      <div className="fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(32,220,115,0.08),transparent_32rem)]" />
+    <div className="min-h-screen bg-transparent text-white">
       <div className="relative flex min-h-screen">
         <Sidebar user={user} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="min-w-0 flex-1 lg:pl-72">

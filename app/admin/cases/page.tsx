@@ -209,11 +209,11 @@ export default function AdminCases() {
   }
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#020604] text-[#20dc73]">Loading Mission Control...</div>
+    return <div className="flex min-h-screen items-center justify-center bg-transparent text-[#20dc73]">Loading Mission Control...</div>
   }
 
   return (
-    <main className="min-h-screen bg-[#020604] p-6 text-white">
+    <main className="min-h-screen bg-transparent p-6 text-white">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 border-b border-[#143b28] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>

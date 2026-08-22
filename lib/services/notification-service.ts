@@ -90,7 +90,7 @@ export async function notifySuperAdmins(event: {
     `
     SELECT id
     FROM app_users
-    WHERE role='super_administrator'
+    WHERE role IN ('super_administrator', 'super-administrator')
     AND status='active'
     `
   )

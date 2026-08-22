@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { RefreshCcw, Search } from "lucide-react"
 
 type Request = {
@@ -15,8 +16,27 @@ type Request = {
   client_username?: string | null
   client_email?: string | null
 }
+const REQUEST_FILTERS: Record<string, string[]> = {
+  pending: ["pending_admin_review"],
+  review: ["pending_admin_review", "pending_super_admin_review"],
+  quoted: [
+    "quote_sent",
+    "revised_quote_sent",
+    "awaiting_client_acceptance",
+  ],
+  negotiation: [
+    "negotiation_requested",
+    "negotiating",
+    "under_negotiation",
+  ],
+  approved: ["client_approved", "active"],
+  rejected: ["rejected", "declined"],
+  archived: ["archived"],
+}
 
 export default function RequestList() {
+  const searchParams = useSearchParams()
+  const statusFilter = searchParams.get("status") || "all"
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -45,6 +65,16 @@ export default function RequestList() {
   useEffect(() => {
     void loadRequests()
   }, [])
+
+  const activeStatuses = REQUEST_FILTERS[statusFilter]
+  const visibleRequests = activeStatuses
+    ? requests.filter((request) => activeStatuses.includes(request.status))
+    : requests
+
+  const title =
+    statusFilter === "all"
+      ? "All Requests"
+      : `${statusFilter.replace(/-/g, " ")} Requests`
 
   return (
     <main className="min-w-0 max-w-full space-y-6">
@@ -82,7 +112,7 @@ export default function RequestList() {
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#143b28] px-5 py-4">
 
           <h2 className="min-w-0 break-words font-semibold text-white">
-            All Requests
+            {title}
           </h2>
 
           <button
@@ -121,7 +151,7 @@ export default function RequestList() {
 
           {/* EMPTY */}
 
-          {!loading && requests.length === 0 && (
+          {!loading && visibleRequests.length === 0 && (
             <div className="flex min-w-0 flex-col items-center px-5 py-12 text-center text-white/40">
 
               <Search className="mb-3 h-10 w-10" />
@@ -136,7 +166,7 @@ export default function RequestList() {
           {/* REQUESTS */}
 
           {!loading &&
-            requests.map((request) => {
+            visibleRequests.map((request) => {
 
               const requestType =
                 request.category ||

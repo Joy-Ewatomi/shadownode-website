@@ -35,12 +35,16 @@ export async function GET(
 
         FROM cases
 
-        WHERE client_email=$1
+        WHERE client_profile_id IN (
+          SELECT id
+          FROM user_profiles
+          WHERE user_id=$1
+        )
 
         ORDER BY created_at DESC
         `,
         [
-          user.email
+          user.id
         ]
       )
 

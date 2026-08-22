@@ -16,7 +16,7 @@ export default function ResendVerificationPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-transparent px-4 text-white">
       <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded border border-white/10 bg-[#08110c] p-6">
         <h1 className="text-2xl font-semibold">Resend Verification</h1>
         <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />

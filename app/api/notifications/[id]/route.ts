@@ -73,7 +73,7 @@ export async function GET(
         n.id = $1
         AND (
           n.user_id = $2
-          OR $3 = 'super_administrator'
+          OR $3 IN ('super_administrator', 'super-administrator')
         )
       LIMIT 1
       `,
@@ -110,6 +110,65 @@ export async function GET(
   }
 }
 
+export async function PATCH(
+  _req: Request,
+  {
+    params,
+  }: {
+    params: Promise<{ id: string }>
+  },
+) {
+  try {
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 },
+      )
+    }
+
+    const { id } = await params
+
+    const result = await query(
+      `
+      UPDATE notifications
+      SET is_read = true
+      WHERE id = $1
+        AND user_id = $2
+      RETURNING id
+      `,
+      [id, user.id],
+    )
+
+    if (!result.rows[0]) {
+      return NextResponse.json(
+        {
+          error: "Notification not found",
+        },
+        { status: 404 },
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      id: result.rows[0].id,
+    })
+  } catch (error) {
+    console.error(
+      "NOTIFICATION READ ERROR",
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        error: "Failed to mark notification as read",
+      },
+      { status: 500 },
+    )
+  }
+}
+
 export async function DELETE(
   _req: Request,
   {
@@ -132,7 +191,10 @@ export async function DELETE(
      * Super Administrator notification stream is immutable
      * from the notification UI.
      */
-    if (user.role === "super_administrator") {
+    if (
+      user.role === "super_administrator" ||
+      user.role === "super-administrator"
+    ) {
       return NextResponse.json(
         {
           error:

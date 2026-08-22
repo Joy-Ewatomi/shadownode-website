@@ -20,6 +20,7 @@ export type AuthRole =
   | "analyst"
   | "administrator"
   | "super_administrator"
+  | "super-administrator"
 
 export type AppUser = {
   id: string
@@ -42,7 +43,8 @@ export function isAuthRole(
     role === "investigator" ||
     role === "analyst" ||
     role === "administrator" ||
-    role === "super_administrator"
+    role === "super_administrator" ||
+    role === "super-administrator"
   )
 }
 
@@ -802,6 +804,7 @@ export function isAdminRole(
 ) {
   return (
     role === "administrator" ||
-    role === "super_administrator"
+    role === "super_administrator" ||
+    role === "super-administrator"
   )
 }

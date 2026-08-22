@@ -11,6 +11,7 @@ export type ServiceType =
   | "osint"
   | "forensics"
   | "ethical-hacking"
+  | "cybersecurity-training"
   | "mixed"
 
 export type Timeline =
@@ -84,13 +85,18 @@ const BASE_PRICES: Record<
     avg: 1500,
   },
 
+  "cybersecurity-training": {
+    min: 200,
+    max: 5000,
+    avg: 1000,
+  },
+
   mixed: {
     min: 500,
     max: 6000,
     avg: 2000,
   },
 }
-
 /**
  * ---------------------------------------------------------
  * DEPTH
@@ -310,15 +316,23 @@ export function estimatePrice(
   )
 
   const serviceNames: Record<
-    ServiceType,
-    string
-  > = {
-    osint: "OSINT Intelligence",
-    forensics: "Digital Forensics",
-    "ethical-hacking":
-      "Ethical Hacking Assessment",
-    mixed: "Multi-Service Investigation",
-  }
+  ServiceType,
+  string
+> = {
+  osint: "OSINT Intelligence",
+
+  forensics:
+    "Digital Forensics",
+
+  "ethical-hacking":
+    "Ethical Hacking Assessment",
+
+  "cybersecurity-training":
+    "Cybersecurity Training",
+
+  mixed:
+    "Multi-Service Investigation",
+}
 
   const timelineNames: Record<
     Timeline,
