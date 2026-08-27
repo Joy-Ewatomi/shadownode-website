@@ -497,58 +497,109 @@ const services = OSINT_SERVICES
   }
 }
 
-  /* ────────── Submit ────────── */
 async function handleSubmit() {
-  const title =
-    form.title.trim() ||
-    form.service_type.trim() ||
-    "OSINT Investigation"
+  const isCustom = form.service_type === "custom"
 
-const serviceDescription =
-  form.service_type === "custom"
-    ? `Custom Requirement: ${form.custom_description}`
+  const customText = form.custom_description.trim()
+
+  const title = isCustom
+    ? customText || "OSINT Investigation"
+    : form.title.trim() ||
+      form.service_type.trim() ||
+      "OSINT Investigation"
+
+  const serviceDescription = isCustom
+    ? customText
     : `Service: ${form.service_type}`
 
-const description = [
-  serviceDescription,
-  `Objective: ${form.investigation_objective}`,
-  `Subject Type: ${form.subject_type}`,
+  const description = [
+    serviceDescription,
 
-  form.subject_full_name
-    ? `Subject Name: ${form.subject_full_name}`
-    : "",
+    `Objective: ${form.investigation_objective}`,
 
-  form.subject_organization
-    ? `Organization: ${form.subject_organization}`
-    : "",
+    `Subject Type: ${form.subject_type}`,
 
-  form.subject_company_name
-    ? `Company: ${form.subject_company_name}`
-    : "",
+    form.subject_full_name
+      ? `Subject Name: ${form.subject_full_name}`
+      : "",
 
-  form.subject_domain
-    ? `Domain: ${form.subject_domain}`
-    : "",
+    form.subject_known_usernames
+      ? `Known Usernames: ${form.subject_known_usernames}`
+      : "",
 
-  form.subject_url
-    ? `URL: ${form.subject_url}`
-    : "",
+    form.subject_emails
+      ? `Emails: ${form.subject_emails}`
+      : "",
 
-  form.existing_information
-    ? `Supporting Intelligence: ${form.existing_information}`
-    : "",
+    form.subject_phone_numbers
+      ? `Phone Numbers: ${form.subject_phone_numbers}`
+      : "",
 
-  form.additional_notes
-    ? `Additional Notes: ${form.additional_notes}`
-    : "",
-]
-  .filter(Boolean)
-  .join("\n")
+    form.subject_location
+      ? `Location: ${form.subject_location}`
+      : "",
+
+    form.subject_organization
+      ? `Organization: ${form.subject_organization}`
+      : "",
+
+    form.subject_websites
+      ? `Known Websites: ${form.subject_websites}`
+      : "",
+
+    form.subject_company_name
+      ? `Company: ${form.subject_company_name}`
+      : "",
+
+    form.subject_company_website
+      ? `Company Website: ${form.subject_company_website}`
+      : "",
+
+    form.subject_company_country
+      ? `Company Country: ${form.subject_company_country}`
+      : "",
+
+    form.subject_company_industry
+      ? `Company Industry: ${form.subject_company_industry}`
+      : "",
+
+    form.subject_domain
+      ? `Domain: ${form.subject_domain}`
+      : "",
+
+    form.subject_url
+      ? `URL: ${form.subject_url}`
+      : "",
+
+    form.subject_ip_address
+      ? `IP Address: ${form.subject_ip_address}`
+      : "",
+
+    form.subject_platform
+      ? `Platform: ${form.subject_platform}`
+      : "",
+
+    form.existing_information
+      ? `Supporting Intelligence: ${form.existing_information}`
+      : "",
+
+    form.additional_notes
+      ? `Additional Notes: ${form.additional_notes}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
 
   await onSubmit({
     ...form,
+
     title,
+
     description,
+
+    custom_description: isCustom
+      ? customText
+      : "",
   })
 }
 
@@ -1089,16 +1140,18 @@ function renderStep3() {
     }
     
     
-    onCountryChange={(value: string)=>{
-    
+   onCountryChange={(value: string) => {
+  if (value === "custom") {
     set({
-    client_country:value,
-    preferred_currency:value === "custom"
-    ? ""
-    : form.preferred_currency
+      client_country: value,
+      preferred_currency: "",
     })
-    
-    }}
+
+    return
+  }
+
+  handleCountryChange(value)
+}}
     
     
     
@@ -1183,64 +1236,163 @@ function renderStep3() {
     return items
   }
 
-  function renderStep8() {
-    return (
-      <div className="space-y-5">
-        {/* Summary */}
-        <div className="rounded-md border border-[#143b28] bg-black/30 p-5">
-          <p className="mb-4 font-semibold text-white">Review Your Investigation Request</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {getSummaryItems().map((item) => (
-              <div key={item.label}>
-                <p className="text-xs uppercase tracking-[0.1em] text-white/40">{item.label}</p>
-                <p className="mt-1 text-sm text-white/80 capitalize">{item.value}</p>
-              </div>
-            ))}
-            {form.supporting_links.length > 0 && (
-              <div className="sm:col-span-2">
-                <p className="text-xs uppercase tracking-[0.1em] text-white/40">Supporting Links</p>
-                <p className="mt-1 text-sm text-white/80">{form.supporting_links.length} link(s) provided</p>
-              </div>
-            )}
-            {form.evidence_files.length > 0 && (
-              <div className="sm:col-span-2">
-                <p className="text-xs uppercase tracking-[0.1em] text-white/40">Evidence Files</p>
-                <p className="mt-1 text-sm text-white/80">{form.evidence_files.length} file(s) uploaded</p>
-              </div>
-            )}
-          </div>
-        </div>
+ function renderStep8() {
+  return (
+    <div className="w-full min-w-0 space-y-5">
+      {/* ======================================================
+          SUMMARY
+      ====================================================== */}
 
-        {/* Legal Authorization */}
-        <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-5">
-          <p className="text-sm font-semibold text-yellow-200">Legal Authorization Required</p>
-          <p className="mt-2 text-sm text-yellow-100/70">
-            By submitting this request, you confirm that you have the lawful authority to request this
-            investigation and that all information provided is accurate and truthful.
-          </p>
+      <div className="w-full min-w-0 overflow-hidden rounded-md border border-[#143b28] bg-black/30 p-5">
+        <p className="mb-4 font-semibold text-white">
+          Review Your Investigation Request
+        </p>
+
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          {getSummaryItems().map((item) => (
+            <div
+              key={item.label}
+              className="min-w-0 max-w-full overflow-hidden"
+            >
+              <p className="text-xs uppercase tracking-[0.1em] text-white/40">
+                {item.label}
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  min-w-0
+                  max-w-full
+                  whitespace-pre-wrap
+                  break-words
+                  [overflow-wrap:anywhere]
+                  text-sm
+                  leading-6
+                  text-white/80
+                "
+              >
+                {item.value || "Not provided"}
+              </p>
+            </div>
+          ))}
+
+          {/* Supporting Links */}
+
+          {form.supporting_links.length > 0 && (
+            <div className="min-w-0 max-w-full overflow-hidden sm:col-span-2">
+              <p className="text-xs uppercase tracking-[0.1em] text-white/40">
+                Supporting Links
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-white/80">
+                {form.supporting_links.length} link(s) provided
+              </p>
+            </div>
+          )}
+
+          {/* Evidence Files */}
+
+          {form.evidence_files.length > 0 && (
+            <div className="min-w-0 max-w-full overflow-hidden sm:col-span-2">
+              <p className="text-xs uppercase tracking-[0.1em] text-white/40">
+                Evidence Files
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-white/80">
+                {form.evidence_files.length} file(s) uploaded
+              </p>
+            </div>
+          )}
         </div>
-        <div className="flex items-start gap-3 rounded-md border border-[#143b28] bg-black/30 p-5">
-          <input
-            id="auth-check"
-            type="checkbox"
-            checked={form.authorization_confirmed}
-            onChange={(e) => set({ authorization_confirmed: e.target.checked })}
-            className="mt-1 h-4 w-4 shrink-0 accent-[#20dc73]"
-          />
-          <label htmlFor="auth-check" className="text-sm leading-relaxed text-white/80">
-            I confirm that I have <strong>lawful authorization</strong> to request this investigation and that
-            the information provided is accurate to the best of my knowledge.
-          </label>
-        </div>
-        {submitting && (
-          <div className="flex items-center justify-center gap-2 py-4 text-[#20dc73]">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Submitting investigation request...</span>
-          </div>
-        )}
       </div>
-    )
-  }
+
+      {/* ======================================================
+          LEGAL AUTHORIZATION NOTICE
+      ====================================================== */}
+
+      <div className="w-full min-w-0 overflow-hidden rounded-md border border-yellow-500/30 bg-yellow-500/10 p-5">
+        <p className="text-sm font-semibold text-yellow-200">
+          Legal Authorization Required
+        </p>
+
+        <p
+          className="
+            mt-2
+            max-w-full
+            whitespace-pre-wrap
+            break-words
+            [overflow-wrap:anywhere]
+            text-sm
+            leading-6
+            text-yellow-100/70
+          "
+        >
+          By submitting this request, you confirm that you have the lawful
+          authority to request this investigation and that all information
+          provided is accurate and truthful.
+        </p>
+      </div>
+
+      {/* ======================================================
+          AUTHORIZATION CHECKBOX
+      ====================================================== */}
+
+      <div className="flex min-w-0 max-w-full items-start gap-3 overflow-hidden rounded-md border border-[#143b28] bg-black/30 p-5">
+        <input
+          id="auth-check"
+          type="checkbox"
+          checked={form.authorization_confirmed}
+          onChange={(e) =>
+            set({
+              authorization_confirmed: e.target.checked,
+            })
+          }
+          className="mt-1 h-4 w-4 shrink-0 accent-[#20dc73]"
+        />
+
+        <label
+          htmlFor="auth-check"
+          className="
+            min-w-0
+            max-w-full
+            break-words
+            [overflow-wrap:anywhere]
+            text-sm
+            leading-relaxed
+            text-white/80
+          "
+        >
+          I confirm that I have{" "}
+          <strong>lawful authorization</strong> to request this
+          investigation and that the information provided is accurate
+          to the best of my knowledge.
+        </label>
+      </div>
+
+      {/* ======================================================
+          SUBMISSION STATUS
+      ====================================================== */}
+
+      {submitting && (
+        <div className="flex min-w-0 items-center justify-center gap-2 overflow-hidden py-4 text-[#20dc73]">
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+
+          <span
+            className="
+              min-w-0
+              max-w-full
+              break-words
+              text-center
+              text-sm
+            "
+          >
+            Submitting investigation request...
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
 
   /* ────────── Main Step Renderer ────────── */
  function renderStep() {

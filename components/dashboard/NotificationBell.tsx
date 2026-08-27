@@ -290,17 +290,19 @@ export default function NotificationBell() {
    * ---------------------------------------------------------
    */
 
-  useEffect(() => {
+useEffect(() => {
+  if (!user?.id) return
+
+  void loadNotifications()
+
+  const timer = window.setInterval(() => {
     void loadNotifications()
+  }, 5000)
 
-    const timer =
-      window.setInterval(() => {
-        void loadNotifications()
-      }, 5000)
-
-    return () =>
-      window.clearInterval(timer)
-  }, [user])
+  return () => {
+    window.clearInterval(timer)
+  }
+}, [user?.id])
 
   const isSuperAdministrator =
     user?.role === "super_administrator" ||

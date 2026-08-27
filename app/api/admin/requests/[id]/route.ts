@@ -44,8 +44,37 @@ const allowedCurrencies = new Set([
 type RequestWorkflow =
   | "professional_training"
   | "cybersecurity_training"
+  | "custom_training"
   | "security_assessment"
   | "investigation"
+
+type QuoteBody = {
+  action?: string
+
+  approved_quote_amount?: number | string
+  approved_quote_currency?: string
+
+  approved_estimated_start?: string
+  approved_estimated_completion?: string
+  approved_completion_date?: string
+
+  negotiation_id?: string
+
+  quote?: {
+    amount?: number | string
+    currency?: string
+    estimated_completion?: string
+  }
+
+  justification?: {
+    reason?: string
+    notes?: string
+  }
+
+  reason?: string
+  admin_quote_notes?: string
+  quote_notes?: string
+}
 
 type RequestRow = {
   id: string
@@ -62,6 +91,7 @@ type RequestRow = {
 
   preferred_currency: string | null
   preferred_deadline: string | null
+  osint_completion_date: string | null
 
   /*
    * Training-specific client dates.
@@ -92,86 +122,121 @@ type RequestRow = {
  * Normalize an arbitrary value to a trimmed string.
  */
 function clean(value: unknown): string {
-  return typeof value === "string"
-    ? value.trim()
-    : ""
+  if (typeof value === "string") {
+    return value.trim()
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+
+  return ""
 }
 
-/**
- * Normalize a date to YYYY-MM-DD.
- *
- * This intentionally does not construct a Date object,
- * because doing so can introduce timezone-related shifts.
- */
-function normalizeDate(
-  value: unknown,
-): string | null {
+function normalizeDate(value: unknown): string | null {
   const result = clean(value)
 
   if (!result) {
     return null
   }
 
-  const date =
-    result.length >= 10
-      ? result.slice(0, 10)
-      : result
+  /*
+   * =====================================================
+   * ISO DATE / ISO DATETIME
+   * =====================================================
+   *
+   * Examples:
+   * 2026-09-19
+   * 2026-09-19T00:00:00.000Z
+   */
+  if (/^\d{4}-\d{2}-\d{2}/.test(result)) {
+    const date = result.slice(0, 10)
 
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(
-      date,
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return null
+    }
+
+    const [year, month, day] =
+      date.split("-").map(Number)
+
+    const check = new Date(
+      Date.UTC(year, month - 1, day),
     )
-  ) {
-    return null
+
+    if (
+      check.getUTCFullYear() !== year ||
+      check.getUTCMonth() !== month - 1 ||
+      check.getUTCDate() !== day
+    ) {
+      return null
+    }
+
+    return date
   }
 
   /*
-   * Validate that the date is a real
-   * calendar date without timezone conversion.
+   * =====================================================
+   * DD/MM/YYYY
+   * =====================================================
+   *
+   * Example:
+   * 19/09/2026
    */
-  const [year, month, day] =
-    date
-      .split("-")
-      .map(Number)
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(result)) {
+    const [day, month, year] =
+      result.split("/").map(Number)
 
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day)
-  ) {
-    return null
-  }
-
-  if (
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
-    return null
-  }
-
-  const check =
-    new Date(
-      Date.UTC(
-        year,
-        month - 1,
-        day,
-      ),
+    const check = new Date(
+      Date.UTC(year, month - 1, day),
     )
 
-  if (
-    check.getUTCFullYear() !==
-      year ||
-    check.getUTCMonth() !==
-      month - 1 ||
-    check.getUTCDate() !==
-      day
-  ) {
-    return null
+    if (
+      check.getUTCFullYear() !== year ||
+      check.getUTCMonth() !== month - 1 ||
+      check.getUTCDate() !== day
+    ) {
+      return null
+    }
+
+    return [
+      String(year),
+      String(month).padStart(2, "0"),
+      String(day).padStart(2, "0"),
+    ].join("-")
   }
 
-  return date
+  /*
+   * =====================================================
+   * DD-MM-YYYY
+   * =====================================================
+   *
+   * Example:
+   * 19-09-2026
+   */
+  if (/^\d{2}-\d{2}-\d{4}$/.test(result)) {
+    const [day, month, year] =
+      result.split("-").map(Number)
+
+    const check = new Date(
+      Date.UTC(year, month - 1, day),
+    )
+
+    if (
+      check.getUTCFullYear() !== year ||
+      check.getUTCMonth() !== month - 1 ||
+      check.getUTCDate() !== day
+    ) {
+      return null
+    }
+
+    return [
+      String(year),
+      String(month).padStart(2, "0"),
+      String(day).padStart(2, "0"),
+    ].join("-")
+  }
+
+  return null
 }
 
 /**
@@ -218,8 +283,6 @@ function normalizeServiceType(
 /**
  * Determine the exact workflow for the request.
  *
- * IMPORTANT:
- *
  * professional_training and cybersecurity_training
  * are training workflows and may use:
  *
@@ -246,19 +309,16 @@ function getRequestWorkflow(
    * =================================================
    */
 
-  if (
-    value ===
-      "professional_training" ||
-    value ===
-      "professional_training_request" ||
-    value ===
-      "training" ||
-    value.includes(
-      "professional_training",
-    )
-  ) {
-    return "professional_training"
-  }
+if (
+  value === "cybersecurity_training" ||
+  value === "cyber_security_training" ||
+  value === "cybersecurity_training_request" ||
+  value === "custom_training" ||
+  value.includes("cybersecurity_training") ||
+  value.includes("cyber_security_training")
+) {
+  return "cybersecurity_training"
+}
 
   /*
    * =================================================
@@ -282,6 +342,12 @@ function getRequestWorkflow(
   ) {
     return "cybersecurity_training"
   }
+
+  if (
+  value === "custom_training"
+) {
+  return "custom_training"
+}
 
   /*
    * =================================================
@@ -311,6 +377,7 @@ function getRequestWorkflow(
    * Everything else is treated as investigation/OSINT
    * for date propagation purposes.
    */
+
   return "investigation"
 }
 
@@ -321,10 +388,9 @@ function isTrainingRequest(
   workflow: RequestWorkflow,
 ): boolean {
   return (
-    workflow ===
-      "professional_training" ||
-    workflow ===
-      "cybersecurity_training"
+    workflow === "professional_training" ||
+    workflow === "cybersecurity_training" ||
+    workflow === "custom_training"
   )
 }
 
@@ -333,17 +399,14 @@ function isTrainingRequest(
  * PATCH
  * =====================================================
  */
-
 export async function PATCH(
-  req: NextRequest,
-  {
-    params,
-  }: {
-    params: Promise<{
-      id: string
-    }>
-  },
-) {
+ req: NextRequest,
+ {
+ params
+ }: {
+ params: Promise<{id:string}>
+}
+): Promise<NextResponse>{
   try {
     /*
      * =================================================
@@ -400,10 +463,9 @@ export async function PATCH(
      * =================================================
      */
 
-    let body: Record<
-      string,
-      unknown
-    >
+    
+
+   let body: QuoteBody
 
     try {
       body =
@@ -420,9 +482,37 @@ export async function PATCH(
       )
     }
 
-    const action =
+    /*
+     * =================================================
+     * ACTION NORMALIZATION
+     * =================================================
+     *
+     * The AdminRequestReviewCard sends:
+     *
+     *   "submit"
+     *   "adjust"
+     *
+     * while the backend workflow historically uses:
+     *
+     *   "submit_for_super_admin_review"
+     *   "adjust_quote"
+     *
+     * Normalize them here so the frontend and backend
+     * can use their respective workflow terminology.
+     */
+
+    const rawAction =
       clean(body.action)
         .toLowerCase()
+
+  const action =
+  rawAction === "submit"
+    ? "submit_for_super_admin_review"
+    : rawAction === "adjust"
+    ? "adjust_quote"
+    : rawAction === "reject"
+    ? "reject"
+    : rawAction
 
     /*
      * =================================================
@@ -448,6 +538,7 @@ export async function PATCH(
 
             preferred_currency,
             preferred_deadline,
+            osint_completion_date,
 
             training_preferred_start_date,
             training_preferred_completion_date,
@@ -534,42 +625,52 @@ export async function PATCH(
     }
 
     /*
-     * =================================================
-     * TRAINING DATE VALIDATION
-     * =================================================
-     */
+/*
+ * =====================================================
+ * CLIENT TRAINING DATE HANDLING
+ * =====================================================
+ *
+ * These dates belong to the client request.
+ *
+ * They are reference values for the Administrator.
+ * They must NOT block Administrator quote submission.
+ *
+ * If an old/legacy request contains an invalid date,
+ * treat that value as unavailable rather than rejecting
+ * the entire Administrator workflow.
+ */
 
-    if (
-      trainingRequest &&
-      item.training_preferred_start_date &&
-      !clientTrainingStart
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Client training start date is invalid.",
-        },
-        {
-          status: 400,
-        },
-      )
-    }
+if (
+  trainingRequest &&
+  item.training_preferred_start_date &&
+  !clientTrainingStart
+) {
+  console.warn(
+    "[ADMIN REVIEW] Invalid client training start date:",
+    {
+      requestId: id,
+      value: item.training_preferred_start_date,
+    },
+  )
 
-    if (
-      trainingRequest &&
-      item.training_preferred_completion_date &&
-      !clientTrainingCompletion
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Client training completion date is invalid.",
-        },
-        {
-          status: 400,
-        },
-      )
-    }
+  clientTrainingStart = null
+}
+
+if (
+  trainingRequest &&
+  item.training_preferred_completion_date &&
+  !clientTrainingCompletion
+) {
+  console.warn(
+    "[ADMIN REVIEW] Invalid client training completion date:",
+    {
+      requestId: id,
+      value: item.training_preferred_completion_date,
+    },
+  )
+
+  clientTrainingCompletion = null
+}
 
     /*
      * =================================================
@@ -583,7 +684,6 @@ export async function PATCH(
 
     const lockedStatuses =
       new Set([
-        "pending_super_admin_review",
         "super_admin_approved",
         "quote_sent",
         "revised_quote_sent",
@@ -630,12 +730,13 @@ export async function PATCH(
      * =================================================
      */
 
-    const currency =
-      clean(
-        body.approved_quote_currency ||
-          item.approved_quote_currency ||
-          "USD",
-      ).toUpperCase()
+  const currency =
+  clean(
+    body.quote?.currency ||
+    body.approved_quote_currency ||
+    item.preferred_currency ||
+    "USD",
+  ).toUpperCase()
 
     /*
      * =================================================
@@ -711,18 +812,20 @@ export async function PATCH(
       action ===
       "adjust_quote"
     ) {
-      const amount =
-        Number(
-          body.approved_quote_amount,
-        )
+    const amount =
+ Number(
+   body.quote?.amount ??
+   body.approved_quote_amount
+ )
 
-      const reason =
-        clean(
-          body.admin_quote_notes ||
-            body.quote_notes ||
-            body.reason ||
-            "",
-        )
+   const reason =
+ clean(
+   body.justification?.reason ||
+   body.reason ||
+   body.admin_quote_notes ||
+   body.quote_notes ||
+   ""
+ )
 
       if (
         !Number.isFinite(
@@ -752,88 +855,122 @@ export async function PATCH(
           },
         )
       }
+/*
+ * =================================================
+ * ESTIMATED DATES
+ * =================================================
+ *
+ * Training:
+ *   estimated start defaults to client start
+ *   estimated completion defaults to client completion
+ *
+ * OSINT / non-training:
+ *   estimated start is always null
+ *   administrator-supplied completion takes priority
+ *   OSINT client completion date is the primary
+ *   automatic completion date
+ *   preferred_deadline remains as a backward-compatible
+ *   fallback for older requests
+ */
 
-      /*
-       * =================================================
-       * ESTIMATED DATES
-       * =================================================
-       *
-       * Training:
-       *   estimated start defaults to client start
-       *   estimated completion defaults to client completion
-       *
-       * Non-training:
-       *   estimated start is always null
-       *   estimated completion may use preferred deadline
-       */
+let estimatedStart: string | null = null
 
-      let estimatedStart:
-        string | null = null
+let estimatedCompletion: string | null = null
 
-      let estimatedCompletion:
-        string | null = null
+try {
+  if (trainingRequest) {
+    /*
+     * =================================================
+     * TRAINING REQUEST
+     * =================================================
+     */
 
-      try {
-        if (trainingRequest) {
-          const suppliedStart =
-            validateOptionalDate(
-              body.approved_estimated_start,
-              "Estimated start",
-            )
+    const suppliedStart =
+      validateOptionalDate(
+        body.approved_estimated_start,
+        "Estimated start",
+      )
 
-          const suppliedCompletion =
-            validateOptionalDate(
-              body.approved_estimated_completion ??
-                body.approved_completion_date,
-              "Estimated completion",
-            )
+    const suppliedCompletion =
+      validateOptionalDate(
+        body.approved_estimated_completion ??
+          body.approved_completion_date,
+        "Estimated completion",
+      )
 
-          estimatedStart =
-            suppliedStart ??
-            clientTrainingStart
+    estimatedStart =
+      suppliedStart ??
+      clientTrainingStart
 
-          estimatedCompletion =
-            suppliedCompletion ??
-            clientTrainingCompletion
-        } else {
-          const suppliedCompletion =
-            validateOptionalDate(
-              body.approved_estimated_completion ??
-                body.approved_completion_date,
-              "Estimated completion",
-            )
+    estimatedCompletion =
+      suppliedCompletion ??
+      clientTrainingCompletion
+  } else {
+    /*
+     * =================================================
+     * NON-TRAINING / OSINT REQUEST
+     * =================================================
+     */
 
-          /*
-           * Only the preferred deadline may act as
-           * an automatic completion date for a
-           * non-training request.
-           */
+    const suppliedCompletion =
+      validateOptionalDate(
+        body.approved_estimated_completion ??
+          body.approved_completion_date,
+        "Estimated completion",
+      )
 
-          const clientPreferredDeadline =
-            normalizeDate(
-              item.preferred_deadline,
-            )
+    /*
+     * Client-requested OSINT completion date.
+     *
+     * This is the primary automatic completion date
+     * for OSINT requests.
+     */
+    const clientOsintCompletionDate =
+      normalizeDate(
+        item.osint_completion_date,
+      )
 
-          estimatedStart =
-            null
+    /*
+     * Legacy fallback.
+     *
+     * Older requests may still use preferred_deadline.
+     */
+    const clientPreferredDeadline =
+      normalizeDate(
+        item.preferred_deadline,
+      )
 
-          estimatedCompletion =
-            suppliedCompletion ??
-            clientPreferredDeadline
-        }
-      } catch (error) {
-        return NextResponse.json(
-          {
-            error:
-              error instanceof Error
-                ? error.message
-                : "Invalid date.",
-          },
-          {
-            status: 400,
-          },
-        )
-      }
+    /*
+     * Non-training investigations do not
+     * have an estimated start date.
+     */
+    estimatedStart = null
+
+    /*
+     * Completion priority:
+     *
+     * 1. Administrator-supplied completion date
+     * 2. Client's OSINT completion date
+     * 3. Legacy preferred deadline
+     */
+    estimatedCompletion =
+      suppliedCompletion ??
+      clientOsintCompletionDate ??
+      clientPreferredDeadline
+  }
+} catch (error) {
+  return NextResponse.json(
+    {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Invalid date.",
+    },
+    {
+      status: 400,
+    },
+  )
+}
 
       /*
        * =================================================
@@ -1086,25 +1223,30 @@ export async function PATCH(
            *
            * Training dates are NEVER used here.
            */
+const suppliedCompletion =
+  validateOptionalDate(
+    body.approved_estimated_completion ??
+      body.approved_completion_date,
+    "Estimated completion",
+  )
 
-          const suppliedCompletion =
-            validateOptionalDate(
-              body.approved_estimated_completion ??
-                body.approved_completion_date,
-              "Estimated completion",
-            )
+const osintCompletionDate =
+  normalizeDate(
+    item.osint_completion_date,
+  )
 
-          const clientPreferredDeadline =
-            normalizeDate(
-              item.preferred_deadline,
-            )
+const clientPreferredDeadline =
+  normalizeDate(
+    item.preferred_deadline,
+  )
 
-          estimatedStart =
-            null
+estimatedStart = null
 
-          estimatedCompletion =
-            suppliedCompletion ??
-            clientPreferredDeadline
+estimatedCompletion =
+  suppliedCompletion ??
+  osintCompletionDate ??
+  clientPreferredDeadline
+
         }
       } catch (error) {
         return NextResponse.json(
@@ -1172,12 +1314,10 @@ export async function PATCH(
          * responded to by the Administrator.
          */
 
-        const validNegotiationStatuses =
-          new Set([
-            "requested",
-            "reviewing",
-            "pending_super_admin_review",
-          ])
+       const validNegotiationStatuses = new Set([
+  "requested",
+  "reviewing",
+])
 
         if (
           !validNegotiationStatuses.has(

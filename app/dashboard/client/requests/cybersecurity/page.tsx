@@ -9,7 +9,6 @@ import CybersecurityTrainingForm, {
 import RequestSubmitted from "@/components/client/RequestSubmitted"
 
 export default function CybersecurityRequestPage() {
-  console.log("🔥 CYBERSECURITY PAGE LOADED")
 
   const [submitting, setSubmitting] = useState(false)
   const [submittedRef, setSubmittedRef] =

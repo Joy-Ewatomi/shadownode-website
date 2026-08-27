@@ -1078,16 +1078,48 @@ export async function POST(request: NextRequest) {
           row.client_country ?? null,
 
         preferred_currency:
-          row.preferred_currency ?? null,
+  row.preferred_currency ?? null,
 
-        supporting_links:
-          row.supporting_links ?? null,
+supporting_links:
+  typeof row.supporting_links === "string"
+    ? (() => {
+        try {
+          const parsed = JSON.parse(
+            row.supporting_links,
+          )
 
-        evidence_uploads:
-          row.evidence_uploads ?? null,
+          return Array.isArray(parsed)
+            ? parsed
+            : []
+        } catch {
+          return []
+        }
+      })()
+    : Array.isArray(row.supporting_links)
+      ? row.supporting_links
+      : [],
 
-        additional_notes:
-          row.additional_notes ?? null,
+evidence_files:
+  typeof row.evidence_uploads === "string"
+    ? (() => {
+        try {
+          const parsed = JSON.parse(
+            row.evidence_uploads,
+          )
+
+          return Array.isArray(parsed)
+            ? parsed
+            : []
+        } catch {
+          return []
+        }
+      })()
+    : Array.isArray(row.evidence_uploads)
+      ? row.evidence_uploads
+      : [],
+
+additional_notes:
+  row.additional_notes ?? null,
 
         subject_approximate_age:
           row.subject_approximate_age ?? null,

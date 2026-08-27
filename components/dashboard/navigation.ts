@@ -10,10 +10,10 @@ import {
   Database,
   Activity,
   ClipboardList,
+  History,
 } from "lucide-react"
 
 import type { Permission } from "@/lib/permission"
-
 
 export type NavigationItem = {
   label: string
@@ -22,12 +22,15 @@ export type NavigationItem = {
   permission: Permission
 }
 
-
 export function getNavigation(role: string): NavigationItem[] {
+  const isClient = role === "client"
+  const isAdministrator = role === "administrator"
+  const isSuperAdministrator = role === "super_administrator"
+
   return [
     {
       label: "Dashboard",
-      href: role === "client"
+      href: isClient
         ? "/dashboard/client"
         : "/dashboard",
       icon: LayoutDashboard,
@@ -36,21 +39,55 @@ export function getNavigation(role: string): NavigationItem[] {
 
     {
       label: "Cases",
-      href: role === "client"
+      href: isClient
         ? "/dashboard/client/cases"
         : "/dashboard/cases",
       icon: Shield,
       permission: "cases:view",
     },
 
+    // =====================================================
+    // ACTIVE REQUESTS
+    // =====================================================
+
     {
       label: "Requests",
-      href: role === "client"
+      href: isClient
         ? "/dashboard/client/requests"
         : "/dashboard/requests",
       icon: FileText,
       permission: "requests:view",
     },
+
+    // =====================================================
+    // REQUEST HISTORY
+    // =====================================================
+
+    ...(isAdministrator
+      ? [
+          {
+            label: "Request History",
+            href: "/dashboard/administrator/request-history",
+            icon: History,
+            permission: "requests:history:view" as Permission,
+          },
+        ]
+      : []),
+
+    ...(isSuperAdministrator
+      ? [
+          {
+            label: "Request History",
+            href: "/dashboard/super-administrator/request-history",
+            icon: History,
+            permission: "requests:history:view" as Permission,
+          },
+        ]
+      : []),
+
+    // =====================================================
+    // CLIENT DOES NOT NEED INTERNAL REQUEST HISTORY
+    // =====================================================
 
     {
       label: "Team",
@@ -61,7 +98,7 @@ export function getNavigation(role: string): NavigationItem[] {
 
     {
       label: "Reports",
-      href: role === "client"
+      href: isClient
         ? "/dashboard/client/reports"
         : "/dashboard/reports",
       icon: FileText,
@@ -77,7 +114,7 @@ export function getNavigation(role: string): NavigationItem[] {
 
     {
       label: "Notifications",
-      href: role === "client"
+      href: isClient
         ? "/dashboard/client/notifications"
         : "/dashboard/notifications",
       icon: Bell,

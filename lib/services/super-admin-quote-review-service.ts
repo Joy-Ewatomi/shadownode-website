@@ -581,22 +581,21 @@ const sourceCurrency =
    * AUDIT FINAL APPROVAL
    * =========================================================
    */
-
-  await recordRequestAudit(
-    input.requestId,
-    input.actorUserId,
-    "super_admin_approved_final_quote",
-    {
-      action: input.action,
-      final_amount: finalAmount,
-      final_currency: finalCurrency,
-      estimated_completion:
-        finalCompletion,
-      reason,
-      quote_version_id:
-        finalVersion.id,
-    },
-  )
+await recordRequestAudit(
+  input.requestId,
+  input.actorUserId,
+  "super_admin_approved_final_quote",
+  {
+    action: input.action,
+    final_amount: finalAmount,
+    final_currency: finalCurrency,
+    estimated_completion:
+      finalCompletion,
+    reason,
+    quote_version_id:
+      finalVersion.id,
+  },
+)
 
   /*
    * =========================================================

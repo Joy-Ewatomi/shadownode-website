@@ -175,14 +175,7 @@ export async function POST(
     const body =
       await request.json()
 
-    console.log(
-      "=== CREATING CYBERSECURITY TRAINING REQUEST ===",
-      {
-        userId: user.id,
-        userEmail: user.email,
-        userRole: user.role,
-      },
-    )
+  
 
     // ========================================================
     // BASIC SERVICE INFORMATION

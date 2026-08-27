@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 type RequestData = {
@@ -14,6 +14,7 @@ type RequestData = {
   status: string
   priority: string | null
   preferred_deadline: string | null
+  osint_completion_date: string | null
 
   client_email: string | null
   client_username: string | null
@@ -51,6 +52,140 @@ type FormState = {
   reason: string
 }
 
+type RequestWorkflow =
+  | "professional_training"
+  | "cybersecurity_training"
+  | "security_assessment"
+  | "investigation"
+
+/* ============================================================
+   WORKFLOW RESOLUTION
+   ============================================================ */
+
+function resolveWorkflow(
+  serviceType: string | null,
+): RequestWorkflow {
+  const service =
+    (serviceType || "")
+      .trim()
+      .toLowerCase()
+
+  /*
+   * PROFESSIONAL TRAINING
+   */
+  if (
+    service === "professional_training"
+  ) {
+    return "professional_training"
+  }
+
+  /*
+   * CYBERSECURITY TRAINING
+   *
+   * custom_training is included because older requests
+   * may already exist in the database using that value.
+   */
+  if (
+    service === "cybersecurity_training" ||
+    service === "custom_training" ||
+    service === "security_awareness" ||
+    service.includes("cybersecurity") ||
+    service.includes("cyber security") ||
+    service.includes("security awareness")
+  ) {
+    return "cybersecurity_training"
+  }
+
+  /*
+   * SECURITY ASSESSMENT
+   */
+  if (
+    service === "security_assessment" ||
+    service.includes("penetration testing") ||
+    service.includes("penetration test") ||
+    service.includes("vulnerability assessment")
+  ) {
+    return "security_assessment"
+  }
+
+  /*
+   * INVESTIGATION
+   */
+  if (
+    service === "investigation" ||
+    service.includes("osint") ||
+    service.includes("open source intelligence") ||
+    service.includes("digital investigation") ||
+    service.includes("digital intelligence")
+  ) {
+    return "investigation"
+  }
+
+  /*
+   * SAFETY FALLBACK
+   */
+  return "investigation"
+}
+
+/* ============================================================
+   DATE HELPER
+   ============================================================ */
+
+function toDateInputValue(
+  value: string | null | undefined,
+): string {
+  if (!value) {
+    return ""
+  }
+
+  const raw = String(value).trim()
+
+  if (!raw) {
+    return ""
+  }
+
+  /*
+   * Already a valid HTML date value.
+   */
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw
+  }
+
+  /*
+   * Handle ISO timestamps such as:
+   * 2026-08-25T00:00:00.000Z
+   */
+  const isoMatch =
+    raw.match(
+      /^(\d{4}-\d{2}-\d{2})/,
+    )
+
+  if (isoMatch) {
+    return isoMatch[1]
+  }
+
+  /*
+   * Last attempt for other valid date strings.
+   */
+  const date = new Date(raw)
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return ""
+  }
+
+  return date
+    .toISOString()
+    .slice(0, 10)
+}
+
+/* ============================================================
+   COMPONENT
+   ============================================================ */
+
 export default function AdminRequestReviewCard({
   request,
 }: {
@@ -58,89 +193,154 @@ export default function AdminRequestReviewCard({
 }) {
   const router = useRouter()
 
-  /*
-   * ============================================================
-   * SERVICE TYPE
-   * ============================================================
-   */
+  /* ==========================================================
+     WORKFLOW
+     ========================================================== */
 
-  const normalizedService =
-    (request.service_type || "")
-      .trim()
-      .toLowerCase()
+  const workflow =
+    resolveWorkflow(
+      request.service_type,
+    )
+
+  const isProfessionalTraining =
+    workflow ===
+    "professional_training"
 
   const isCyberSecurity =
-    normalizedService === "security_assessment" ||
-    normalizedService.includes("cybersecurity") ||
-    normalizedService.includes("cyber security") ||
-    normalizedService.includes("security assessment") ||
-    normalizedService.includes("penetration testing") ||
-    normalizedService.includes("penetration test") ||
-    normalizedService.includes("vulnerability assessment")
+    workflow ===
+    "cybersecurity_training"
 
-  const isOSINT =
-    normalizedService.includes("osint") ||
-    normalizedService.includes("open source intelligence") ||
-    normalizedService.includes("digital investigation") ||
-    normalizedService.includes("digital intelligence")
+  const isSecurityAssessment =
+    workflow ===
+    "security_assessment"
+
+  const isInvestigation =
+    workflow ===
+    "investigation"
 
   /*
-   * ============================================================
-   * PREVIOUS SUBMISSION
-   * ============================================================
+   * Both professional training and cybersecurity training
+   * use a client-requested START DATE + COMPLETION DATE.
    */
+  const hasTrainingDates =
+    isProfessionalTraining ||
+    isCyberSecurity
+
+  /*
+   * Investigation and security assessment only need
+   * completion date.
+   */
+  const isCompletionOnly =
+    isSecurityAssessment ||
+    isInvestigation
+
+  /* ==========================================================
+     PREVIOUS SUBMISSION
+     ========================================================== */
 
   const alreadySubmitted =
-    Boolean(request.admin_reviewed_at) ||
-    Boolean(request.admin_reviewed_by) ||
-    Boolean(request.admin_quote_action) ||
-    request.status === "pending_super_admin_review"
+    request.status ===
+      "pending_super_admin_review" ||
+    request.status === "approved" ||
+    request.status === "completed"
 
-  /*
-   * ============================================================
-   * STATE
-   * ============================================================
-   */
+  /* ==========================================================
+     STATE
+     ========================================================== */
 
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState("")
+  const [loading, setLoading] =
+    useState(false)
 
-  const [form, setForm] = useState<FormState>({
-    amount:
-      request.approved_quote_amount != null
-        ? String(request.approved_quote_amount)
-        : "",
+  const [message, setMessage] =
+    useState("")
 
-    currency:
-      request.approved_quote_currency || "USD",
+  const [form, setForm] =
+    useState<FormState>({
+      amount:
+        request.approved_quote_amount !=
+        null
+          ? String(
+              request.approved_quote_amount,
+            )
+          : "",
 
-    start_date:
-      isCyberSecurity
-        ? request.training_preferred_start_date || ""
-        : "",
+      currency: "USD",
 
-    completion_date:
-      isCyberSecurity
-        ? request.training_preferred_completion_date ||
-          request.approved_estimated_completion ||
-          ""
-        : request.preferred_deadline ||
-          request.approved_estimated_completion ||
-          "",
+      start_date:
+        hasTrainingDates
+          ? toDateInputValue(
+              request.training_preferred_start_date,
+            )
+          : "",
 
-    action: "accept",
+      completion_date:
+        hasTrainingDates
+          ? toDateInputValue(
+              request
+                .training_preferred_completion_date ||
+                request.approved_estimated_completion,
+            )
+          : toDateInputValue(
+              request.osint_completion_date ||
+                request.preferred_deadline ||
+                request.approved_estimated_completion,
+            ),
 
-    reason:
-      request.admin_quote_notes || "",
-  })
+      action: "accept",
 
-  /*
-   * ============================================================
-   * FIELD UPDATE
-   * ============================================================
-   */
+      reason:
+        request.admin_quote_notes ||
+        "",
+    })
 
-  function updateForm<K extends keyof FormState>(
+  /* ==========================================================
+     SYNC DATES WHEN REQUEST CHANGES
+     ========================================================== */
+
+  useEffect(() => {
+    const startDate =
+      hasTrainingDates
+        ? toDateInputValue(
+            request.training_preferred_start_date,
+          )
+        : ""
+
+    const completionDate =
+      hasTrainingDates
+        ? toDateInputValue(
+            request
+              .training_preferred_completion_date ||
+              request.approved_estimated_completion,
+          )
+        : toDateInputValue(
+            request.osint_completion_date ||
+              request.preferred_deadline ||
+              request.approved_estimated_completion,
+          )
+
+    setForm((previous) => ({
+      ...previous,
+      start_date:
+        startDate,
+      completion_date:
+        completionDate,
+    }))
+  }, [
+    hasTrainingDates,
+    request.training_preferred_start_date,
+    request.training_preferred_completion_date,
+    request.osint_completion_date,
+    request.preferred_deadline,
+    request.approved_estimated_completion,
+  ])
+
+  /* ==========================================================
+     FIELD UPDATE
+     ========================================================== */
+
+  function updateForm<
+    K extends keyof FormState
+  >(
     field: K,
     value: FormState[K],
   ) {
@@ -150,24 +350,21 @@ export default function AdminRequestReviewCard({
     }))
   }
 
-  /*
-   * ============================================================
-   * SUBMIT
-   * ============================================================
-   */
+  /* ==========================================================
+     SUBMIT
+     ========================================================== */
 
   async function submit() {
     try {
       setLoading(true)
       setMessage("")
 
-      /*
-       * --------------------------------------------------------
-       * CLIENT-SIDE VALIDATION
-       * --------------------------------------------------------
-       */
+      /* ------------------------------------------------------
+         AMOUNT
+         ------------------------------------------------------ */
 
-      const amount = Number(form.amount)
+      const amount =
+        Number(form.amount)
 
       if (
         !Number.isFinite(amount) ||
@@ -178,23 +375,25 @@ export default function AdminRequestReviewCard({
         )
       }
 
+      /* ------------------------------------------------------
+         REASON
+         ------------------------------------------------------ */
+
       if (!form.reason.trim()) {
         throw new Error(
           "A reason is required before submitting the quote.",
         )
       }
 
+      /* ------------------------------------------------------
+         COMPLETION DATE
+         ------------------------------------------------------ */
+
       if (!form.completion_date) {
         throw new Error(
           "An estimated completion date is required.",
         )
       }
-
-      /*
-       * --------------------------------------------------------
-       * DATE VALIDATION
-       * --------------------------------------------------------
-       */
 
       if (
         !/^\d{4}-\d{2}-\d{2}$/.test(
@@ -206,78 +405,78 @@ export default function AdminRequestReviewCard({
         )
       }
 
-      /*
-       * --------------------------------------------------------
-       * BACKEND PAYLOAD
-       * --------------------------------------------------------
-       *
-       * IMPORTANT:
-       *
-       * The backend reviewQuoteAsAdmin() expects:
-       *
-       * action:
-       *   "submit" | "adjust"
-       *
-       * amount
-       * currency
-       * notes
-       * reason
-       * estimated_completion
-       *
-       * Do NOT send:
-       *
-       * submit_for_super_admin_review
-       * approved_estimated_start
-       *
-       * because the backend function you provided does not
-       * accept/use those values.
-       */
+      /* ------------------------------------------------------
+         TRAINING START DATE
+         ------------------------------------------------------ */
 
-   const payload = {
-  action:
-    form.action === "accept"
-      ? "submit"
-      : "adjust",
+      if (
+        hasTrainingDates &&
+        !form.start_date
+      ) {
+        throw new Error(
+          "A training start date is required.",
+        )
+      }
 
-  approved_quote_amount: amount,
+      if (
+        hasTrainingDates &&
+        !/^\d{4}-\d{2}-\d{2}$/.test(
+          form.start_date,
+        )
+      ) {
+        throw new Error(
+          "Training start date must be a valid date.",
+        )
+      }
 
-  approved_quote_currency:
-    form.currency,
+      /* ------------------------------------------------------
+         PAYLOAD
+         ------------------------------------------------------ */
 
-  admin_quote_notes:
-    form.reason.trim(),
+      const payload = {
+        action:
+          form.action === "accept"
+            ? "submit"
+            : "adjust",
 
-  reason:
-    form.reason.trim(),
+        approved_quote_amount:
+          amount,
 
-  approved_estimated_start:
-    isCyberSecurity
-      ? form.start_date || null
-      : null,
+        approved_quote_currency:
+          form.currency,
 
-  approved_estimated_completion:
-    form.completion_date,
-}
-      /*
-       * --------------------------------------------------------
-       * API REQUEST
-       * --------------------------------------------------------
-       */
+        admin_quote_notes:
+          form.reason.trim(),
 
-      const response = await fetch(
-        `/api/admin/requests/${request.id}`,
-        {
-          method: "PATCH",
+        reason:
+          form.reason.trim(),
 
-          credentials: "include",
+        approved_estimated_completion:
+          form.completion_date,
+      }
 
-          headers: {
-            "Content-Type": "application/json",
+      /* ------------------------------------------------------
+         API
+         ------------------------------------------------------ */
+
+      const response =
+        await fetch(
+          `/api/admin/requests/${request.id}`,
+          {
+            method: "PATCH",
+
+            credentials: "include",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify(
+              payload,
+            ),
           },
-
-          body: JSON.stringify(payload),
-        },
-      )
+        )
 
       let data: {
         error?: string
@@ -285,7 +484,8 @@ export default function AdminRequestReviewCard({
       } = {}
 
       try {
-        data = await response.json()
+        data =
+          await response.json()
       } catch {
         data = {}
       }
@@ -298,11 +498,9 @@ export default function AdminRequestReviewCard({
         )
       }
 
-      /*
-       * --------------------------------------------------------
-       * SUCCESS
-       * --------------------------------------------------------
-       */
+      /* ------------------------------------------------------
+         SUCCESS
+         ------------------------------------------------------ */
 
       router.push(
         "/dashboard/requests",
@@ -320,11 +518,9 @@ export default function AdminRequestReviewCard({
     }
   }
 
-  /*
-   * ============================================================
-   * RENDER
-   * ============================================================
-   */
+  /* ==========================================================
+     RENDER
+     ========================================================== */
 
   return (
     <div className="space-y-6">
@@ -431,7 +627,7 @@ export default function AdminRequestReviewCard({
               Service Type
             </p>
 
-            <p className="mt-1 min-w-0 max-w-full break-words text-sm text-white">
+            <p className="mt-1 break-words text-sm text-white">
               {request.service_type ||
                 "Not specified"}
             </p>
@@ -442,7 +638,7 @@ export default function AdminRequestReviewCard({
               Category
             </p>
 
-            <p className="mt-1 min-w-0 max-w-full break-words text-sm text-white">
+            <p className="mt-1 break-words text-sm text-white">
               {request.category ||
                 "Not specified"}
             </p>
@@ -453,7 +649,7 @@ export default function AdminRequestReviewCard({
               Priority
             </p>
 
-            <p className="mt-1 min-w-0 max-w-full break-words text-sm text-white">
+            <p className="mt-1 break-words text-sm text-white">
               {request.priority ||
                 "Not specified"}
             </p>
@@ -540,7 +736,9 @@ export default function AdminRequestReviewCard({
 
             <p className="mt-1 text-lg font-semibold text-white">
               {request.ai_price_estimate != null
-                ? request.ai_price_estimate.toLocaleString()
+                ? Number(
+                    request.ai_price_estimate,
+                  ).toLocaleString()
                 : "Pending"}{" "}
               USD
             </p>
@@ -577,7 +775,11 @@ export default function AdminRequestReviewCard({
             <p className="mt-1 text-sm font-semibold text-[#20dc73]">
               {request.ai_confidence != null
                 ? `${(
-                    request.ai_confidence * 100
+                    request.ai_confidence <=
+                    1
+                      ? request.ai_confidence *
+                        100
+                      : request.ai_confidence
                   ).toFixed(0)}%`
                 : "Pending"}
             </p>
@@ -649,72 +851,79 @@ export default function AdminRequestReviewCard({
       ====================================================== */}
 
       {alreadySubmitted && (
-        <div className="rounded-md border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
+        <div className="w-full min-w-0 overflow-hidden rounded-md border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
 
-          <div className="mb-5 border-b border-white/10 pb-5">
+          <div className="mb-5 min-w-0 border-b border-white/10 pb-5">
 
             <p className="text-xs uppercase tracking-[0.2em] text-[#20dc73]">
               Administrator Record
             </p>
 
-            <h3 className="mt-2 text-lg font-semibold text-white">
+            <h3 className="mt-2 break-words text-lg font-semibold text-white">
               Previous Submission
             </h3>
 
-            <p className="mt-1 text-sm text-white/40">
+            <p className="mt-1 break-words text-sm text-white/40">
               This request has already been submitted to the Super Administrator.
             </p>
 
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid min-w-0 max-w-full gap-5 md:grid-cols-3">
 
-            <div>
+            <div className="min-w-0">
+
               <p className="text-xs uppercase tracking-wider text-white/40">
                 Submitted Quote
               </p>
 
-              <p className="mt-1 text-lg font-semibold text-white">
+              <p className="mt-1 break-words text-lg font-semibold text-white">
                 {request.approved_quote_currency ||
                   "USD"}{" "}
-                {request.approved_quote_amount != null
+                {request.approved_quote_amount !=
+                null
                   ? Number(
                       request.approved_quote_amount,
                     ).toLocaleString()
                   : "Not specified"}
               </p>
+
             </div>
 
-            <div>
+            <div className="min-w-0">
+
               <p className="text-xs uppercase tracking-wider text-white/40">
                 Estimated Completion
               </p>
 
-              <p className="mt-1 text-sm text-white">
+              <p className="mt-1 break-words text-sm text-white">
                 {request.approved_estimated_completion ||
                   "Not specified"}
               </p>
+
             </div>
 
-            <div>
+            <div className="min-w-0">
+
               <p className="text-xs uppercase tracking-wider text-white/40">
                 Submission Status
               </p>
 
-              <p className="mt-1 text-sm font-semibold uppercase text-[#20dc73]">
+              <p className="mt-1 break-words text-sm font-semibold uppercase text-[#20dc73]">
                 Submitted
               </p>
+
             </div>
 
-            <div className="md:col-span-3">
+            <div className="min-w-0 md:col-span-3">
 
               <p className="text-xs uppercase tracking-wider text-white/40">
                 Administrator Notes
               </p>
 
-              <div className="mt-2 rounded-md border border-[#143b28] bg-black/40 p-4">
+              <div className="mt-2 w-full overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4">
 
-                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/70">
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/70 [overflow-wrap:anywhere]">
                   {request.admin_quote_notes ||
                     "No administrator notes provided."}
                 </p>
@@ -724,13 +933,13 @@ export default function AdminRequestReviewCard({
             </div>
 
             {request.admin_reviewed_at && (
-              <div className="md:col-span-3">
+              <div className="min-w-0 md:col-span-3">
 
                 <p className="text-xs uppercase tracking-wider text-white/40">
                   Submitted At
                 </p>
 
-                <p className="mt-1 text-sm text-white/60">
+                <p className="mt-1 break-words text-sm text-white/60">
                   {new Date(
                     request.admin_reviewed_at,
                   ).toLocaleString()}
@@ -740,6 +949,7 @@ export default function AdminRequestReviewCard({
             )}
 
           </div>
+
         </div>
       )}
 
@@ -770,7 +980,7 @@ export default function AdminRequestReviewCard({
           <div className="grid gap-5 md:grid-cols-2">
 
             {/* ==================================================
-                QUOTE AMOUNT
+                QUOTE
             ================================================== */}
 
             <label className="text-sm text-white/60">
@@ -807,52 +1017,50 @@ export default function AdminRequestReviewCard({
                 Quote Currency
               </span>
 
-              <input
-                type="text"
-                value="USD"
-                disabled
-                className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm font-semibold text-white/70 outline-none disabled:cursor-not-allowed"
-              />
+            <input
+  type="text"
+  value="USD"
+  disabled
+  className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm font-semibold text-white"
+/>
 
               <p className="mt-2 text-xs text-white/30">
                 Administrator quotes are prepared in USD.
                 The final quote will be converted to the
-                client's preferred currency before it is
-                presented for payment.
+                client's preferred currency before payment.
               </p>
 
             </label>
 
             {/* ==================================================
-                CYBERSECURITY START DATE
+                START DATE
             ================================================== */}
 
-            {isCyberSecurity && (
-              <label className="text-sm text-white/60">
+            {hasTrainingDates && (
+            <label className="text-sm text-white/60">
+  <span className="mb-2 block">
+    Training Start Date
+  </span>
 
-                <span className="mb-2 block">
-                  Security Assessment Start Date
-                </span>
+  <input
+    type="date"
+    disabled={loading}
+    value={form.start_date}
+    onChange={(event) =>
+      updateForm(
+        "start_date",
+        event.target.value,
+      )
+    }
+    className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
+  />
 
-                <input
-                  type="date"
-                  disabled={loading}
-                  value={form.start_date}
-                  onChange={(event) =>
-                    updateForm(
-                      "start_date",
-                      event.target.value,
-                    )
-                  }
-                  className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
-                />
-
-                <p className="mt-2 text-xs text-white/30">
-                  Client-requested cybersecurity start date.
-                  This is shown for administrator planning.
-                </p>
-
-              </label>
+  <p className="mt-2 text-xs text-white/30">
+    Administrator estimated start date.
+    If a valid client-requested date exists,
+    it is pre-filled for review.
+  </p>
+</label>
             )}
 
             {/* ==================================================
@@ -868,7 +1076,9 @@ export default function AdminRequestReviewCard({
               <input
                 type="date"
                 disabled={loading}
-                value={form.completion_date}
+                value={
+                  form.completion_date
+                }
                 onChange={(event) =>
                   updateForm(
                     "completion_date",
@@ -879,9 +1089,19 @@ export default function AdminRequestReviewCard({
               />
 
               <p className="mt-2 text-xs text-white/30">
-                {isCyberSecurity
-                  ? "Requested cybersecurity completion date. You may adjust it before submission."
-                  : "Estimated completion date for this investigation."}
+
+                {isProfessionalTraining &&
+                  "Professional training completion date."}
+
+                {isCyberSecurity &&
+                  "Cybersecurity training completion date."}
+
+                {isSecurityAssessment &&
+                  "Security assessment completion date."}
+
+                {isInvestigation &&
+                  "Investigation completion date."}
+
               </p>
 
             </label>
@@ -899,11 +1119,23 @@ export default function AdminRequestReviewCard({
                 </p>
 
                 <p className="mt-1 text-sm text-white/70">
-                  {isCyberSecurity
-                    ? "Cybersecurity workflow — Start Date + Completion Date"
-                    : isOSINT
-                    ? "OSINT workflow — Completion Date only"
-                    : "Standard investigation workflow — Completion Date only"}
+
+                  {workflow ===
+                    "professional_training" &&
+                    "Professional training workflow — Start Date + Completion Date"}
+
+                  {workflow ===
+                    "cybersecurity_training" &&
+                    "Cybersecurity training workflow — Start Date + Completion Date"}
+
+                  {workflow ===
+                    "security_assessment" &&
+                    "Security assessment workflow — Completion Date only"}
+
+                  {workflow ===
+                    "investigation" &&
+                    "Investigation workflow — Completion Date only"}
+
                 </p>
 
               </div>
@@ -933,7 +1165,8 @@ export default function AdminRequestReviewCard({
                   }
                   className={[
                     "rounded-md border px-4 py-3 text-left transition",
-                    form.action === "accept"
+                    form.action ===
+                    "accept"
                       ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
                       : "border-[#143b28] bg-black text-white/60 hover:border-[#20dc73]/50",
                   ].join(" ")}
@@ -961,7 +1194,8 @@ export default function AdminRequestReviewCard({
                   }
                   className={[
                     "rounded-md border px-4 py-3 text-left transition",
-                    form.action === "adjust"
+                    form.action ===
+                    "adjust"
                       ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
                       : "border-[#143b28] bg-black text-white/60 hover:border-[#20dc73]/50",
                   ].join(" ")}
@@ -1003,7 +1237,8 @@ export default function AdminRequestReviewCard({
                 }
                 rows={6}
                 placeholder={
-                  form.action === "adjust"
+                  form.action ===
+                  "adjust"
                     ? "Explain why you are adjusting the AI recommendation, including pricing, complexity, timeline, scope, or risk considerations..."
                     : "Explain why you are accepting the AI recommendation and why the proposed quote and timeline are appropriate..."
                 }
@@ -1054,11 +1289,9 @@ export default function AdminRequestReviewCard({
                     : "bg-[#20dc73] text-black hover:bg-[#32ef82]",
                 ].join(" ")}
               >
-
                 {loading
                   ? "Submitting..."
                   : "Submit to Super Administrator"}
-
               </button>
 
             </div>

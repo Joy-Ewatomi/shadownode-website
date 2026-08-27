@@ -41,13 +41,36 @@ export async function POST(request: NextRequest) {
     const { case_id, user_id, amount, currency, status } = await request.json()
     if (!user_id || !amount) return NextResponse.json({ error: "Client and amount required" }, { status: 400 })
 
+  const quoteResult = await query(
+  `
+  SELECT approved_quote_amount, approved_quote_currency
+  FROM requests
+  WHERE id = $1
+  `,
+  [case_id]
+)
+
+const approvedQuote = quoteResult.rows[0]
+
+const finalCurrency =
+  currency || approvedQuote?.approved_quote_currency || "USD"
+
+const finalAmount =
+  amount || approvedQuote?.approved_quote_amount || 0
+
     const inserted = await query(
       `
       INSERT INTO invoices (case_id, ${invoiceOwnerColumn}, amount, currency, status, paid_at)
       VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 = 'paid' THEN NOW() ELSE NULL END)
       RETURNING *
       `,
-      [case_id || null, user_id, Number(amount), currency || "NGN", status || "draft"],
+      [
+  case_id || null,
+  user_id,
+  Number(finalAmount),
+  finalCurrency,
+  status || "draft"
+]
     )
 
     await auditLog(auth.user?.id || null, "invoice_created", request, { invoice_id: inserted.rows[0].id, case_id, user_id })

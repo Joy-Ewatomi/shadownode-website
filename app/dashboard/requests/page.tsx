@@ -18,7 +18,7 @@ type Request = {
 }
 const REQUEST_FILTERS: Record<string, string[]> = {
   pending: ["pending_admin_review"],
-  review: ["pending_admin_review", "pending_super_admin_review"],
+  review: ["pending_admin_review"],
   quoted: [
     "quote_sent",
     "revised_quote_sent",

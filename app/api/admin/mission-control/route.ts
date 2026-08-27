@@ -33,7 +33,14 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       count("SELECT COUNT(*) AS total FROM cases WHERE status <> 'archived'"),
       count("SELECT COUNT(*) AS total FROM cases WHERE priority IN ('high', 'critical') AND status <> 'archived'"),
-      count("SELECT COUNT(*) AS total FROM requests WHERE status = 'pending_admin_review'"),
+      count(`
+  SELECT COUNT(*) AS total
+  FROM requests
+  WHERE status IN (
+    'pending_admin_review',
+    'negotiation_requested'
+  )
+`),
       count("SELECT COUNT(*) AS total FROM case_reports"),
       count("SELECT COUNT(*) AS total FROM app_users WHERE role='investigator' AND status='active'"),
       count("SELECT COUNT(*) AS total FROM forensic_files WHERE created_at >= CURRENT_DATE"),
@@ -108,15 +115,42 @@ export async function GET(request: NextRequest) {
         LIMIT 10
         `,
       ),
-      query(
-        `
-        SELECT id, case_number, title, service_type, status, client_email, created_at
-        FROM requests
-        WHERE status = 'pending_admin_review'
-        ORDER BY created_at DESC
-        LIMIT 10
-        `,
-      ),
+ query(
+  `
+  SELECT
+    r.id,
+    r.case_number,
+    r.title,
+    r.service_type,
+    r.status,
+    r.client_email,
+    r.created_at,
+    qn.id AS negotiation_id,
+    qn.requested_budget,
+    qn.quote_currency,
+    qn.client_reason,
+    qn.status AS negotiation_status
+  FROM requests r
+  LEFT JOIN LATERAL (
+    SELECT
+      id,
+      requested_budget,
+      quote_currency,
+      client_reason,
+      status
+    FROM quote_negotiations
+    WHERE request_id = r.id
+    ORDER BY created_at DESC
+    LIMIT 1
+  ) qn ON true
+  WHERE r.status IN (
+    'pending_admin_review',
+    'negotiation_requested'
+  )
+  ORDER BY r.created_at DESC
+  LIMIT 10
+  `,
+),
       query(
         `
         SELECT i.id, i.case_id, i.${invoiceOwnerColumn} AS invoice_user_id, i.amount, i.currency, i.status, i.created_at, c.case_number, c.title AS case_title

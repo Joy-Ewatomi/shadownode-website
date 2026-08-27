@@ -18,7 +18,8 @@ export default function TrainingServiceStep({
   onCustomDescriptionChange,
 }: Props) {
 
-  const isCustom = service_type === "custom"
+ const isCustom =
+  service_type === "custom_training"
 
   return (
     <div className="space-y-6">
@@ -91,25 +92,23 @@ export default function TrainingServiceStep({
 
           {/* CUSTOM OPTION */}
 
-          <button
-            type="button"
-            onClick={() => onSelect("custom")}
-            className={`rounded-md border p-5 text-left transition ${
-              service_type === "custom"
-                ? "border-[#20dc73] bg-[#20dc73]/10"
-                : "border-[#143b28] hover:border-[#20dc73]/40"
-            }`}
-          >
+      <button
+  type="button"
+  onClick={() => onSelect("custom_training")}
+  className={`rounded-md border p-5 text-left transition ${
+    service_type === "custom_training"
+      ? "border-[#20dc73] bg-[#20dc73]/10"
+      : "border-[#143b28] hover:border-[#20dc73]/40"
+  }`}
+>
+  <h3 className="font-semibold text-white">
+    Custom Requirement
+  </h3>
 
-            <h3 className="font-semibold text-white">
-              Custom Requirement
-            </h3>
-
-            <p className="mt-2 text-sm text-white/60">
-              Describe a cybersecurity training programme you need.
-            </p>
-
-          </button>
+  <p className="mt-2 text-sm text-white/60">
+    Describe a cybersecurity training programme you need.
+  </p>
+</button>
 
 
         </div>

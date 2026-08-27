@@ -11,6 +11,9 @@ type RequestData = {
   case_number: string | null
   title: string | null
   service_type: string | null
+  supporting_links?: unknown
+  evidence_uploads?: unknown
+  evidence_files?: unknown
   category: "osint" | "cybersecurity" | null
   description: string | null
   investigation_objective: string | null
@@ -51,6 +54,7 @@ type RequestData = {
   client_decision_at: string | null
 
   created_at: string | null
+  
 
   [key: string]: unknown
 }
@@ -76,6 +80,19 @@ type AuditEvent = {
   actor_user_id: string | null
   action: string
   details: unknown
+  created_at: string | null
+}
+
+type WorkflowHistoryEvent = {
+  id: string
+  request_id: string | null
+  case_id: string | null
+  quote_version_id: string | null
+  performed_by: string | null
+  performer_role: string | null
+  action: string | null
+  description: string | null
+  metadata: unknown
   created_at: string | null
 }
 
@@ -155,6 +172,52 @@ function toNumber(value: unknown): number | null {
 }
 
 // =========================================================
+// ROLE-SPECIFIC ACTION STATE
+// =========================================================
+
+function getActionRequired(
+  role: string,
+  request: RequestData,
+): boolean {
+  /*
+   * IMPORTANT:
+   *
+   * We are deliberately not inventing a new
+   * action_required database column.
+   *
+   * The final pending conditions should match
+   * the status values already produced by your
+   * request workflow.
+   *
+   * These are conservative fallbacks based on
+   * the fields already present in requests.
+   */
+
+  if (role === "administrator") {
+    return (
+      request.status === "submitted" ||
+      request.status === "pending_admin_review" ||
+      request.status === "admin_review_required"
+    )
+  }
+
+  if (role === "super_administrator") {
+    return (
+      request.status ===
+        "awaiting_super_admin_review" ||
+      request.status ===
+        "pending_super_admin_review" ||
+      request.status ===
+        "quote_pending_approval" ||
+      request.status ===
+        "negotiation_pending_approval"
+    )
+  }
+
+  return false
+}
+
+// =========================================================
 // PAGE
 // =========================================================
 
@@ -194,6 +257,32 @@ export default async function RequestDetailPage({
   // =======================================================
 
   const { id } = await params
+
+
+  // =======================================================
+// MARK REQUEST NOTIFICATIONS AS READ
+//
+// Any unread notification belonging to the current user
+// and associated with this request is marked as read.
+//
+// This works regardless of whether the request was opened
+// from the notification bell, request sidebar, dashboard
+// widget, history page, or direct URL.
+// =======================================================
+
+await query(
+  `
+    UPDATE notifications
+    SET is_read = true
+    WHERE user_id = $1
+      AND is_read = false
+      AND (
+        metadata->>'request_id' = $2
+        OR metadata->>'requestId' = $2
+      )
+  `,
+  [user.id, id],
+)
 
   // =======================================================
   // LOAD COMPLETE REQUEST
@@ -251,6 +340,11 @@ export default async function RequestDetailPage({
         ? String(rawRequest.service_type)
         : null,
 
+    evidence_uploads:
+  Array.isArray(rawRequest.evidence_uploads)
+    ? rawRequest.evidence_uploads
+    : [],    
+
     category:
       rawRequest.category === "osint" ||
       rawRequest.category === "cybersecurity"
@@ -266,10 +360,14 @@ export default async function RequestDetailPage({
     investigation_objective:
       rawRequest.investigation_objective !== null &&
       rawRequest.investigation_objective !== undefined
-        ? String(rawRequest.investigation_objective)
+        ? String(
+            rawRequest.investigation_objective,
+          )
         : null,
 
-    status: String(rawRequest.status ?? ""),
+    status: String(
+      rawRequest.status ?? "",
+    ),
 
     priority:
       rawRequest.priority !== null &&
@@ -307,28 +405,35 @@ export default async function RequestDetailPage({
         ? String(rawRequest.ai_analysis)
         : null,
 
-    ai_price_estimate: toNumber(
-      rawRequest.ai_price_estimate,
-    ),
+    ai_price_estimate:
+      toNumber(
+        rawRequest.ai_price_estimate,
+      ),
 
-    ai_confidence: toNumber(
-      rawRequest.ai_confidence,
-    ),
+    ai_confidence:
+      toNumber(
+        rawRequest.ai_confidence,
+      ),
 
-    approved_quote_amount: toNumber(
-      rawRequest.approved_quote_amount,
-    ),
+    approved_quote_amount:
+      toNumber(
+        rawRequest.approved_quote_amount,
+      ),
 
     approved_quote_currency:
       rawRequest.approved_quote_currency !== null &&
       rawRequest.approved_quote_currency !== undefined
-        ? String(rawRequest.approved_quote_currency)
+        ? String(
+            rawRequest.approved_quote_currency,
+          )
         : null,
 
     approved_quote_notes:
       rawRequest.approved_quote_notes !== null &&
       rawRequest.approved_quote_notes !== undefined
-        ? String(rawRequest.approved_quote_notes)
+        ? String(
+            rawRequest.approved_quote_notes,
+          )
         : null,
 
     approved_estimated_completion:
@@ -339,19 +444,25 @@ export default async function RequestDetailPage({
     admin_quote_action:
       rawRequest.admin_quote_action !== null &&
       rawRequest.admin_quote_action !== undefined
-        ? String(rawRequest.admin_quote_action)
+        ? String(
+            rawRequest.admin_quote_action,
+          )
         : null,
 
     admin_quote_notes:
       rawRequest.admin_quote_notes !== null &&
       rawRequest.admin_quote_notes !== undefined
-        ? String(rawRequest.admin_quote_notes)
+        ? String(
+            rawRequest.admin_quote_notes,
+          )
         : null,
 
     admin_reviewed_by:
       rawRequest.admin_reviewed_by !== null &&
       rawRequest.admin_reviewed_by !== undefined
-        ? String(rawRequest.admin_reviewed_by)
+        ? String(
+            rawRequest.admin_reviewed_by,
+          )
         : null,
 
     admin_reviewed_at:
@@ -362,19 +473,25 @@ export default async function RequestDetailPage({
     super_admin_quote_action:
       rawRequest.super_admin_quote_action !== null &&
       rawRequest.super_admin_quote_action !== undefined
-        ? String(rawRequest.super_admin_quote_action)
+        ? String(
+            rawRequest.super_admin_quote_action,
+          )
         : null,
 
     super_admin_quote_notes:
       rawRequest.super_admin_quote_notes !== null &&
       rawRequest.super_admin_quote_notes !== undefined
-        ? String(rawRequest.super_admin_quote_notes)
+        ? String(
+            rawRequest.super_admin_quote_notes,
+          )
         : null,
 
     super_admin_reviewed_by:
       rawRequest.super_admin_reviewed_by !== null &&
       rawRequest.super_admin_reviewed_by !== undefined
-        ? String(rawRequest.super_admin_reviewed_by)
+        ? String(
+            rawRequest.super_admin_reviewed_by,
+          )
         : null,
 
     super_admin_reviewed_at:
@@ -414,15 +531,7 @@ export default async function RequestDetailPage({
   }
 
   // =======================================================
-  // SERIALIZE REQUEST
-  // =======================================================
-
-  const serializedRequest = JSON.parse(
-    JSON.stringify(request),
-  )
-
-  // =======================================================
-  // LOAD QUOTE HISTORY
+  // QUOTE HISTORY
   // =======================================================
 
   const quotesResult = await query(
@@ -446,19 +555,22 @@ export default async function RequestDetailPage({
 
       WHERE request_id = $1
 
-      ORDER BY version_number DESC
+      ORDER BY
+        version_number DESC,
+        created_at DESC
     `,
     [id],
   )
 
   const quoteVersions: QuoteVersion[] =
     quotesResult.rows.map(
-      (quote: Record<string, unknown>) => ({
+      (
+        quote: Record<string, unknown>,
+      ) => ({
         id: String(quote.id),
 
-        request_id: String(
-          quote.request_id,
-        ),
+        request_id:
+          String(quote.request_id),
 
         version_number:
           Number(
@@ -468,27 +580,35 @@ export default async function RequestDetailPage({
         created_by:
           quote.created_by !== null &&
           quote.created_by !== undefined
-            ? String(quote.created_by)
+            ? String(
+                quote.created_by,
+              )
             : null,
 
         creator_role:
           quote.creator_role !== null &&
           quote.creator_role !== undefined
-            ? String(quote.creator_role)
+            ? String(
+                quote.creator_role,
+              )
             : null,
 
-        source: String(
-          quote.source ?? "",
-        ),
+        source:
+          String(
+            quote.source ?? "",
+          ),
 
-        price: toNumber(
-          quote.price,
-        ),
+        price:
+          toNumber(
+            quote.price,
+          ),
 
         currency:
           quote.currency !== null &&
           quote.currency !== undefined
-            ? String(quote.currency)
+            ? String(
+                quote.currency,
+              )
             : null,
 
         estimated_completion:
@@ -499,19 +619,25 @@ export default async function RequestDetailPage({
         reasoning:
           quote.reasoning !== null &&
           quote.reasoning !== undefined
-            ? String(quote.reasoning)
+            ? String(
+                quote.reasoning,
+              )
             : null,
 
         notes:
           quote.notes !== null &&
           quote.notes !== undefined
-            ? String(quote.notes)
+            ? String(
+                quote.notes,
+              )
             : null,
 
         status:
           quote.status !== null &&
           quote.status !== undefined
-            ? String(quote.status)
+            ? String(
+                quote.status,
+              )
             : null,
 
         created_at:
@@ -522,7 +648,7 @@ export default async function RequestDetailPage({
     )
 
   // =======================================================
-  // FIND IMPORTANT QUOTES
+  // IMPORTANT QUOTES
   // =======================================================
 
   const adminQuote =
@@ -539,45 +665,170 @@ export default async function RequestDetailPage({
     ) ?? null
 
   // =======================================================
-  // SUPER ADMIN HISTORY
+  // ROLE-SPECIFIC WORKFLOW HISTORY
+  //
+  // THIS IS THE IMPORTANT NEW PART.
+  //
+  // Administrator sees administrator history.
+  // Super administrator sees super administrator history.
+  //
+  // We do NOT expose every internal role's workflow
+  // history to every role.
+  // =======================================================
+
+  let workflowHistory:
+    WorkflowHistoryEvent[] = []
+
+  if (
+    user.role === "administrator" ||
+    user.role === "super_administrator"
+  ) {
+    const workflowResult =
+      await query(
+        `
+          SELECT
+            id,
+            request_id,
+            case_id,
+            quote_version_id,
+            performed_by,
+            performer_role,
+            action,
+            description,
+            metadata,
+            created_at
+
+          FROM workflow_history
+
+          WHERE request_id = $1
+            AND performer_role = $2
+
+          ORDER BY created_at ASC
+        `,
+        [
+          id,
+          user.role,
+        ],
+      )
+
+    workflowHistory =
+      workflowResult.rows.map(
+        (
+          item: Record<string, unknown>,
+        ): WorkflowHistoryEvent => ({
+          id:
+            String(item.id),
+
+          request_id:
+            item.request_id !== null &&
+            item.request_id !== undefined
+              ? String(
+                  item.request_id,
+                )
+              : null,
+
+          case_id:
+            item.case_id !== null &&
+            item.case_id !== undefined
+              ? String(
+                  item.case_id,
+                )
+              : null,
+
+          quote_version_id:
+            item.quote_version_id !== null &&
+            item.quote_version_id !== undefined
+              ? String(
+                  item.quote_version_id,
+                )
+              : null,
+
+          performed_by:
+            item.performed_by !== null &&
+            item.performed_by !== undefined
+              ? String(
+                  item.performed_by,
+                )
+              : null,
+
+          performer_role:
+            item.performer_role !== null &&
+            item.performer_role !== undefined
+              ? String(
+                  item.performer_role,
+                )
+              : null,
+
+          action:
+            item.action !== null &&
+            item.action !== undefined
+              ? String(
+                  item.action,
+                )
+              : null,
+
+          description:
+            item.description !== null &&
+            item.description !== undefined
+              ? String(
+                  item.description,
+                )
+              : null,
+
+          metadata:
+            item.metadata ?? null,
+
+          created_at:
+            toISOString(
+              item.created_at,
+            ),
+        }),
+      )
+  }
+
+  // =======================================================
+  // SUPER ADMIN AUDIT / NEGOTIATION HISTORY
   // =======================================================
 
   let auditHistory: AuditEvent[] = []
 
-  let negotiationHistory: NegotiationEvent[] = []
+  let negotiationHistory:
+    NegotiationEvent[] = []
 
   if (
     user.role ===
     "super_administrator"
   ) {
     // =====================================================
-    // AUDIT HISTORY
+    // AUDIT EVENTS
     // =====================================================
 
-    const auditResult = await query(
-      `
-        SELECT
-          id,
-          actor_user_id,
-          action,
-          details,
-          created_at
+    const auditResult =
+      await query(
+        `
+          SELECT
+            id,
+            actor_user_id,
+            action,
+            details,
+            created_at
 
-        FROM request_audit_events
+          FROM request_audit_events
 
-        WHERE request_id = $1
+          WHERE request_id = $1
 
-        ORDER BY created_at ASC
-      `,
-      [id],
-    )
+          ORDER BY created_at ASC
+        `,
+        [id],
+      )
 
     auditHistory =
       auditResult.rows.map(
         (
           item: Record<string, unknown>,
         ) => ({
-          id: String(item.id),
+          id:
+            String(item.id),
 
           actor_user_id:
             item.actor_user_id !== null &&
@@ -587,9 +838,10 @@ export default async function RequestDetailPage({
                 )
               : null,
 
-          action: String(
-            item.action ?? "",
-          ),
+          action:
+            String(
+              item.action ?? "",
+            ),
 
           details:
             item.details ?? null,
@@ -652,16 +904,20 @@ export default async function RequestDetailPage({
         (
           item: Record<string, unknown>,
         ): NegotiationEvent => ({
-          id: String(item.id),
+          id:
+            String(item.id),
 
-          request_id: String(
-            item.request_id,
-          ),
+          request_id:
+            String(
+              item.request_id,
+            ),
 
           client_id:
             item.client_id !== null &&
             item.client_id !== undefined
-              ? String(item.client_id)
+              ? String(
+                  item.client_id,
+                )
               : null,
 
           assigned_reviewer_id:
@@ -683,7 +939,9 @@ export default async function RequestDetailPage({
           status:
             item.status !== null &&
             item.status !== undefined
-              ? String(item.status)
+              ? String(
+                  item.status,
+                )
               : null,
 
           original_ai_estimate:
@@ -781,12 +1039,45 @@ export default async function RequestDetailPage({
   }
 
   // =======================================================
-  // FINAL SERIALIZATION
+  // SERIALIZATION
   // =======================================================
 
-  const finalRequest = JSON.parse(
-    JSON.stringify(request),
-  )
+ const finalRequest = {
+  ...JSON.parse(JSON.stringify(request)),
+
+  evidence_files:
+    request.evidence_uploads ?? [],
+
+  evidence_uploads:
+    request.evidence_uploads ?? [],
+}
+
+  const actionRequired =
+    getActionRequired(
+      user.role,
+      request,
+    )
+
+  const serializedWorkflowHistory =
+    JSON.parse(
+      JSON.stringify(
+        workflowHistory,
+      ),
+    )
+
+  const serializedAuditHistory =
+    JSON.parse(
+      JSON.stringify(
+        auditHistory,
+      ),
+    )
+
+  const serializedNegotiationHistory =
+    JSON.parse(
+      JSON.stringify(
+        negotiationHistory,
+      ),
+    )
 
   // =======================================================
   // PAGE
@@ -821,6 +1112,16 @@ export default async function RequestDetailPage({
             {request.status}
           </span>
 
+          {actionRequired ? (
+            <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-xs text-amber-300">
+              Action Required
+            </span>
+          ) : (
+            <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white/40">
+              No Action Required
+            </span>
+          )}
+
           {request.priority && (
             <span className="rounded border border-white/10 px-2 py-1 text-xs uppercase text-white/50">
               {request.priority}
@@ -832,7 +1133,92 @@ export default async function RequestDetailPage({
       </header>
 
       {/* =================================================
-          ROLE-SPECIFIC REQUEST WORKFLOW
+          ROLE WORKFLOW HISTORY
+          ================================================= */}
+
+      {(user.role ===
+        "administrator" ||
+        user.role ===
+          "super_administrator") && (
+        <section className="min-w-0 overflow-hidden rounded-md border border-[#143b28] bg-[#06110f]">
+
+          <div className="border-b border-white/10 px-5 py-5 sm:px-6">
+
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#20dc73]">
+              {user.role ===
+              "administrator"
+                ? "Administrator History"
+                : "Super Administrator History"}
+            </p>
+
+            <p className="mt-2 text-sm text-white/50">
+              Actions previously performed by your role
+              on this request.
+            </p>
+
+          </div>
+
+          {serializedWorkflowHistory.length ===
+          0 ? (
+            <div className="px-5 py-8 text-sm text-white/40 sm:px-6">
+              No workflow actions recorded yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-white/5">
+
+              {serializedWorkflowHistory.map(
+                (
+                  event: WorkflowHistoryEvent,
+                ) => (
+                  <div
+                    key={event.id}
+                    className="px-5 py-5 sm:px-6"
+                  >
+
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+
+                      <div className="min-w-0">
+
+                        <p className="font-mono text-xs uppercase tracking-wider text-[#20dc73]">
+                          {event.action ||
+                            "Workflow Action"}
+                        </p>
+
+                        {event.description && (
+                          <p className="mt-2 text-sm leading-6 text-white/70">
+                            {event.description}
+                          </p>
+                        )}
+
+                      </div>
+
+                      {event.created_at && (
+                        <time
+                          dateTime={
+                            event.created_at
+                          }
+                          className="shrink-0 font-mono text-xs text-white/30"
+                        >
+                          {new Date(
+                            event.created_at,
+                          ).toLocaleString()}
+                        </time>
+                      )}
+
+                    </div>
+
+                  </div>
+                ),
+              )}
+
+            </div>
+          )}
+
+        </section>
+      )}
+
+      {/* =================================================
+          REQUEST ACTIONS
           ================================================= */}
 
       <section className="min-w-0 overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] p-5 sm:p-6">
@@ -844,8 +1230,8 @@ export default async function RequestDetailPage({
           </p>
 
           <p className="mt-2 text-sm text-white/50">
-            Role-specific workflow actions
-            for this request.
+            Role-specific workflow actions for this
+            request.
           </p>
 
         </div>
@@ -872,10 +1258,10 @@ export default async function RequestDetailPage({
                 quoteVersions
               }
               auditHistory={
-                auditHistory
+                serializedAuditHistory
               }
               negotiationHistory={
-                negotiationHistory
+                serializedNegotiationHistory
               }
             />
 

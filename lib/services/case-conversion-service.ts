@@ -163,7 +163,7 @@ export async function convertAcceptedRequestToCase(
     // ---------------------------------------------------------
 
     const caseNumber =
-      `SN-CASE-${new Date().getFullYear()}-${Date.now()}`
+      `SOB-CASE-${new Date().getFullYear()}-${Date.now()}`
 
     const existingCase = await query<{
       id: string

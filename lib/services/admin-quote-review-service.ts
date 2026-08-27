@@ -167,107 +167,113 @@ export async function reviewQuoteAsAdmin(
    * =========================================================
    */
 
-  const current =
-    await query<{
-      id: string
+const current =
+  await query<{
+    id: string
 
-      user_id:
-        | string
-        | null
+    user_id:
+      | string
+      | null
 
-      client_email:
-        | string
-        | null
+    client_email:
+      | string
+      | null
 
-      title:
-        | string
-        | null
+    title:
+      | string
+      | null
 
-      status:
-        | string
-        | null
+    status:
+      | string
+      | null
 
-      service_type:
-        | string
-        | null
+    service_type:
+      | string
+      | null
 
-      approved_quote_amount:
-        | number
-        | null
+    approved_quote_amount:
+      | number
+      | null
 
-      approved_quote_currency:
-        | string
-        | null
+    approved_quote_currency:
+      | string
+      | null
 
-      approved_quote_notes:
-        | string
-        | null
+    approved_quote_notes:
+      | string
+      | null
 
-      approved_estimated_start:
-        | string
-        | null
+    approved_estimated_start:
+      | string
+      | null
 
-      approved_estimated_completion:
-        | string
-        | null
+    approved_estimated_completion:
+      | string
+      | null
 
-      preferred_deadline:
-        | string
-        | null
+    preferred_deadline:
+      | string
+      | null
 
-      training_preferred_start_date:
-        | string
-        | null
+    osint_completion_date:
+      | string
+      | null
 
-      training_preferred_completion_date:
-        | string
-        | null
+    training_preferred_start_date:
+      | string
+      | null
 
-      training_preferred_dates:
-        | string
-        | null
-    }>(
-      `
-        SELECT
-          id,
-          user_id,
-          client_email,
+    training_preferred_completion_date:
+      | string
+      | null
 
-          title,
-          status,
-          service_type,
+    training_preferred_dates:
+      | string
+      | null
+  }>(
+    `
+      SELECT
+        id,
+        user_id,
+        client_email,
 
-          approved_quote_amount,
-          approved_quote_currency,
-          approved_quote_notes,
+        title,
+        status,
+        service_type,
 
-          approved_estimated_start,
-          approved_estimated_completion,
+        approved_quote_amount,
+        approved_quote_currency,
+        approved_quote_notes,
 
-          preferred_deadline,
+        approved_estimated_start,
+        approved_estimated_completion,
 
-          training_preferred_start_date,
-          training_preferred_completion_date,
+        preferred_deadline,
 
-          training_preferred_dates
+        osint_completion_date,
 
-        FROM requests
+        training_preferred_start_date,
+        training_preferred_completion_date,
 
-        WHERE id = $1
+        training_preferred_dates
 
-        LIMIT 1
-      `,
-      [input.requestId],
-    )
+      FROM requests
 
-  const request =
-    current.rows[0]
+      WHERE id = $1
 
-  if (!request) {
-    throw new Error(
-      "Request not found",
-    )
-  }
+      LIMIT 1
+    `,
+    [input.requestId],
+  )
+
+const request =
+  current.rows[0]
+
+if (!request) {
+  throw new Error(
+    "Request not found",
+  )
+}
 
   /*
    * =========================================================
@@ -504,19 +510,20 @@ export async function reviewQuoteAsAdmin(
    */
 
   const estimatedCompletion =
+  (
+    input.approved_estimated_completion ??
+    input.estimated_completion ??
+    request.approved_estimated_completion ??
     (
-      input.approved_estimated_completion ??
-      input.estimated_completion ??
-      request.approved_estimated_completion ??
-      (
-        isCyberSecurity
-          ? request.training_preferred_completion_date
-          : null
-      ) ??
-      request.preferred_deadline ??
-      aiQuote?.estimated_completion ??
-      ""
-    ).trim() || null
+      isCyberSecurity
+        ? request.training_preferred_completion_date
+        : request.osint_completion_date
+    ) ??
+    request.osint_completion_date ??
+    request.preferred_deadline ??
+    aiQuote?.estimated_completion ??
+    ""
+  ).trim() || null
 
   /*
    * =========================================================

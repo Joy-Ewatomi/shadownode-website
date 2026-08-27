@@ -224,12 +224,12 @@ if (!profileId) {
 
 
 
-          (
-            SELECT COUNT(*)
-            FROM notifications
-            WHERE user_id = $1
-              AND is_read = false
-          ) AS unread_notifications
+        (
+  SELECT COUNT(*)::int
+  FROM notifications
+  WHERE user_id = $1
+    AND is_read = false
+) AS unread_notifications
 
         `,
         [

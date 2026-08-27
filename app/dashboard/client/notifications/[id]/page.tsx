@@ -153,21 +153,24 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
     </div>
 
 
-
-    <Link
-      href={`/dashboard/client/payments/${notification?.metadata?.case_id || request.id}`}
-      className="
-        inline-flex
-        rounded
-        bg-[#20dc73]
-        px-5
-        py-3
-        font-semibold
-        text-black
-      "
-    >
-      Make Payment
-    </Link>
+<Link
+  href={`/dashboard/client/payments/${
+    notification?.metadata?.case_id || request.id
+  }?notificationId=${encodeURIComponent(
+    notification.id,
+  )}`}
+  className="
+    inline-flex
+    rounded
+    bg-[#20dc73]
+    px-5
+    py-3
+    font-semibold
+    text-black
+  "
+>
+  Make Payment
+</Link>
 
 
   </div>
@@ -175,8 +178,22 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
           <div className="flex flex-wrap gap-3">
 <Link
   href={
-    getNotificationDestination(notification) ||
-    "/dashboard/client/notifications"
+    (() => {
+      const destination =
+        getNotificationDestination(notification)
+
+      if (!destination) {
+        return "/dashboard/client/notifications"
+      }
+
+      const separator = destination.includes("?")
+        ? "&"
+        : "?"
+
+      return `${destination}${separator}notificationId=${encodeURIComponent(
+        notification.id,
+      )}`
+    })()
   }
   className="rounded bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black"
 >

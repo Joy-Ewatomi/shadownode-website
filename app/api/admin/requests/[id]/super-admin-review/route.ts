@@ -22,7 +22,10 @@ export async function POST(
 
     if (user.role !== "super_administrator") {
       return NextResponse.json(
-        {  error:"Super administrator access required"},
+        {
+          error:
+            "Super administrator access required",
+        },
         { status: 403 },
       )
     }
@@ -31,16 +34,30 @@ export async function POST(
 
     if (!id) {
       return NextResponse.json(
-        { error: "Request id is required" },
+        {
+          error:
+            "Request id is required",
+        },
         { status: 400 },
       )
     }
 
     const body = await request.json()
 
-    const rawAction = String(body.action || "")
+
+    /**
+     * ACTION
+     * Supports new dashboard payload
+     * and old payload format
+     */
+    const rawAction = String(
+      body.decision_action ||
+        body.action ||
+        "",
+    )
       .trim()
       .toLowerCase()
+
 
     if (
       rawAction !== "accept" &&
@@ -56,16 +73,27 @@ export async function POST(
       )
     }
 
+
+    /**
+     * QUOTE AMOUNT
+     */
+    const amountValue =
+      body.quote?.amount ??
+      body.amount
+
+
     const amount =
-      body.amount === null ||
-      body.amount === undefined ||
-      body.amount === ""
+      amountValue === null ||
+      amountValue === undefined ||
+      amountValue === ""
         ? null
-        : Number(body.amount)
+        : Number(amountValue)
+
 
     if (
       amount !== null &&
-      (!Number.isFinite(amount) || amount <= 0)
+      (!Number.isFinite(amount) ||
+        amount <= 0)
     ) {
       return NextResponse.json(
         {
@@ -76,30 +104,69 @@ export async function POST(
       )
     }
 
+
+    /**
+     * CURRENCY
+     */
+    const currencyValue =
+      body.quote?.currency ??
+      body.currency
+
+
     const currency =
-      body.currency !== null &&
-      body.currency !== undefined &&
-      String(body.currency).trim()
-        ? String(body.currency).trim().toUpperCase()
+      currencyValue !== null &&
+      currencyValue !== undefined &&
+      String(currencyValue).trim()
+        ? String(currencyValue)
+            .trim()
+            .toUpperCase()
         : null
+
+
+    /**
+     * JUSTIFICATION
+     */
+    const notesValue =
+      body.justification?.notes ??
+      body.notes
+
 
     const notes =
-      body.notes !== null &&
-      body.notes !== undefined
-        ? String(body.notes).trim() || null
+      notesValue !== null &&
+      notesValue !== undefined
+        ? String(notesValue).trim() || null
         : null
+
+
+    const reasonValue =
+      body.justification?.reason ??
+      body.reason
+
 
     const reason =
-      body.reason !== null &&
-      body.reason !== undefined
-        ? String(body.reason).trim()
+      reasonValue !== null &&
+      reasonValue !== undefined
+        ? String(reasonValue).trim()
         : ""
 
+
+    /**
+     * COMPLETION DATE
+     */
+    const estimatedCompletionValue =
+      body.quote?.estimated_completion ??
+      body.estimated_completion
+
+
     const estimatedCompletion =
-      body.estimated_completion !== null &&
-      body.estimated_completion !== undefined
-        ? String(body.estimated_completion).trim() || null
+      estimatedCompletionValue !== null &&
+      estimatedCompletionValue !== undefined
+        ? String(
+            estimatedCompletionValue,
+          ).trim() || null
         : null
+
+
 
     if (!reason) {
       return NextResponse.json(
@@ -111,31 +178,46 @@ export async function POST(
       )
     }
 
-    const result = await reviewQuoteAsSuperAdmin({
-      requestId: id,
-      actorUserId: user.id,
-      actorRole: user.role,
-      action: rawAction,
-      amount,
-      currency,
-      notes,
-      reason,
-      estimated_completion: estimatedCompletion,
-    })
+
+
+    const result =
+      await reviewQuoteAsSuperAdmin({
+        requestId: id,
+        actorUserId: user.id,
+        actorRole: user.role,
+
+        action: rawAction,
+
+        amount,
+
+        currency,
+
+        notes,
+
+        reason,
+
+        estimated_completion:
+          estimatedCompletion,
+      })
+
+
 
     await auditLog(
-  user.id,
-  "super_admin_reviewed_quote",
-  request,
-  {
-    request_id: id,
-    action: rawAction,
-  },
-)
-   return NextResponse.json({
-  ...result,
-  success: true,
-})
+      user.id,
+      "super_admin_reviewed_quote",
+      request,
+      {
+        request_id: id,
+        action: rawAction,
+      },
+    )
+
+
+    return NextResponse.json({
+      ...result,
+      success: true,
+    })
+
 
   } catch (error) {
     console.error(
@@ -143,14 +225,20 @@ export async function POST(
       error,
     )
 
+
     const message =
       error instanceof Error
         ? error.message
         : "Failed to process quote review"
 
+
     return NextResponse.json(
-      { error: message },
-      { status: 400 },
+      {
+        error: message,
+      },
+      {
+        status: 400,
+      },
     )
   }
 }

@@ -247,6 +247,7 @@ CREATE TABLE public.requests (
   approved_quote_base_amount numeric,
   training_details jsonb,
   approved_estimated_start date,
+  osint_completion_date date,
   CONSTRAINT requests_pkey PRIMARY KEY (id),
   CONSTRAINT requests_case_fk FOREIGN KEY (converted_case_id) REFERENCES public.cases(id),
   CONSTRAINT requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
@@ -677,6 +678,7 @@ CREATE TABLE public.quote_versions (
   created_at timestamp with time zone DEFAULT now(),
   previous_price numeric,
   price_difference numeric,
+  estimated_start date,
   CONSTRAINT quote_versions_pkey PRIMARY KEY (id),
   CONSTRAINT quote_versions_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id)
 );

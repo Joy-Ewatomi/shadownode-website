@@ -38,7 +38,7 @@ export default function AdminRequestsPage() {
  quote_notes:"",
  approved_estimated_completion:""
 })
-  const [superAdminQuote, setSuperAdminQuote] = useState({ amount: "", currency: "NGN", reason: "", notes: "", estimated_completion: "" })
+  const [superAdminQuote, setSuperAdminQuote] = useState({ amount: "", currency: "USD", reason: "", notes: "", estimated_completion: "" })
   const [loading, setLoading] = useState(true)
 
   const selected = useMemo(() => requests.find((r) => r.id === selectedId) || requests[0], [requests, selectedId])

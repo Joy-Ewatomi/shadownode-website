@@ -13,8 +13,9 @@ export async function convertCurrency(input: {
   const amount = Number(input.amount)
   const from = input.from.trim().toUpperCase()
   const to = input.to.trim().toUpperCase()
+  
 
-  if (!Number.isFinite(amount) || amount <= 0) {
+  if (!Number.isFinite(amount) || amount < 0) {
     throw new Error("Invalid conversion amount")
   }
 

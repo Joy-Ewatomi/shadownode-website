@@ -13,6 +13,7 @@ type RequestData = {
   status: string
 
   ai_price_estimate: number | null
+  ai_price_currency: string | null
   ai_complexity: string | null
   ai_confidence: number | null
   ai_reasoning: string | null
@@ -139,6 +140,7 @@ export default async function SuperAdministratorRequestDetailPage({
       status,
 
       ai_price_estimate,
+      currency AS ai_price_currency,
       ai_complexity,
       ai_confidence,
       ai_reasoning,

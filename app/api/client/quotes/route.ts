@@ -31,18 +31,57 @@ export async function GET() {
 
         /*
          * =====================================================
-         * CLIENT-FACING QUOTE ONLY
+         * QUOTE
          * =====================================================
          */
 
         approved_quote_amount,
         approved_quote_currency,
         approved_quote_notes,
+
+        /*
+         * Administrator's estimated workflow dates.
+         *
+         * Training requests use BOTH.
+         * Investigation requests may only use completion.
+         */
+
+        approved_estimated_start,
         approved_estimated_completion,
+
+        /*
+         * =====================================================
+         * CLIENT CURRENCY
+         * =====================================================
+         */
+
+        preferred_currency,
+
+        /*
+         * =====================================================
+         * QUOTE / CLIENT DECISION
+         * =====================================================
+         */
 
         quote_sent_at,
         client_decision_at,
         declined_reason,
+
+        /*
+         * =====================================================
+         * REQUEST TIMELINE
+         * =====================================================
+         */
+
+        preferred_deadline,
+        training_preferred_start_date,
+        training_preferred_completion_date,
+
+        /*
+         * =====================================================
+         * NEGOTIATION
+         * =====================================================
+         */
 
         created_at,
         updated_at

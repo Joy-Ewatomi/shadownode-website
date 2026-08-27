@@ -120,19 +120,31 @@ case "super_admin_quote_review":
 
 
 
-  if (
-    type === "payment_required" ||
-    type === "payment_received" ||
-    type === "payment_failed"
-  ) {
+ if (
+  type === "payment_required"
+) {
 
-    return caseId
+  return requestId
+    ? `/dashboard/client/requests/${requestId}`
+    : caseId
       ? `/dashboard/client/payments/${caseId}`
-      : requestId
-        ? `/dashboard/client/payments/${requestId}`
-        : "/dashboard/client/payments"
+      : "/dashboard/client/requests"
 
-  }
+}
+
+
+if (
+  type === "payment_received" ||
+  type === "payment_failed"
+) {
+
+  return caseId
+    ? `/dashboard/client/payments/${caseId}`
+    : requestId
+      ? `/dashboard/client/requests/${requestId}`
+      : "/dashboard/client/payments"
+
+}
 
 
 

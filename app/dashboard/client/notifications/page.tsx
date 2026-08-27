@@ -37,19 +37,26 @@ export default function ClientNotificationsPage() {
     load()
   }, [])
 
-  async function markRead(id: string) {
-    const res = await fetch("/api/notifications", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    })
-    if (res.ok) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-      )
-    }
-  }
+async function markRead(id:string){
+
+ const res = await fetch(
+   `/api/notifications/${id}`,
+   {
+     method:"PATCH",
+     credentials:"include",
+   }
+ )
+
+ if(res.ok){
+   setNotifications(prev =>
+     prev.map(n =>
+       n.id === id
+       ? {...n, read:true}
+       : n
+     )
+   )
+ }
+}
 
 const typeIcon: Record<string, string> = {
   case_update: "🔒",

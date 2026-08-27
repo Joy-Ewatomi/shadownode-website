@@ -65,15 +65,14 @@ export async function GET() {
         /*
          * ONLY FINAL CLIENT-FACING QUOTE DATA
          */
-        approved_quote_amount,
-        approved_quote_currency,
-        approved_quote_notes,
-        approved_estimated_completion,
+      approved_quote_amount,
+      approved_quote_currency,
+      approved_quote_notes,
+      approved_estimated_completion,
 
-        /*
-         * Training dates are client-facing.
-         */
-        training_preferred_start_date,
+      osint_completion_date,
+
+       training_preferred_start_date,
         training_preferred_completion_date,
         training_timeline_flexible,
 
@@ -116,6 +115,9 @@ export async function GET() {
 
       approved_estimated_completion:
         row.approved_estimated_completion ?? null,
+
+      osint_completion_date:
+         row.osint_completion_date ?? null,
 
       training_preferred_start_date:
         row.training_preferred_start_date ?? null,

@@ -2,6 +2,7 @@
 
 import { RefreshCcw, Search } from "lucide-react"
 import { useEffect, useState } from "react"
+import MarkNotificationRead from "@/components/notifications/MarkNotificationRead"
 
 import RequestServiceSelector from "@/components/client/requests/RequestServiceSelector"
 
@@ -119,6 +120,7 @@ export default function ClientRequestsPage() {
 
   return (
     <div className="w-full space-y-6">
+      <MarkNotificationRead />
       <header className="border-b border-[#143b28] pb-6">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">
           ShadowNode Operations

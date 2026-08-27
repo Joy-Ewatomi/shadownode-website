@@ -20,6 +20,7 @@ export type Permission =
   | "settings:manage"
   | "messages:view"
   | "notifications:view"
+  | "requests:history:view"
 
 
 type RolePermission = Permission | "*"
@@ -66,6 +67,7 @@ administrator:[
  "cases:assign",
  "requests:view",
  "requests:approve",
+ "requests:history:view",
  "team:view",
  "team:manage",
  "reports:view",

@@ -13,6 +13,7 @@ import {
 
 import {
   notifyAdmins,
+  notifyUser,
 } from "@/lib/services/notification-service"
 
 import {
@@ -26,17 +27,38 @@ type RouteContext = {
   }>
 }
 
+/*
+ * =========================================================
+ * QUOTE STATUSES
+ * =========================================================
+ *
+ * These are the request states where the client can still
+ * make a decision about the quote.
+ */
 const QUOTE_STATUSES = [
   "quote_sent",
   "revised_quote_sent",
+  "client_decision_pending",
   "awaiting_client_acceptance",
+  "awaiting_payment",
 ]
 
+/*
+ * =========================================================
+ * REVIEW ACTIONS
+ * =========================================================
+ */
 const REVIEW_ACTIONS = [
   "review",
   "request_review",
   "negotiate",
 ]
+
+/*
+ * =========================================================
+ * MAIN DECISION HANDLER
+ * =========================================================
+ */
 
 async function handleDecision(
   request: NextRequest,
@@ -134,23 +156,54 @@ async function handleDecision(
     // ========================================================
     // ACCEPT QUOTE
     // ========================================================
+    //
+    // IMPORTANT:
+    //
+    // ACCEPTING A QUOTE DOES NOT MEAN THE INVESTIGATION
+    // HAS STARTED.
+    //
+    // The sequence is:
+    //
+    // quote
+    //   ↓
+    // client accepts
+    //   ↓
+    // case created as awaiting_payment
+    //   ↓
+    // Paystack payment
+    //   ↓
+    // payment verified
+    //   ↓
+    // case becomes active
+    //
+    // Therefore we deliberately do NOT mark the case active
+    // here.
+    // ========================================================
 
     if (action === "accept") {
       const eligible = await query<{
         id: string
         status: string
         converted_case_id: string | null
+        approved_quote_amount:
+          | number
+          | string
+          | null
+        approved_quote_currency:
+          | string
+          | null
       }>(
         `
           SELECT
             id,
             status,
-            converted_case_id
+            converted_case_id,
+            approved_quote_amount,
+            approved_quote_currency
           FROM requests
           WHERE id = $1
             AND user_id = $2
             AND status = ANY($3::varchar[])
-            AND converted_case_id IS NULL
           LIMIT 1
         `,
         [
@@ -160,7 +213,10 @@ async function handleDecision(
         ],
       )
 
-      if (!eligible.rows[0]) {
+      const eligibleRequest =
+        eligible.rows[0]
+
+      if (!eligibleRequest) {
         return NextResponse.json(
           {
             error:
@@ -172,11 +228,102 @@ async function handleDecision(
         )
       }
 
+      // ------------------------------------------------------
+      // ALREADY ACCEPTED / WAITING FOR PAYMENT
+      // ------------------------------------------------------
+
+      if (
+        eligibleRequest.status ===
+          "awaiting_payment" &&
+        eligibleRequest.converted_case_id
+      ) {
+        return NextResponse.json({
+          success: true,
+          decision: "accept",
+          payment_required: true,
+          request_id: id,
+          case_id:
+            eligibleRequest.converted_case_id,
+          message:
+            "Quote already accepted. Payment is required before the investigation can begin.",
+        })
+      }
+
+      // ------------------------------------------------------
+      // APPROVED QUOTE MUST EXIST
+      // ------------------------------------------------------
+
+      if (
+        eligibleRequest.approved_quote_amount ===
+          null ||
+        eligibleRequest.approved_quote_amount ===
+          undefined
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "No approved quote amount is available for payment.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
+
+      const quoteAmount = Number(
+        eligibleRequest.approved_quote_amount,
+      )
+
+      if (
+        !Number.isFinite(
+          quoteAmount,
+        ) ||
+        quoteAmount <= 0
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "The approved quote amount is invalid.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
+
+      if (
+        !eligibleRequest.approved_quote_currency
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "The approved quote currency is missing.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
+
+      // ------------------------------------------------------
+      // CONVERT REQUEST TO PAYMENT-PENDING CASE
+      // ------------------------------------------------------
+      //
+      // Your existing conversion service should create the
+      // case with awaiting_payment status.
+      //
+      // It must NOT make the case active.
+      //
+
       const caseId =
         await convertAcceptedRequestToCase(
           id,
           user.id,
         )
+
+      // ------------------------------------------------------
+      // RECORD CLIENT ACCEPTANCE
+      // ------------------------------------------------------
 
       await recordRequestAudit(
         id,
@@ -184,8 +331,21 @@ async function handleDecision(
         "client_accepted_quote",
         {
           case_id: caseId,
+
+          payment_required: true,
+
+          amount:
+            quoteAmount,
+
+          currency:
+            eligibleRequest
+              .approved_quote_currency,
         },
       )
+
+      // ------------------------------------------------------
+      // AUDIT LOG
+      // ------------------------------------------------------
 
       await auditLog(
         user.id,
@@ -193,28 +353,67 @@ async function handleDecision(
         request,
         {
           request_id: id,
+
           case_id: caseId,
+
+          payment_required: true,
+
+          amount:
+            quoteAmount,
+
+          currency:
+            eligibleRequest
+              .approved_quote_currency,
         },
       )
+      // ------------------------------------------------------
+      // IMPORTANT RESPONSE
+      // ------------------------------------------------------
+      //
+      // Tell frontend that acceptance succeeded BUT payment
+      // is the next step.
+      //
 
       return NextResponse.json({
         success: true,
+
         decision: "accept",
+
         request_id: id,
+
         case_id: caseId,
+
+        payment_required: true,
+
+        payment_status:
+          "awaiting_payment",
+
+        amount:
+          quoteAmount,
+
+        currency:
+          eligibleRequest
+            .approved_quote_currency,
+
+        message:
+          "Quote accepted successfully. Payment is required before the investigation can begin.",
       })
     }
 
     // ========================================================
-    // REQUEST QUOTE REVIEW
+    // REQUEST QUOTE REVIEW / NEGOTIATION
     // ========================================================
 
-    if (REVIEW_ACTIONS.includes(action)) {
+    if (
+      REVIEW_ACTIONS.includes(action)
+    ) {
       const requestedBudgetRaw =
         body.requested_budget
 
       const requestedBudget =
-        Number(requestedBudgetRaw)
+        Number(
+          requestedBudgetRaw,
+        )
 
       const reason = String(
         body.reason ?? "",
@@ -225,7 +424,9 @@ async function handleDecision(
       ).trim()
 
       if (
-        !Number.isFinite(requestedBudget) ||
+        !Number.isFinite(
+          requestedBudget,
+        ) ||
         requestedBudget <= 0
       ) {
         return NextResponse.json(
@@ -239,7 +440,9 @@ async function handleDecision(
         )
       }
 
-      if (reason.length < 10) {
+      if (
+        reason.length < 10
+      ) {
         return NextResponse.json(
           {
             error:
@@ -251,70 +454,92 @@ async function handleDecision(
         )
       }
 
-// ======================================================
-// VERIFY ACTIVE QUOTE
-// ======================================================
+      // ======================================================
+      // VERIFY ACTIVE QUOTE
+      // ======================================================
 
-const eligible = await query<{
-  id: string
-  status: string
-  preferred_currency: string | null
-}>(
-  `
-    SELECT
-      id,
-      status,
-      preferred_currency
-    FROM requests
-    WHERE id = $1
-      AND user_id = $2
-      AND status = ANY($3::varchar[])
-      AND converted_case_id IS NULL
-    LIMIT 1
-  `,
-  [
-    id,
-    user.id,
-    QUOTE_STATUSES,
-  ],
-)
+      const eligible =
+        await query<{
+          id: string
+          status: string
+          preferred_currency:
+            | string
+            | null
+          converted_case_id:
+            | string
+            | null
+        }>(
+          `
+            SELECT
+              id,
+              status,
+              preferred_currency,
+              converted_case_id
+            FROM requests
+            WHERE id = $1
+              AND user_id = $2
+              AND status = ANY($3::varchar[])
+              AND converted_case_id IS NULL
+            LIMIT 1
+          `,
+          [
+            id,
+            user.id,
+            [
+              "quote_sent",
+              "revised_quote_sent",
+              "client_decision_pending",
+              "awaiting_client_acceptance",
+            ],
+          ],
+        )
 
-const eligibleRequest = eligible.rows[0]
+      const eligibleRequest =
+        eligible.rows[0]
 
-if (!eligibleRequest) {
-  return NextResponse.json(
-    {
-      error:
-        "No active quote is available for review",
-    },
-    {
-      status: 400,
-    },
-  )
-}
+      if (!eligibleRequest) {
+        return NextResponse.json(
+          {
+            error:
+              "No active quote is available for review",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
 
-// ======================================================
-// CLIENT CURRENCY
-// ======================================================
+      // ======================================================
+      // CLIENT CURRENCY
+      // ======================================================
 
-const currency =
-  eligibleRequest.preferred_currency
-    ?.trim()
-    .toUpperCase() || "USD"
+      const currency =
+        eligibleRequest
+          .preferred_currency
+          ?.trim()
+          .toUpperCase() ||
+        "USD"
 
-// ======================================================
-// CREATE NEGOTIATION
-// ======================================================
+      // ======================================================
+      // CREATE NEGOTIATION
+      // ======================================================
 
-const negotiation =
-  await requestQuoteReview({
-    requestId: id,
-    clientId: user.id,
-    requestedBudget,
-    currency,
-    reason,
-    notes: notes || null,
-  })
+      const negotiation =
+        await requestQuoteReview({
+          requestId: id,
+
+          clientId:
+            user.id,
+
+          requestedBudget,
+
+          currency,
+
+          reason,
+
+          notes:
+            notes || null,
+        })
 
 
   await query(
@@ -343,25 +568,35 @@ const negotiation =
 
       try {
         await notifyAdmins({
-          type: "quote_review_requested",
+          type:
+            "quote_review_requested",
+
           title:
             "Client requested quote review",
+
           message:
             reason ||
             "A client has requested a review of their quote.",
+
           metadata: {
             request_id: id,
+
             negotiation_id:
               negotiation.id,
+
             requested_budget:
               requestedBudget,
+
             target_page:
               "admin_request_review",
+
             action:
               "view_request",
           },
         })
-      } catch (notificationError) {
+      } catch (
+        notificationError
+      ) {
         console.error(
           "QUOTE REVIEW NOTIFICATION ERROR:",
           notificationError,
@@ -371,8 +606,11 @@ const negotiation =
       return NextResponse.json(
         {
           success: true,
-          decision: "review",
+
+          decision: action,
+
           request_id: id,
+
           negotiation,
         },
         {
@@ -385,44 +623,81 @@ const negotiation =
     // DECLINE QUOTE
     // ========================================================
 
-    if (action === "decline") {
-      const reason = body.reason
-        ? String(body.reason)
-            .trim()
-            .slice(0, 2000)
-        : null
+    if (
+      action === "decline"
+    ) {
+      const reason =
+        String(
+          body.reason ?? "",
+        ).trim()
 
-      const updated = await query(
-        `
-          UPDATE requests
-          SET
-            status = 'declined',
-            declined_reason = $3,
-            client_decision_at = NOW(),
-            updated_at = NOW()
-          WHERE id = $1
-            AND user_id = $2
-            AND status = ANY($4::varchar[])
-            AND converted_case_id IS NULL
-          RETURNING
+      if (
+        reason.length < 10
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Please provide a clear reason for declining the quote.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
+
+      const safeReason =
+        reason.slice(
+          0,
+          2000,
+        )
+
+      const updated =
+        await query(
+          `
+            UPDATE requests
+            SET
+              status = 'declined',
+
+              declined_reason =
+                $3,
+
+              client_decision_at =
+                NOW(),
+
+              updated_at =
+                NOW()
+
+            WHERE id = $1
+              AND user_id = $2
+              AND status = ANY($4::varchar[])
+              AND converted_case_id IS NULL
+
+            RETURNING
+              id,
+              case_number,
+              title,
+              service_type,
+              status,
+              declined_reason,
+              client_decision_at,
+              updated_at
+          `,
+          [
             id,
-            case_number,
-            title,
-            service_type,
-            status,
-            declined_reason,
-            client_decision_at,
-            updated_at
-        `,
-        [
-          id,
-          user.id,
-          reason,
-          QUOTE_STATUSES,
-        ],
-      )
+            user.id,
+            safeReason,
+            [
+              "quote_sent",
+              "revised_quote_sent",
+              "client_decision_pending",
+              "awaiting_client_acceptance",
+            ],
+          ],
+        )
 
-      if (!updated.rows[0]) {
+      if (
+        !updated.rows[0]
+      ) {
         return NextResponse.json(
           {
             error:
@@ -439,27 +714,36 @@ const negotiation =
         user.id,
         "client_declined_quote",
         {
-          reason,
+          reason:
+            safeReason,
         },
       )
 
       try {
         await notifyAdmins({
-          type: "quote_rejected",
+          type:
+            "quote_rejected",
+
           title:
             "Client declined quote",
+
           message:
-            reason ||
+            safeReason ||
             "A client declined a quote.",
+
           metadata: {
             request_id: id,
+
             target_page:
               "admin_request_review",
+
             action:
               "view_request",
           },
         })
-      } catch (notificationError) {
+      } catch (
+        notificationError
+      ) {
         console.error(
           "QUOTE DECLINE NOTIFICATION ERROR:",
           notificationError,
@@ -472,14 +756,19 @@ const negotiation =
         request,
         {
           request_id: id,
-          reason,
+
+          reason:
+            safeReason,
         },
       )
 
       return NextResponse.json({
         success: true,
+
         decision: "decline",
-        request: updated.rows[0],
+
+        request:
+          updated.rows[0],
       })
     }
 
@@ -489,7 +778,9 @@ const negotiation =
 
     return NextResponse.json(
       {
-        error: "Invalid decision action",
+        error:
+          "Invalid decision action",
+
         allowed_actions: [
           "accept",
           "review",
@@ -506,7 +797,9 @@ const negotiation =
       error,
     )
 
-    if (error instanceof Error) {
+    if (
+      error instanceof Error
+    ) {
       console.error(
         "MESSAGE:",
         error.message,
