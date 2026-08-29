@@ -658,13 +658,24 @@ await query(
   // =======================================================
   // IMPORTANT QUOTES
   // =======================================================
-
 const adminQuote =
-  quoteVersions.find(
-    (quote) =>
-      quote.source ===
-      "administrator_proposal",
-  ) ?? null
+  quoteVersions
+    .filter(
+      (quote) =>
+        quote.source ===
+        "administrator_proposal" ||
+        (
+          quote.creator_role ===
+            "administrator" &&
+          quote.source !==
+            "client_negotiation"
+        ),
+    )
+    .sort(
+      (a, b) =>
+        b.version_number -
+        a.version_number,
+    )[0] ?? null
 
   const aiQuote =
     quoteVersions.find(

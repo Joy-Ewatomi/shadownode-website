@@ -12,7 +12,7 @@ dns.setDefaultResultOrder("ipv4first")
 // TYPES
 // ============================================================
 
-type DatabasePoolClient = {
+export type DatabasePoolClient = {
   query<T extends QueryResultRow = QueryResultRow>(
     text: string,
     values?: unknown[],

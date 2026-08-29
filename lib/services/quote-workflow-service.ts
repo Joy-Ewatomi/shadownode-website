@@ -13,6 +13,8 @@ import {
   convertCurrency,
 } from "@/lib/services/currency-service"
 
+import type { DatabasePoolClient } from "@/lib/db"
+
 type AdminQuoteReviewAction =
   | "adjust"
   | "submit"
@@ -1503,15 +1505,155 @@ export async function declineRequest(
 
 /**
  * =========================================================
+ * CREATE NEXT QUOTE VERSION
+ * =========================================================
+ *
+ * Quote versions are immutable.
+ *
+ * Every new workflow participant creates the next version.
+ */
+async function createNextQuoteVersion(
+  client: DatabasePoolClient,
+  input: {
+    requestId: string
+    createdBy: string
+    creatorRole: string
+    source: string
+    price: number
+    currency: string
+    estimatedStart?: string | null
+    estimatedCompletion?: string | null
+    notes?: string | null
+    reasoning?: string | null
+    status: string
+    previousPrice?: number | null
+  },
+) {
+  const nextVersionResult =
+    await client.query<{
+      next_version: number
+    }>(
+      `
+        SELECT
+          COALESCE(
+            MAX(version_number),
+            0
+          ) + 1 AS next_version
+        FROM quote_versions
+        WHERE request_id = $1
+      `,
+      [input.requestId],
+    )
+
+  const versionNumber =
+    Number(
+      nextVersionResult.rows[0]
+        ?.next_version || 1,
+    )
+
+  const previousPrice =
+    input.previousPrice ?? null
+
+  const priceDifference =
+    previousPrice !== null
+      ? input.price -
+        Number(previousPrice)
+      : null
+
+  const inserted =
+    await client.query<{
+      id: string
+    }>(
+      `
+        INSERT INTO quote_versions
+        (
+          request_id,
+          version_number,
+          created_by,
+          creator_role,
+          source,
+          price,
+          currency,
+          estimated_start,
+          estimated_completion,
+          notes,
+          reasoning,
+          status,
+          previous_price,
+          price_difference
+        )
+        VALUES
+        (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13,
+          $14
+        )
+        RETURNING id
+      `,
+      [
+        input.requestId,
+        versionNumber,
+        input.createdBy,
+        input.creatorRole,
+        input.source,
+        input.price,
+        input.currency,
+        input.estimatedStart ?? null,
+        input.estimatedCompletion ?? null,
+        input.notes ?? null,
+        input.reasoning ?? null,
+        input.status,
+        previousPrice,
+        priceDifference,
+      ],
+    )
+
+  const versionId =
+    inserted.rows[0]?.id
+
+  if (!versionId) {
+    throw new Error(
+      "Failed to create quote version",
+    )
+  }
+
+  return {
+    id: versionId,
+    versionNumber,
+  }
+}
+
+/**
+ * =========================================================
  * CLIENT REQUESTS QUOTE REVIEW
  * =========================================================
  *
- * Creates a negotiation request.
+ * Creates the client negotiation request.
+ *
+ * VERSION FLOW:
+ *
+ * V1 = AI
+ * V2 = Administrator
+ * V3 = Super Administrator
+ * V4 = Client negotiation request
  *
  * IMPORTANT:
  *
- * The AI estimate is copied into the negotiation record
- * for internal review but is NEVER returned to the client.
+ * Version 4 is an immutable historical record of what the
+ * CLIENT requested during negotiation.
+ *
+ * It does not expose or alter the internal AI quote.
  */
 export async function requestQuoteReview(
   input: {
@@ -1523,22 +1665,24 @@ export async function requestQuoteReview(
     notes?: string | null
   },
 ) {
-  /**
+  /*
    * -------------------------------------------------------
    * VALIDATE BUDGET
    * -------------------------------------------------------
    */
+
   const requestedBudget =
     validatePositiveAmount(
       input.requestedBudget,
       "Requested budget",
     )
 
-  /**
+  /*
    * -------------------------------------------------------
    * VALIDATE REASON
    * -------------------------------------------------------
    */
+
   const cleanReason =
     input.reason?.trim()
 
@@ -1548,49 +1692,77 @@ export async function requestQuoteReview(
     )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
    * VALIDATE CURRENCY
    * -------------------------------------------------------
    */
+
   const clientCurrency =
     normalizeCurrency(
       input.currency,
     )
 
-  /**
+  /*
    * -------------------------------------------------------
-   * CREATE NEGOTIATION + MOVE REQUEST
+   * CREATE NEGOTIATION + V4
    * -------------------------------------------------------
-   *
-   * Everything happens inside one transaction.
    */
-  const negotiation =
+
+  const result =
     await withTransaction(
       async (client) => {
-        /**
-         * Lock request first.
+        /*
+         * ---------------------------------------------------
+         * LOCK REQUEST
+         * ---------------------------------------------------
          */
+
         const lockedRequest =
           await client.query<{
-            ai_price_estimate: number | null
-            approved_quote_amount: number | null
-            approved_quote_currency: string | null
-            preferred_currency: string | null
-            status: string | null
-            user_id: string | null
+            ai_price_estimate:
+              | number
+              | null
+
+            approved_quote_amount:
+              | number
+              | null
+
+            approved_quote_currency:
+              | string
+              | null
+
+            approved_estimated_completion:
+              | string
+              | null
+
+            preferred_currency:
+              | string
+              | null
+
+            status:
+              | string
+              | null
+
+            user_id:
+              | string
+              | null
           }>(
             `
               SELECT
                 ai_price_estimate,
                 approved_quote_amount,
                 approved_quote_currency,
+                approved_estimated_completion,
                 preferred_currency,
                 status,
                 user_id
+
               FROM requests
+
               WHERE id = $1
                 AND user_id = $2
+
               FOR UPDATE
             `,
             [
@@ -1608,11 +1780,12 @@ export async function requestQuoteReview(
           )
         }
 
-        /**
+        /*
          * ---------------------------------------------------
-         * VALID CLIENT-FACING STATE
+         * VALID CLIENT STATE
          * ---------------------------------------------------
          */
+
         if (
           request.status !==
             "quote_sent" &&
@@ -1624,11 +1797,12 @@ export async function requestQuoteReview(
           )
         }
 
-        /**
+        /*
          * ---------------------------------------------------
-         * CLIENT CURRENCY
+         * VERIFY CLIENT CURRENCY
          * ---------------------------------------------------
          */
+
         const requestCurrency =
           normalizeCurrency(
             request.preferred_currency,
@@ -1643,11 +1817,12 @@ export async function requestQuoteReview(
           )
         }
 
-        /**
+        /*
          * ---------------------------------------------------
-         * EXISTING NEGOTIATION
+         * PREVENT DUPLICATE NEGOTIATION
          * ---------------------------------------------------
          */
+
         const existingNegotiation =
           await client.query<{
             id: string
@@ -1670,11 +1845,12 @@ export async function requestQuoteReview(
           )
         }
 
-        /**
+        /*
          * ---------------------------------------------------
-         * CURRENT QUOTE
+         * CURRENT CLIENT QUOTE
          * ---------------------------------------------------
          */
+
         const currentQuote =
           Number(
             request.approved_quote_amount,
@@ -1693,11 +1869,12 @@ export async function requestQuoteReview(
           )
         }
 
-        /**
+        /*
          * ---------------------------------------------------
-         * VERIFY QUOTE CURRENCY
+         * VERIFY CURRENT QUOTE CURRENCY
          * ---------------------------------------------------
          */
+
         const approvedCurrency =
           normalizeCurrency(
             request.approved_quote_currency,
@@ -1712,11 +1889,12 @@ export async function requestQuoteReview(
           )
         }
 
-        /**
+        /*
          * ---------------------------------------------------
-         * FIND ADMINISTRATOR REVIEWER
+         * FIND ADMINISTRATOR
          * ---------------------------------------------------
          */
+
         const reviewer =
           await client.query<{
             id: string
@@ -1725,18 +1903,26 @@ export async function requestQuoteReview(
               SELECT
                 id
               FROM app_users
-              WHERE role = 'administrator'
-                AND status = 'active'
-              ORDER BY created_at ASC
+
+              WHERE role =
+                'administrator'
+
+                AND status =
+                  'active'
+
+              ORDER BY
+                created_at ASC
+
               LIMIT 1
             `,
           )
 
-        /**
+        /*
          * ---------------------------------------------------
          * NEXT NEGOTIATION ROUND
          * ---------------------------------------------------
          */
+
         const roundResult =
           await client.query<{
             next_round: number
@@ -1747,7 +1933,9 @@ export async function requestQuoteReview(
                   MAX(round_number),
                   0
                 ) + 1 AS next_round
+
               FROM quote_negotiations
+
               WHERE request_id = $1
             `,
             [input.requestId],
@@ -1759,11 +1947,76 @@ export async function requestQuoteReview(
               ?.next_round || 1,
           )
 
-        /**
+        /*
+         * ---------------------------------------------------
+         * CREATE VERSION 4
+         * ---------------------------------------------------
+         *
+         * This is the client's requested negotiated quote.
+         *
+         * It records:
+         *
+         * - requested budget
+         * - client currency
+         * - client reason
+         * - client notes
+         *
+         * It does NOT expose AI internals.
+         */
+
+        const clientQuoteVersion =
+          await createNextQuoteVersion(
+            client,
+            {
+              requestId:
+                input.requestId,
+
+              createdBy:
+                input.clientId,
+
+              creatorRole:
+                "client",
+
+              source:
+                "client_negotiation",
+
+              price:
+                requestedBudget,
+
+              currency:
+                clientCurrency,
+
+              estimatedStart:
+                null,
+
+              estimatedCompletion:
+                request
+                  .approved_estimated_completion
+                  ?.toString()
+                  .slice(0, 10) ||
+                null,
+
+              notes:
+                input.notes?.trim() ||
+                null,
+
+              reasoning:
+                cleanReason,
+
+              status:
+                "pending_admin_review",
+
+              previousPrice:
+                currentQuote,
+            },
+          )
+
+        /*
          * ---------------------------------------------------
          * CREATE NEGOTIATION
          * ---------------------------------------------------
          */
+
         const inserted =
           await client.query<{
             id: string
@@ -1810,16 +2063,25 @@ export async function requestQuoteReview(
             `,
             [
               input.requestId,
+
               input.clientId,
+
               reviewer.rows[0]?.id ||
                 null,
+
               nextRound,
+
               request.ai_price_estimate ??
                 null,
+
               currentQuote,
+
               clientCurrency,
+
               requestedBudget,
+
               cleanReason,
+
               input.notes?.trim() ||
                 null,
             ],
@@ -1834,18 +2096,23 @@ export async function requestQuoteReview(
           )
         }
 
-        /**
+        /*
          * ---------------------------------------------------
-         * MOVE REQUEST TO NEGOTIATION
+         * MOVE REQUEST
          * ---------------------------------------------------
          */
+
         const requestUpdated =
           await client.query(
             `
               UPDATE requests
+
               SET
                 status =
                   'negotiation_requested',
+
+                client_decision_at =
+                  NOW(),
 
                 updated_at =
                   NOW()
@@ -1872,15 +2139,25 @@ export async function requestQuoteReview(
           )
         }
 
-        return createdNegotiation
+        return {
+          negotiation:
+            createdNegotiation,
+
+          quoteVersionId:
+            clientQuoteVersion.id,
+        }
       },
     )
 
-  /**
+  const negotiation =
+    result.negotiation
+
+  /*
    * -------------------------------------------------------
    * AUDIT
    * -------------------------------------------------------
    */
+
   await recordRequestAudit(
     input.requestId,
     input.clientId,
@@ -1888,6 +2165,9 @@ export async function requestQuoteReview(
     {
       negotiation_id:
         negotiation.id,
+
+      quote_version_id:
+        result.quoteVersionId,
 
       requested_budget:
         requestedBudget,
@@ -1903,11 +2183,12 @@ export async function requestQuoteReview(
     },
   )
 
-  /**
+  /*
    * -------------------------------------------------------
    * NOTIFY ADMINISTRATORS
    * -------------------------------------------------------
    */
+
   await notifyAdmins({
     type:
       "quote_negotiation_requested",
@@ -1925,6 +2206,9 @@ export async function requestQuoteReview(
       negotiation_id:
         negotiation.id,
 
+      quote_version_id:
+        result.quoteVersionId,
+
       target_page:
         "administrator_negotiation_review",
 
@@ -1938,11 +2222,12 @@ export async function requestQuoteReview(
     )
   })
 
-  /**
+  /*
    * -------------------------------------------------------
    * SAFE CLIENT RESPONSE
    * -------------------------------------------------------
    */
+
   return {
     id:
       negotiation.id,
@@ -1958,6 +2243,9 @@ export async function requestQuoteReview(
 
     round_number:
       negotiation.round_number,
+
+    quote_version_id:
+      result.quoteVersionId,
   }
 }
 
@@ -1966,12 +2254,15 @@ export async function requestQuoteReview(
  * ADMINISTRATOR REVIEWS NEGOTIATION
  * =========================================================
  *
- * requested → reviewing
+ * VERSION FLOW:
  *
- * Administrator recommends.
+ * V4 = Client negotiation request
+ *          ↓
+ * V5 = Administrator proposal
+ *          ↓
+ * V6 = Super Administrator final decision
  *
- * Administrator does NOT make the final client-facing
- * decision.
+ * The Administrator does NOT make the final decision.
  */
 export async function administratorReviewNegotiation(
   input: {
@@ -1982,11 +2273,12 @@ export async function administratorReviewNegotiation(
     notes?: string | null
   },
 ) {
-  /**
+  /*
    * -------------------------------------------------------
    * VERIFY ADMINISTRATOR
    * -------------------------------------------------------
    */
+
   const administrator =
     await query<{
       id: string
@@ -1998,8 +2290,11 @@ export async function administratorReviewNegotiation(
           id,
           role,
           status
+
         FROM app_users
+
         WHERE id = $1
+
         LIMIT 1
       `,
       [input.administratorId],
@@ -2030,11 +2325,12 @@ export async function administratorReviewNegotiation(
     )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
-   * VALIDATE RECOMMENDATION
+   * RECOMMENDATION
    * -------------------------------------------------------
    */
+
   const recommendation =
     input.recommendation?.trim()
 
@@ -2044,11 +2340,15 @@ export async function administratorReviewNegotiation(
     )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
-   * VALIDATE REVISED QUOTE
+   * OPTIONAL ADMIN PROPOSAL AMOUNT
    * -------------------------------------------------------
+   *
+   * If the Administrator does not supply a different
+   * amount, use the client's Version 4 requested budget.
    */
+
   let revisedQuoteAmount:
     number | null = null
 
@@ -2061,19 +2361,21 @@ export async function administratorReviewNegotiation(
     revisedQuoteAmount =
       validatePositiveAmount(
         input.revisedQuoteAmount,
-        "Revised quote amount",
+        "Administrator quote amount",
       )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
-   * GET NEGOTIATION
+   * LOAD NEGOTIATION
    * -------------------------------------------------------
    */
+
   const negotiation =
     await query<{
       id: string
       request_id: string
+      client_id: string
       status: string
       requested_budget: number | null
       quote_currency: string | null
@@ -2084,15 +2386,20 @@ export async function administratorReviewNegotiation(
         SELECT
           qn.id,
           qn.request_id,
+          qn.client_id,
           qn.status,
           qn.requested_budget,
           qn.quote_currency,
           qn.assigned_reviewer_id,
           r.status AS request_status
+
         FROM quote_negotiations qn
+
         INNER JOIN requests r
           ON r.id = qn.request_id
+
         WHERE qn.id = $1
+
         LIMIT 1
       `,
       [input.negotiationId],
@@ -2107,11 +2414,12 @@ export async function administratorReviewNegotiation(
     )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
-   * VERIFY ASSIGNED REVIEWER
+   * VERIFY ASSIGNED ADMINISTRATOR
    * -------------------------------------------------------
    */
+
   if (
     current.assigned_reviewer_id &&
     current.assigned_reviewer_id !==
@@ -2122,25 +2430,29 @@ export async function administratorReviewNegotiation(
     )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
-   * VALID NEGOTIATION STATE
+   * NEGOTIATION STATE
    * -------------------------------------------------------
    */
+
   if (
-    current.status !== "requested" &&
-    current.status !== "reviewing"
+    current.status !==
+      "requested" &&
+    current.status !==
+      "reviewing"
   ) {
     throw new Error(
       "This negotiation is not available for administrator review",
     )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
-   * VALID REQUEST STATE
+   * REQUEST STATE
    * -------------------------------------------------------
    */
+
   if (
     current.request_status !==
       "negotiation_requested" &&
@@ -2152,33 +2464,63 @@ export async function administratorReviewNegotiation(
     )
   }
 
-  /**
+  /*
    * -------------------------------------------------------
-   * VERIFY CURRENCY
+   * CURRENCY
    * -------------------------------------------------------
    */
+
   const negotiationCurrency =
     normalizeCurrency(
       current.quote_currency,
     )
 
-  /**
+  /*
    * -------------------------------------------------------
-   * ADMINISTRATOR → SUPER ADMIN
+   * FINAL ADMINISTRATOR AMOUNT
+   * -------------------------------------------------------
+   *
+   * Version 4 requested budget is the default.
+   */
+
+  const adminAmount =
+    revisedQuoteAmount ??
+    Number(
+      current.requested_budget,
+    )
+
+  if (
+    !Number.isFinite(
+      adminAmount,
+    ) ||
+    adminAmount <= 0
+  ) {
+    throw new Error(
+      "No valid administrator quote amount is available",
+    )
+  }
+
+  /*
+   * -------------------------------------------------------
+   * TRANSACTION
    * -------------------------------------------------------
    */
+
   const transactionResult =
     await withTransaction(
       async (client) => {
-        /**
-         * Lock negotiation.
+        /*
+         * LOCK NEGOTIATION
          */
+
         const locked =
           await client.query<{
             id: string
             request_id: string
             status: string
-            assigned_reviewer_id: string | null
+            assigned_reviewer_id:
+              | string
+              | null
           }>(
             `
               SELECT
@@ -2186,8 +2528,11 @@ export async function administratorReviewNegotiation(
                 request_id,
                 status,
                 assigned_reviewer_id
+
               FROM quote_negotiations
+
               WHERE id = $1
+
               FOR UPDATE
             `,
             [input.negotiationId],
@@ -2219,29 +2564,124 @@ export async function administratorReviewNegotiation(
             "reviewing"
         ) {
           throw new Error(
-            "Negotiation changed state before the administrator recommendation could be submitted",
+            "Negotiation changed state before the administrator proposal could be submitted",
           )
         }
 
-        /**
-         * Update negotiation.
+        /*
+         * ---------------------------------------------------
+         * GET PREVIOUS VERSION PRICE
+         * ---------------------------------------------------
          */
+
+        const previousQuote =
+          await client.query<{
+            price: number | null
+          }>(
+            `
+              SELECT
+                price
+
+              FROM quote_versions
+
+              WHERE request_id = $1
+
+              ORDER BY
+                version_number DESC
+
+              LIMIT 1
+            `,
+            [current.request_id],
+          )
+
+        const previousPrice =
+          previousQuote.rows[0]
+            ?.price ?? null
+
+        /*
+         * ---------------------------------------------------
+         * CREATE VERSION 5
+         * ---------------------------------------------------
+         */
+
+        const adminQuoteVersion =
+          await createNextQuoteVersion(
+            client,
+            {
+              requestId:
+                current.request_id,
+
+              createdBy:
+                input.administratorId,
+
+              creatorRole:
+                "administrator",
+
+              source:
+                "administrator_proposal",
+
+              price:
+                adminAmount,
+
+              currency:
+                negotiationCurrency,
+
+              estimatedStart:
+                null,
+
+              estimatedCompletion:
+                null,
+
+              notes:
+                input.notes?.trim() ||
+                null,
+
+              reasoning:
+                recommendation,
+
+              status:
+                "pending_super_admin_review",
+
+              previousPrice:
+                previousPrice !== null
+                  ? Number(
+                      previousPrice,
+                    )
+                  : null,
+            },
+          )
+
+        /*
+         * ---------------------------------------------------
+         * UPDATE NEGOTIATION
+         * ---------------------------------------------------
+         */
+
         const updated =
           await client.query<{
             id: string
             request_id: string
             client_id: string
-            assigned_reviewer_id: string | null
+            assigned_reviewer_id:
+              | string
+              | null
             round_number: number
             status: string
-            administrator_recommendation: string | null
-            revised_quote_amount: number | null
-            owner_decision_notes: string | null
+            administrator_recommendation:
+              | string
+              | null
+            revised_quote_amount:
+              | number
+              | null
+            owner_decision_notes:
+              | string
+              | null
             created_at: string
             updated_at: string
           }>(
             `
               UPDATE quote_negotiations
+
               SET
                 assigned_reviewer_id =
                   COALESCE(
@@ -2265,6 +2705,7 @@ export async function administratorReviewNegotiation(
                   NOW()
 
               WHERE id = $1
+
                 AND status IN (
                   'requested',
                   'reviewing'
@@ -2285,9 +2726,13 @@ export async function administratorReviewNegotiation(
             `,
             [
               input.negotiationId,
+
               input.administratorId,
+
               recommendation,
-              revisedQuoteAmount,
+
+              adminAmount,
+
               input.notes?.trim() ||
                 null,
             ],
@@ -2298,25 +2743,51 @@ export async function administratorReviewNegotiation(
 
         if (!updatedNegotiation) {
           throw new Error(
-            "Negotiation changed state before the administrator recommendation could be submitted",
+            "Negotiation changed state before the administrator proposal could be submitted",
           )
         }
 
-        /**
-         * Parent request.
+        /*
+         * ---------------------------------------------------
+         * MOVE REQUEST TO SUPER ADMIN REVIEW
+         * ---------------------------------------------------
          */
+
         const requestUpdated =
           await client.query(
             `
               UPDATE requests
+
               SET
                 status =
                   'pending_super_admin_review',
+
+                approved_quote_amount =
+                  $2::numeric,
+
+                approved_quote_currency =
+                  $3,
+
+                approved_quote_notes =
+                  $4,
+
+                admin_quote_action =
+                  'submitted_for_super_admin_review',
+
+                admin_quote_notes =
+                  $4,
+
+                admin_reviewed_by =
+                  $5,
+
+                admin_reviewed_at =
+                  NOW(),
 
                 updated_at =
                   NOW()
 
               WHERE id = $1
+
                 AND status IN (
                   'negotiation_requested',
                   'pending_super_admin_review'
@@ -2324,6 +2795,14 @@ export async function administratorReviewNegotiation(
             `,
             [
               current.request_id,
+
+              adminAmount,
+
+              negotiationCurrency,
+
+              recommendation,
+
+              input.administratorId,
             ],
           )
 
@@ -2336,18 +2815,25 @@ export async function administratorReviewNegotiation(
           )
         }
 
-        return updatedNegotiation
+        return {
+          negotiation:
+            updatedNegotiation,
+
+          quoteVersionId:
+            adminQuoteVersion.id,
+        }
       },
     )
 
   const updatedNegotiation =
-    transactionResult
+    transactionResult.negotiation
 
-  /**
+  /*
    * -------------------------------------------------------
    * AUDIT
    * -------------------------------------------------------
    */
+
   await recordRequestAudit(
     current.request_id,
     input.administratorId,
@@ -2356,8 +2842,11 @@ export async function administratorReviewNegotiation(
       negotiation_id:
         input.negotiationId,
 
+      quote_version_id:
+        transactionResult.quoteVersionId,
+
       recommended_amount:
-        revisedQuoteAmount,
+        adminAmount,
 
       recommendation,
 
@@ -2366,11 +2855,12 @@ export async function administratorReviewNegotiation(
     },
   )
 
-  /**
+  /*
    * -------------------------------------------------------
    * NOTIFY SUPER ADMIN
    * -------------------------------------------------------
    */
+
   await notifySuperAdmins({
     type:
       "quote_pending_super_admin_review",
@@ -2379,7 +2869,7 @@ export async function administratorReviewNegotiation(
       "Negotiation requires review",
 
     message:
-      "An Administrator has submitted a negotiation recommendation for Super Administrator review.",
+      "An Administrator has submitted a revised quote for Super Administrator review.",
 
     metadata: {
       request_id:
@@ -2387,6 +2877,9 @@ export async function administratorReviewNegotiation(
 
       negotiation_id:
         input.negotiationId,
+
+      quote_version_id:
+        transactionResult.quoteVersionId,
 
       target_page:
         "super_admin_quote_review",
@@ -2401,12 +2894,12 @@ export async function administratorReviewNegotiation(
     )
   })
 
-  /**
-   * -------------------------------------------------------
-   * SAFE ADMIN RESPONSE
-   * -------------------------------------------------------
-   */
-  return updatedNegotiation
+  return {
+    ...updatedNegotiation,
+
+    quote_version_id:
+      transactionResult.quoteVersionId,
+  }
 }
 
 /**
@@ -2414,11 +2907,22 @@ export async function administratorReviewNegotiation(
  * SUPER ADMINISTRATOR DECIDES NEGOTIATION
  * =========================================================
  *
- * reviewing → approved
- * reviewing → rejected
+ * VERSION FLOW:
  *
- * ONLY Super Administrator can change the actual
- * client-facing quote.
+ * V4 = Client negotiation request
+ * V5 = Administrator proposal
+ * V6 = Super Administrator final decision
+ *
+ * INTERNAL VERSION 6:
+ * - Stores the Super Administrator's actual working amount
+ * - Stores the negotiation/workflow currency
+ *
+ * CLIENT-FACING REQUEST:
+ * - Converts the final amount into the client's preferred
+ *   currency before writing approved_quote_amount
+ * - Stores conversion metadata
+ *
+ * ONLY Super Administrator can finalize the negotiation.
  */
 export async function superAdminDecideNegotiation(
   input: {
@@ -2432,11 +2936,12 @@ export async function superAdminDecideNegotiation(
     notes?: string | null
   },
 ) {
-  /**
-   * -------------------------------------------------------
+  /*
+   * =======================================================
    * VERIFY SUPER ADMINISTRATOR
-   * -------------------------------------------------------
+   * =======================================================
    */
+
   const superAdmin =
     await query<{
       id: string
@@ -2480,11 +2985,12 @@ export async function superAdminDecideNegotiation(
     )
   }
 
-  /**
-   * -------------------------------------------------------
+  /*
+   * =======================================================
    * VALIDATE DECISION
-   * -------------------------------------------------------
+   * =======================================================
    */
+
   if (
     input.decision !== "approve" &&
     input.decision !== "reject" &&
@@ -2495,19 +3001,18 @@ export async function superAdminDecideNegotiation(
     )
   }
 
-  /**
-   * -------------------------------------------------------
-   * VALIDATE MODIFICATION
-   * -------------------------------------------------------
+  /*
+   * =======================================================
+   * VALIDATE OPTIONAL REVISION
+   * =======================================================
    */
+
   let suppliedRevision:
     number | null = null
 
   if (
-    input.revisedQuoteAmount !==
-      null &&
-    input.revisedQuoteAmount !==
-      undefined
+    input.revisedQuoteAmount !== null &&
+    input.revisedQuoteAmount !== undefined
   ) {
     suppliedRevision =
       validatePositiveAmount(
@@ -2517,34 +3022,71 @@ export async function superAdminDecideNegotiation(
   }
 
   if (
-    input.decision ===
-    "modify"
+    input.decision === "modify" &&
+    suppliedRevision === null
   ) {
-    if (
-      suppliedRevision === null
-    ) {
-      throw new Error(
-        "A valid revised quote amount is required",
-      )
-    }
+    throw new Error(
+      "A valid revised quote amount is required",
+    )
   }
 
-  /**
-   * -------------------------------------------------------
-   * GET NEGOTIATION
-   * -------------------------------------------------------
+  /*
+   * =======================================================
+   * LOAD NEGOTIATION
+   * =======================================================
    */
+
   const negotiation =
     await query<{
       id: string
       request_id: string
       client_id: string
-      quote_currency: string | null
-      preferred_currency: string | null
-      original_quote_amount: number | null
-      revised_quote_amount: number | null
+
+      quote_currency:
+        | string
+        | null
+
+      preferred_currency:
+        | string
+        | null
+
+      original_quote_amount:
+        | number
+        | null
+
+      requested_budget:
+        | number
+        | null
+
+      revised_quote_amount:
+        | number
+        | null
+
       status: string
-      request_status: string | null
+
+      request_status:
+        | string
+        | null
+
+      approved_quote_amount:
+        | number
+        | null
+
+      approved_quote_currency:
+        | string
+        | null
+
+      approved_quote_notes:
+        | string
+        | null
+
+      approved_estimated_start:
+        | string
+        | null
+
+      approved_estimated_completion:
+        | string
+        | null
     }>(
       `
         SELECT
@@ -2553,14 +3095,27 @@ export async function superAdminDecideNegotiation(
           qn.client_id,
           qn.quote_currency,
           qn.original_quote_amount,
+          qn.requested_budget,
           qn.revised_quote_amount,
           qn.status,
+
           r.preferred_currency,
-          r.status AS request_status
+
+          r.status AS request_status,
+
+          r.approved_quote_amount,
+          r.approved_quote_currency,
+          r.approved_quote_notes,
+          r.approved_estimated_start,
+          r.approved_estimated_completion
+
         FROM quote_negotiations qn
+
         INNER JOIN requests r
           ON r.id = qn.request_id
+
         WHERE qn.id = $1
+
         LIMIT 1
       `,
       [input.negotiationId],
@@ -2575,25 +3130,26 @@ export async function superAdminDecideNegotiation(
     )
   }
 
-  /**
-   * -------------------------------------------------------
+  /*
+   * =======================================================
    * VERIFY NEGOTIATION STATE
-   * -------------------------------------------------------
+   * =======================================================
    */
+
   if (
-    current.status !==
-    "reviewing"
+    current.status !== "reviewing"
   ) {
     throw new Error(
       "Negotiation is not awaiting Super Administrator review",
     )
   }
 
-  /**
-   * -------------------------------------------------------
+  /*
+   * =======================================================
    * VERIFY PARENT REQUEST
-   * -------------------------------------------------------
+   * =======================================================
    */
+
   if (
     current.request_status !==
     "pending_super_admin_review"
@@ -2603,11 +3159,18 @@ export async function superAdminDecideNegotiation(
     )
   }
 
-  /**
-   * -------------------------------------------------------
-   * VERIFY CURRENCY
-   * -------------------------------------------------------
+  /*
+   * =======================================================
+   * NORMALIZE CURRENCIES
+   * =======================================================
+   *
+   * negotiationCurrency:
+   *   Currency used by the negotiation workflow.
+   *
+   * requestCurrency:
+   *   Currency the client should see.
    */
+
   const negotiationCurrency =
     normalizeCurrency(
       current.quote_currency,
@@ -2618,30 +3181,70 @@ export async function superAdminDecideNegotiation(
       current.preferred_currency,
     )
 
+  /*
+   * =======================================================
+   * CURRENCY CONSISTENCY
+   * =======================================================
+   *
+   * The client negotiation itself must be in the client's
+   * preferred currency.
+   */
+
   if (
     negotiationCurrency !==
     requestCurrency
   ) {
     throw new Error(
-      "Negotiation currency no longer matches the client's currency",
+      "Negotiation currency no longer matches the client's preferred currency",
     )
   }
 
-  /**
-   * -------------------------------------------------------
-   * REJECT
-   * -------------------------------------------------------
+  /*
+   * =======================================================
+   * DETERMINE FINAL INTERNAL AMOUNT
+   * =======================================================
+   *
+   * This is the amount the Super Administrator is actually
+   * approving.
    */
+
+  let finalAmount:
+    number | null = null
+
   if (
-    input.decision ===
-    "reject"
+    input.decision === "approve"
   ) {
-    const negotiationRow =
+    finalAmount =
+      current.revised_quote_amount ??
+      current.requested_budget ??
+      current.original_quote_amount
+  }
+
+  if (
+    input.decision === "modify"
+  ) {
+    finalAmount =
+      suppliedRevision
+  }
+
+  /*
+   * =======================================================
+   * REJECT NEGOTIATION
+   * =======================================================
+   */
+
+  if (
+    input.decision === "reject"
+  ) {
+    const result =
       await withTransaction(
         async (client) => {
-          /**
-           * Lock negotiation.
+          /*
+           * -------------------------------------------------
+           * LOCK NEGOTIATION
+           * -------------------------------------------------
            */
+
           const locked =
             await client.query<{
               id: string
@@ -2663,9 +3266,7 @@ export async function superAdminDecideNegotiation(
           const lockedNegotiation =
             locked.rows[0]
 
-          if (
-            !lockedNegotiation
-          ) {
+          if (!lockedNegotiation) {
             throw new Error(
               "Negotiation not found",
             )
@@ -2680,9 +3281,115 @@ export async function superAdminDecideNegotiation(
             )
           }
 
-          /**
-           * Reject negotiation.
+          /*
+           * -------------------------------------------------
+           * GET PREVIOUS VERSION
+           * -------------------------------------------------
            */
+
+          const previousQuote =
+            await client.query<{
+              price: number | null
+              currency: string | null
+            }>(
+              `
+                SELECT
+                  price,
+                  currency
+                FROM quote_versions
+                WHERE request_id = $1
+                ORDER BY version_number DESC
+                LIMIT 1
+              `,
+              [current.request_id],
+            )
+
+          const previousPrice =
+            previousQuote.rows[0]
+              ?.price ?? null
+
+          if (
+            previousPrice === null ||
+            !Number.isFinite(
+              Number(previousPrice),
+            ) ||
+            Number(previousPrice) <= 0
+          ) {
+            throw new Error(
+              "Cannot create final negotiation decision without a valid quote",
+            )
+          }
+
+          /*
+           * -------------------------------------------------
+           * CREATE V6
+           * -------------------------------------------------
+           *
+           * Rejection is still recorded as an immutable
+           * Super Administrator version.
+           */
+
+          const finalVersion =
+            await createNextQuoteVersion(
+              client,
+              {
+                requestId:
+                  current.request_id,
+
+                createdBy:
+                  input.superAdminId,
+
+                creatorRole:
+                  "super_administrator",
+
+                source:
+                  "super_admin",
+
+                price:
+                  Number(
+                    current.original_quote_amount ??
+                    previousPrice,
+                  ),
+
+                currency:
+                  negotiationCurrency,
+
+                estimatedStart:
+                  current
+                    .approved_estimated_start
+                    ?.toString()
+                    .slice(0, 10) ||
+                  null,
+
+                estimatedCompletion:
+                  current
+                    .approved_estimated_completion
+                    ?.toString()
+                    .slice(0, 10) ||
+                  null,
+
+                notes:
+                  input.notes?.trim() ||
+                  null,
+
+                reasoning:
+                  input.notes?.trim() ||
+                  "Negotiation request rejected by Super Administrator.",
+
+                status:
+                  "rejected",
+
+                previousPrice:
+                  Number(previousPrice),
+              },
+            )
+
+          /*
+           * -------------------------------------------------
+           * UPDATE NEGOTIATION
+           * -------------------------------------------------
+           */
+
           const updated =
             await client.query<{
               id: string
@@ -2691,7 +3398,9 @@ export async function superAdminDecideNegotiation(
               status: string
               owner_approver_id: string
               owner_decision: string
-              owner_decision_notes: string | null
+              owner_decision_notes:
+                | string
+                | null
               decided_at: string
               created_at: string
               updated_at: string
@@ -2699,8 +3408,7 @@ export async function superAdminDecideNegotiation(
               `
                 UPDATE quote_negotiations
                 SET
-                  status =
-                    'rejected',
+                  status = 'rejected',
 
                   owner_approver_id =
                     $2,
@@ -2718,8 +3426,7 @@ export async function superAdminDecideNegotiation(
                     NOW()
 
                 WHERE id = $1
-                  AND status =
-                    'reviewing'
+                  AND status = 'reviewing'
 
                 RETURNING
                   id,
@@ -2741,28 +3448,29 @@ export async function superAdminDecideNegotiation(
               ],
             )
 
-          const negotiation =
+          const negotiationRow =
             updated.rows[0]
 
-          if (!negotiation) {
+          if (!negotiationRow) {
             throw new Error(
-              "Negotiation changed state before the Super Administrator decision could be recorded",
+              "Negotiation changed state before the final decision could be recorded",
             )
           }
 
-          /**
-           * Restore original client-facing quote.
+          /*
+           * -------------------------------------------------
+           * RESTORE ORIGINAL QUOTE STATE
+           * -------------------------------------------------
            */
+
           const requestUpdated =
             await client.query(
               `
                 UPDATE requests
                 SET
-                  status =
-                    'quote_sent',
+                  status = 'quote_sent',
 
-                  updated_at =
-                    NOW()
+                  updated_at = NOW()
 
                 WHERE id = $1
                   AND status =
@@ -2782,15 +3490,21 @@ export async function superAdminDecideNegotiation(
             )
           }
 
-          return negotiation
+          return {
+            negotiationRow,
+
+            quoteVersionId:
+              finalVersion.id,
+          }
         },
       )
 
-    /**
-     * -------------------------------------------------------
+    /*
+     * ------------------------------------------------------
      * AUDIT
-     * -------------------------------------------------------
+     * ------------------------------------------------------
      */
+
     await recordRequestAudit(
       current.request_id,
       input.superAdminId,
@@ -2799,20 +3513,26 @@ export async function superAdminDecideNegotiation(
         negotiation_id:
           input.negotiationId,
 
+        quote_version_id:
+          result.quoteVersionId,
+
         notes:
           input.notes?.trim() ||
           null,
       },
     )
 
-    /**
-     * -------------------------------------------------------
+    /*
+     * ------------------------------------------------------
      * NOTIFY CLIENT
-     * -------------------------------------------------------
+     * ------------------------------------------------------
      */
-    if (negotiationRow.client_id) {
+
+    if (
+      result.negotiationRow.client_id
+    ) {
       await notifyUser(
-        negotiationRow.client_id,
+        result.negotiationRow.client_id,
         {
           type:
             "quote_rejected",
@@ -2830,6 +3550,9 @@ export async function superAdminDecideNegotiation(
             negotiation_id:
               input.negotiationId,
 
+            quote_version_id:
+              result.quoteVersionId,
+
             target_page:
               "client_quote_review",
 
@@ -2845,50 +3568,28 @@ export async function superAdminDecideNegotiation(
       })
     }
 
-    return negotiationRow
+    return {
+      success: true,
+
+      action:
+        "reject",
+
+      status:
+        result
+          .negotiationRow
+          .status,
+
+      quote_version_id:
+        result.quoteVersionId,
+    }
   }
 
-  /**
-   * -------------------------------------------------------
-   * DETERMINE FINAL AMOUNT
-   * -------------------------------------------------------
+  /*
+   * =======================================================
+   * FINAL INTERNAL AMOUNT VALIDATION
+   * =======================================================
    */
-  let finalAmount:
-    number | null = null
 
-  /**
-   * APPROVE
-   *
-   * Uses the Administrator's recommended revised amount
-   * when available. Otherwise preserves the original quote.
-   */
-  if (
-    input.decision ===
-    "approve"
-  ) {
-    finalAmount =
-      current.revised_quote_amount ??
-      current.original_quote_amount
-  }
-
-  /**
-   * MODIFY
-   *
-   * Super Administrator explicitly supplies a new amount.
-   */
-  if (
-    input.decision ===
-    "modify"
-  ) {
-    finalAmount =
-      suppliedRevision
-  }
-
-  /**
-   * -------------------------------------------------------
-   * FINAL AMOUNT SAFETY CHECK
-   * -------------------------------------------------------
-   */
   if (
     finalAmount === null ||
     !Number.isFinite(
@@ -2904,28 +3605,100 @@ export async function superAdminDecideNegotiation(
   const normalizedFinalAmount =
     Number(finalAmount)
 
-  /**
-   * -------------------------------------------------------
+  /*
+   * =======================================================
    * OWNER DECISION
-   * -------------------------------------------------------
+   * =======================================================
    */
+
   const ownerDecision =
-    input.decision ===
-      "modify"
+    input.decision === "modify"
       ? "modified"
       : "approved"
 
-  /**
-   * -------------------------------------------------------
-   * APPROVE / MODIFY NEGOTIATION
-   * -------------------------------------------------------
+  /*
+   * =======================================================
+   * CONVERT FINAL QUOTE TO CLIENT CURRENCY
+   * =======================================================
+   *
+   * Normally negotiationCurrency and requestCurrency
+   * should already match.
+   *
+   * We still perform the conversion defensively so this
+   * workflow remains correct even if the internal workflow
+   * currency differs in a future scenario.
    */
+
+  let clientAmount =
+    normalizedFinalAmount
+
+  let exchangeRate =
+    1
+
+  if (
+    negotiationCurrency !==
+    requestCurrency
+  ) {
+    const converted =
+      await convertCurrency({
+        amount:
+          normalizedFinalAmount,
+
+        from:
+          negotiationCurrency,
+
+        to:
+          requestCurrency,
+      })
+
+    clientAmount =
+      Number(
+        converted.amount,
+      )
+
+    exchangeRate =
+      Number(
+        converted.rate,
+      )
+
+    if (
+      !Number.isFinite(
+        clientAmount,
+      ) ||
+      clientAmount <= 0
+    ) {
+      throw new Error(
+        "Currency conversion returned an invalid client amount",
+      )
+    }
+
+    if (
+      !Number.isFinite(
+        exchangeRate,
+      ) ||
+      exchangeRate <= 0
+    ) {
+      throw new Error(
+        "Currency conversion returned an invalid exchange rate",
+      )
+    }
+  }
+
+  /*
+   * =======================================================
+   * FINAL TRANSACTION
+   * =======================================================
+   */
+
   const transactionResult =
     await withTransaction(
       async (client) => {
-        /**
-         * Lock negotiation first.
+        /*
+         * -------------------------------------------------
+         * LOCK NEGOTIATION
+         * -------------------------------------------------
          */
+
         const locked =
           await client.query<{
             id: string
@@ -2947,9 +3720,7 @@ export async function superAdminDecideNegotiation(
         const lockedNegotiation =
           locked.rows[0]
 
-        if (
-          !lockedNegotiation
-        ) {
+        if (!lockedNegotiation) {
           throw new Error(
             "Negotiation not found",
           )
@@ -2964,9 +3735,103 @@ export async function superAdminDecideNegotiation(
           )
         }
 
-        /**
-         * Update negotiation.
+        /*
+         * -------------------------------------------------
+         * PREVIOUS PRICE
+         * -------------------------------------------------
          */
+
+        const previousQuote =
+          await client.query<{
+            price: number | null
+          }>(
+            `
+              SELECT
+                price
+              FROM quote_versions
+              WHERE request_id = $1
+              ORDER BY version_number DESC
+              LIMIT 1
+            `,
+            [current.request_id],
+          )
+
+        const previousPrice =
+          previousQuote.rows[0]
+            ?.price ?? null
+
+        /*
+         * -------------------------------------------------
+         * CREATE V6
+         * -------------------------------------------------
+         *
+         * IMPORTANT:
+         *
+         * V6 stores the INTERNAL final amount.
+         */
+
+        const finalVersion =
+          await createNextQuoteVersion(
+            client,
+            {
+              requestId:
+                current.request_id,
+
+              createdBy:
+                input.superAdminId,
+
+              creatorRole:
+                "super_administrator",
+
+              source:
+                "super_admin",
+
+              price:
+                normalizedFinalAmount,
+
+              currency:
+                negotiationCurrency,
+
+              estimatedStart:
+                current
+                  .approved_estimated_start
+                  ?.toString()
+                  .slice(0, 10) ||
+                null,
+
+              estimatedCompletion:
+                current
+                  .approved_estimated_completion
+                  ?.toString()
+                  .slice(0, 10) ||
+                null,
+
+              notes:
+                input.notes?.trim() ||
+                null,
+
+              reasoning:
+                input.notes?.trim() ||
+                "Negotiation finalized by Super Administrator.",
+
+              status:
+                input.decision === "modify"
+                  ? "modified"
+                  : "approved",
+
+              previousPrice:
+                previousPrice !== null
+                  ? Number(previousPrice)
+                  : null,
+            },
+          )
+
+        /*
+         * -------------------------------------------------
+         * UPDATE NEGOTIATION
+         * -------------------------------------------------
+         */
+
         const updated =
           await client.query<{
             id: string
@@ -2976,7 +3841,9 @@ export async function superAdminDecideNegotiation(
             owner_approver_id: string
             owner_decision: string
             revised_quote_amount: number
-            owner_decision_notes: string | null
+            owner_decision_notes:
+              | string
+              | null
             decided_at: string
             created_at: string
             updated_at: string
@@ -2984,8 +3851,7 @@ export async function superAdminDecideNegotiation(
             `
               UPDATE quote_negotiations
               SET
-                status =
-                  'approved',
+                status = 'approved',
 
                 owner_approver_id =
                   $2,
@@ -3006,8 +3872,7 @@ export async function superAdminDecideNegotiation(
                   NOW()
 
               WHERE id = $1
-                AND status =
-                  'reviewing'
+                AND status = 'reviewing'
 
               RETURNING
                 id,
@@ -3024,9 +3889,13 @@ export async function superAdminDecideNegotiation(
             `,
             [
               input.negotiationId,
+
               input.superAdminId,
+
               ownerDecision,
+
               normalizedFinalAmount,
+
               input.notes?.trim() ||
                 null,
             ],
@@ -3041,9 +3910,16 @@ export async function superAdminDecideNegotiation(
           )
         }
 
-        /**
-         * Update client-facing request.
+        /*
+         * -------------------------------------------------
+         * UPDATE CLIENT-FACING REQUEST
+         * -------------------------------------------------
+         *
+         * This is the important conversion.
+         *
+         * The client sees clientAmount in requestCurrency.
          */
+
         const requestUpdated =
           await client.query(
             `
@@ -3053,18 +3929,39 @@ export async function superAdminDecideNegotiation(
                   'revised_quote_sent',
 
                 final_price =
-                  $2,
+                  ROUND($2)::integer,
 
                 approved_quote_amount =
-                  $2,
+                  $2::numeric,
 
                 approved_quote_currency =
                   $3,
 
+                approved_quote_base_amount =
+                  $4::numeric,
+
+                approved_quote_notes =
+                  $5,
+
+                super_admin_quote_action =
+                  $6,
+
+                super_admin_quote_notes =
+                  $5,
+
                 super_admin_reviewed_by =
-                  $4,
+                  $7,
 
                 super_admin_reviewed_at =
+                  NOW(),
+
+                quote_exchange_rate =
+                  $8::numeric,
+
+                quote_base_currency =
+                  $9,
+
+                quote_currency_converted_at =
                   NOW(),
 
                 quote_sent_at =
@@ -3082,9 +3979,25 @@ export async function superAdminDecideNegotiation(
             `,
             [
               current.request_id,
+
+              clientAmount,
+
+              requestCurrency,
+
               normalizedFinalAmount,
-              negotiationCurrency,
+
+              input.notes?.trim() ||
+                null,
+
+              input.decision === "modify"
+                ? "modified"
+                : "approved",
+
               input.superAdminId,
+
+              exchangeRate,
+
+              negotiationCurrency,
             ],
           )
 
@@ -3097,18 +4010,34 @@ export async function superAdminDecideNegotiation(
           )
         }
 
-        return negotiationRow
+        return {
+          negotiationRow,
+
+          quoteVersionId:
+            finalVersion.id,
+
+          clientAmount,
+
+          clientCurrency:
+            requestCurrency,
+
+          exchangeRate,
+
+          internalAmount:
+            normalizedFinalAmount,
+
+          internalCurrency:
+            negotiationCurrency,
+        }
       },
     )
 
-  const negotiationRow =
-    transactionResult
-
-  /**
-   * -------------------------------------------------------
+  /*
+   * =======================================================
    * AUDIT
-   * -------------------------------------------------------
+   * =======================================================
    */
+
   await recordRequestAudit(
     current.request_id,
     input.superAdminId,
@@ -3117,8 +4046,23 @@ export async function superAdminDecideNegotiation(
       negotiation_id:
         input.negotiationId,
 
+      quote_version_id:
+        transactionResult.quoteVersionId,
+
       final_amount:
-        normalizedFinalAmount,
+        transactionResult.internalAmount,
+
+      final_currency:
+        transactionResult.internalCurrency,
+
+      client_amount:
+        transactionResult.clientAmount,
+
+      client_currency:
+        transactionResult.clientCurrency,
+
+      exchange_rate:
+        transactionResult.exchangeRate,
 
       decision:
         input.decision,
@@ -3126,22 +4070,24 @@ export async function superAdminDecideNegotiation(
       notes:
         input.notes?.trim() ||
         null,
-
-      currency:
-        negotiationCurrency,
     },
   )
 
-  /**
-   * -------------------------------------------------------
+  /*
+   * =======================================================
    * NOTIFY CLIENT
-   * -------------------------------------------------------
+   * =======================================================
    */
+
   if (
-    negotiationRow.client_id
+    transactionResult
+      .negotiationRow
+      .client_id
   ) {
     await notifyUser(
-      negotiationRow.client_id,
+      transactionResult
+        .negotiationRow
+        .client_id,
       {
         type:
           "quote_ready",
@@ -3159,6 +4105,9 @@ export async function superAdminDecideNegotiation(
           negotiation_id:
             input.negotiationId,
 
+          quote_version_id:
+            transactionResult.quoteVersionId,
+
           target_page:
             "client_quote_review",
 
@@ -3174,15 +4123,43 @@ export async function superAdminDecideNegotiation(
     })
   }
 
-  /**
-   * -------------------------------------------------------
-   * SAFE ADMIN / SUPER ADMIN RESPONSE
-   * -------------------------------------------------------
-   *
-   * Do not return:
-   * - original_ai_estimate
-   * - hidden pricing calculations
-   * - internal reviewer information
+  /*
+   * =======================================================
+   * SAFE RESPONSE
+   * =======================================================
    */
-  return negotiationRow
+
+  return {
+    success: true,
+
+    action:
+      input.decision,
+
+    status:
+      transactionResult
+        .negotiationRow
+        .status,
+
+    quote: {
+      amount:
+        transactionResult.clientAmount,
+
+      currency:
+        transactionResult.clientCurrency,
+
+      notes:
+        input.notes?.trim() ||
+        null,
+
+      estimated_completion:
+        current
+          .approved_estimated_completion
+          ?.toString()
+          .slice(0, 10) ||
+        null,
+    },
+
+    quote_version_id:
+      transactionResult.quoteVersionId,
+  }
 }

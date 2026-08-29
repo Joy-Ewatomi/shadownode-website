@@ -600,42 +600,36 @@ export default function SuperAdminRequestReviewCard({
        * =====================================================
        */
 
-      const payload = {
-        decision_action:
-          action,
+   const payload = {
+  decision_action: action,
 
-        decision_source:
-          decisionMode,
+  decision_source:
+    decisionMode === "admin"
+      ? "admin"
+      : decisionMode === "ai"
+      ? "ai"
+      : "adjusted",
 
-        quote:
-          action ===
-          "reject"
-            ? undefined
-            : {
-                amount:
-                  Number(
-                    form.amount,
-                  ),
-
-                currency:
-                  form.currency,
-
-                estimated_completion:
-                  form.estimated_completion,
-              },
-
-        justification: {
-          reason,
-
-          notes:
-            form.notes.trim(),
+  quote:
+    action === "reject"
+      ? undefined
+      : {
+          amount: Number(form.amount),
+          currency: form.currency,
+          estimated_completion:
+            form.estimated_completion,
         },
 
-        metadata: {
-          reviewed_from:
-            "super_admin_dashboard",
-        },
-      }
+  justification: {
+    reason,
+    notes: form.notes.trim(),
+  },
+
+  metadata: {
+    reviewed_from:
+      "super_admin_dashboard",
+  },
+}
 
       /*
        * =====================================================
