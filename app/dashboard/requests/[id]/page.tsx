@@ -86,7 +86,6 @@ type AuditEvent = {
 type WorkflowHistoryEvent = {
   id: string
   request_id: string | null
-  case_id: string | null
   quote_version_id: string | null
   performed_by: string | null
   performer_role: string | null
@@ -192,14 +191,14 @@ function getActionRequired(
    * These are conservative fallbacks based on
    * the fields already present in requests.
    */
-
-  if (role === "administrator") {
-    return (
-      request.status === "submitted" ||
-      request.status === "pending_admin_review" ||
-      request.status === "admin_review_required"
-    )
-  }
+if (role === "administrator") {
+  return [
+    "pending_admin_review",
+    "negotiation_requested",
+    "negotiating",
+    "under_negotiation",
+  ].includes(request.status)
+}
 
   if (role === "super_administrator") {
     return (
@@ -223,9 +222,13 @@ function getActionRequired(
 
 export default async function RequestDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{
     id: string
+  }>
+  searchParams: Promise<{
+    history?: string
   }>
 }) {
   // =======================================================
@@ -257,6 +260,11 @@ export default async function RequestDetailPage({
   // =======================================================
 
   const { id } = await params
+
+  const { history } = await searchParams
+
+const isHistoryView =
+  history === "true"
 
 
   // =======================================================
@@ -651,12 +659,12 @@ await query(
   // IMPORTANT QUOTES
   // =======================================================
 
-  const adminQuote =
-    quoteVersions.find(
-      (quote) =>
-        quote.source ===
-        "administrator",
-    ) ?? null
+const adminQuote =
+  quoteVersions.find(
+    (quote) =>
+      quote.source ===
+      "administrator_proposal",
+  ) ?? null
 
   const aiQuote =
     quoteVersions.find(
@@ -678,113 +686,102 @@ await query(
 
   let workflowHistory:
     WorkflowHistoryEvent[] = []
+if (
+  user.role === "administrator" ||
+  user.role === "super_administrator"
+) {
+  const workflowResult =
+    await query(
+      `
+        SELECT
+          rae.id,
+          rae.request_id,
+          rae.actor_user_id,
+          rae.action,
+          rae.details,
+          rae.created_at,
 
-  if (
-    user.role === "administrator" ||
-    user.role === "super_administrator"
-  ) {
-    const workflowResult =
-      await query(
-        `
-          SELECT
-            id,
-            request_id,
-            case_id,
-            quote_version_id,
-            performed_by,
-            performer_role,
-            action,
-            description,
-            metadata,
-            created_at
+          au.role AS performer_role
 
-          FROM workflow_history
+        FROM request_audit_events rae
 
-          WHERE request_id = $1
-            AND performer_role = $2
+        LEFT JOIN app_users au
+          ON au.id = rae.actor_user_id
 
-          ORDER BY created_at ASC
-        `,
-        [
-          id,
-          user.role,
-        ],
-      )
+        WHERE rae.request_id = $1
+          AND (
+            (
+              $2 = 'administrator'
+              AND au.role = 'administrator'
+            )
+            OR
+            (
+              $2 = 'super_administrator'
+              AND (
+                au.role = 'super_administrator'
+                OR au.role = 'super-administrator'
+              )
+            )
+          )
 
-    workflowHistory =
-      workflowResult.rows.map(
-        (
-          item: Record<string, unknown>,
-        ): WorkflowHistoryEvent => ({
-          id:
-            String(item.id),
+        ORDER BY
+          rae.created_at ASC,
+          rae.id ASC
+      `,
+      [
+        id,
+        user.role,
+      ],
+    )
 
-          request_id:
-            item.request_id !== null &&
-            item.request_id !== undefined
-              ? String(
-                  item.request_id,
-                )
-              : null,
+  workflowHistory =
+    workflowResult.rows.map(
+      (
+        item: Record<string, unknown>,
+      ): WorkflowHistoryEvent => ({
+        id:
+          String(item.id),
 
-          case_id:
-            item.case_id !== null &&
-            item.case_id !== undefined
-              ? String(
-                  item.case_id,
-                )
-              : null,
+        request_id:
+          item.request_id !== null &&
+          item.request_id !== undefined
+            ? String(item.request_id)
+            : null,
 
-          quote_version_id:
-            item.quote_version_id !== null &&
-            item.quote_version_id !== undefined
-              ? String(
-                  item.quote_version_id,
-                )
-              : null,
+        quote_version_id:
+          null,
 
-          performed_by:
-            item.performed_by !== null &&
-            item.performed_by !== undefined
-              ? String(
-                  item.performed_by,
-                )
-              : null,
+        performed_by:
+          item.actor_user_id !== null &&
+          item.actor_user_id !== undefined
+            ? String(item.actor_user_id)
+            : null,
 
-          performer_role:
-            item.performer_role !== null &&
-            item.performer_role !== undefined
-              ? String(
-                  item.performer_role,
-                )
-              : null,
+        performer_role:
+          item.performer_role !== null &&
+          item.performer_role !== undefined
+            ? String(item.performer_role)
+            : null,
 
-          action:
-            item.action !== null &&
-            item.action !== undefined
-              ? String(
-                  item.action,
-                )
-              : null,
+        action:
+          item.action !== null &&
+          item.action !== undefined
+            ? String(item.action)
+            : null,
 
-          description:
-            item.description !== null &&
-            item.description !== undefined
-              ? String(
-                  item.description,
-                )
-              : null,
+        description:
+          null,
 
-          metadata:
-            item.metadata ?? null,
+        metadata:
+          item.details ?? null,
 
-          created_at:
-            toISOString(
-              item.created_at,
-            ),
-        }),
-      )
-  }
+        created_at:
+          toISOString(item.created_at),
+      }),
+    )
+}
+
+
 
   // =======================================================
   // SUPER ADMIN AUDIT / NEGOTIATION HISTORY
@@ -823,6 +820,8 @@ await query(
       )
 
     auditHistory =
+
+     
       auditResult.rows.map(
         (
           item: Record<string, unknown>,
@@ -853,190 +852,243 @@ await query(
         }),
       )
 
+
     // =====================================================
-    // NEGOTIATION HISTORY
-    // =====================================================
+// NEGOTIATION HISTORY
+// =====================================================
 
-    const negotiationResult =
-      await query(
-        `
-          SELECT
-            id,
-            request_id,
-            client_id,
-            assigned_reviewer_id,
+const negotiationResult =
+  await query(
+    `
+      SELECT
+        id,
+        request_id,
+        client_id,
+        assigned_reviewer_id,
 
-            round_number,
-            status,
+        round_number,
+        status,
 
-            original_ai_estimate,
-            original_quote_amount,
-            quote_currency,
+        original_ai_estimate,
+        original_quote_amount,
+        quote_currency,
 
-            requested_budget,
-            client_reason,
-            client_notes,
+        requested_budget,
+        client_reason,
+        client_notes,
 
-            administrator_recommendation,
-            revised_quote_amount,
+        administrator_recommendation,
+        revised_quote_amount,
 
-            owner_approver_id,
-            owner_decision,
-            owner_decision_notes,
+        owner_approver_id,
+        owner_decision,
+        owner_decision_notes,
 
-            decided_at,
-            created_at,
-            updated_at
+        decided_at,
+        created_at,
+        updated_at
 
-          FROM quote_negotiations
+      FROM quote_negotiations
 
-          WHERE request_id = $1
+      WHERE request_id = $1
 
-          ORDER BY
-            round_number ASC NULLS LAST,
-            created_at ASC
-        `,
-        [id],
-      )
+      ORDER BY
+        round_number ASC NULLS LAST,
+        created_at ASC
+    `,
+    [id],
+  )
 
-    negotiationHistory =
-      negotiationResult.rows.map(
-        (
-          item: Record<string, unknown>,
-        ): NegotiationEvent => ({
-          id:
-            String(item.id),
+negotiationHistory =
+  negotiationResult.rows.map(
+    (
+      item: Record<string, unknown>,
+    ): NegotiationEvent => ({
+      id:
+        String(item.id),
 
-          request_id:
-            String(
-              item.request_id,
-            ),
+      request_id:
+        String(item.request_id),
 
-          client_id:
-            item.client_id !== null &&
-            item.client_id !== undefined
-              ? String(
-                  item.client_id,
-                )
-              : null,
+      client_id:
+        item.client_id !== null &&
+        item.client_id !== undefined
+          ? String(item.client_id)
+          : null,
 
-          assigned_reviewer_id:
-            item.assigned_reviewer_id !== null &&
-            item.assigned_reviewer_id !== undefined
-              ? String(
-                  item.assigned_reviewer_id,
-                )
-              : null,
+      assigned_reviewer_id:
+        item.assigned_reviewer_id !== null &&
+        item.assigned_reviewer_id !== undefined
+          ? String(item.assigned_reviewer_id)
+          : null,
 
-          round_number:
-            item.round_number !== null &&
-            item.round_number !== undefined
-              ? Number(
-                  item.round_number,
-                )
-              : null,
+      round_number:
+        item.round_number !== null &&
+        item.round_number !== undefined
+          ? Number(item.round_number)
+          : null,
 
-          status:
-            item.status !== null &&
-            item.status !== undefined
-              ? String(
-                  item.status,
-                )
-              : null,
+      status:
+        item.status !== null &&
+        item.status !== undefined
+          ? String(item.status)
+          : null,
 
-          original_ai_estimate:
-            toNumber(
-              item.original_ai_estimate,
-            ),
+      original_ai_estimate:
+        toNumber(item.original_ai_estimate),
 
-          original_quote_amount:
-            toNumber(
-              item.original_quote_amount,
-            ),
+      original_quote_amount:
+        toNumber(item.original_quote_amount),
 
-          quote_currency:
-            item.quote_currency !== null &&
-            item.quote_currency !== undefined
-              ? String(
-                  item.quote_currency,
-                )
-              : null,
+      quote_currency:
+        item.quote_currency !== null &&
+        item.quote_currency !== undefined
+          ? String(item.quote_currency)
+          : null,
 
-          requested_budget:
-            toNumber(
-              item.requested_budget,
-            ),
+      requested_budget:
+        toNumber(item.requested_budget),
 
-          client_reason:
-            item.client_reason !== null &&
-            item.client_reason !== undefined
-              ? String(
-                  item.client_reason,
-                )
-              : null,
+      client_reason:
+        item.client_reason !== null &&
+        item.client_reason !== undefined
+          ? String(item.client_reason)
+          : null,
 
-          client_notes:
-            item.client_notes !== null &&
-            item.client_notes !== undefined
-              ? String(
-                  item.client_notes,
-                )
-              : null,
+      client_notes:
+        item.client_notes !== null &&
+        item.client_notes !== undefined
+          ? String(item.client_notes)
+          : null,
 
-          administrator_recommendation:
-            item.administrator_recommendation !== null &&
-            item.administrator_recommendation !== undefined
-              ? String(
-                  item.administrator_recommendation,
-                )
-              : null,
+      administrator_recommendation:
+        item.administrator_recommendation !== null &&
+        item.administrator_recommendation !== undefined
+          ? String(item.administrator_recommendation)
+          : null,
 
-          revised_quote_amount:
-            toNumber(
-              item.revised_quote_amount,
-            ),
+      revised_quote_amount:
+        toNumber(item.revised_quote_amount),
 
-          owner_approver_id:
-            item.owner_approver_id !== null &&
-            item.owner_approver_id !== undefined
-              ? String(
-                  item.owner_approver_id,
-                )
-              : null,
+      owner_approver_id:
+        item.owner_approver_id !== null &&
+        item.owner_approver_id !== undefined
+          ? String(item.owner_approver_id)
+          : null,
 
-          owner_decision:
-            item.owner_decision !== null &&
-            item.owner_decision !== undefined
-              ? String(
-                  item.owner_decision,
-                )
-              : null,
+      owner_decision:
+        item.owner_decision !== null &&
+        item.owner_decision !== undefined
+          ? String(item.owner_decision)
+          : null,
 
-          owner_decision_notes:
-            item.owner_decision_notes !== null &&
-            item.owner_decision_notes !== undefined
-              ? String(
-                  item.owner_decision_notes,
-                )
-              : null,
+      owner_decision_notes:
+        item.owner_decision_notes !== null &&
+        item.owner_decision_notes !== undefined
+          ? String(item.owner_decision_notes)
+          : null,
 
-          decided_at:
-            toISOString(
-              item.decided_at,
-            ),
+      decided_at:
+        toISOString(item.decided_at),
 
-          created_at:
-            toISOString(
-              item.created_at,
-            ),
+      created_at:
+        toISOString(item.created_at),
 
-          updated_at:
-            toISOString(
-              item.updated_at,
-            ),
-        }),
-      )
-  }
+      updated_at:
+        toISOString(item.updated_at),
+    }),
+  )
+}
+
+   const workflowResult =
+  await query(
+    `
+      SELECT
+        rae.id,
+        rae.request_id,
+        rae.actor_user_id,
+        rae.action,
+        rae.details,
+        rae.created_at,
+
+        au.role AS performer_role
+
+      FROM request_audit_events rae
+
+      LEFT JOIN app_users au
+        ON au.id = rae.actor_user_id
+
+      WHERE rae.request_id = $1
+        AND (
+          (
+            $2 = 'administrator'
+            AND au.role = 'administrator'
+          )
+          OR
+          (
+            $2 = 'super_administrator'
+            AND (
+              au.role = 'super_administrator'
+              OR au.role = 'super-administrator'
+            )
+          )
+        )
+
+      ORDER BY
+        rae.created_at ASC,
+        rae.id ASC
+    `,
+    [
+      id,
+      user.role,
+    ],
+  )
+
+workflowHistory =
+  workflowResult.rows.map(
+    (
+      item: Record<string, unknown>,
+    ): WorkflowHistoryEvent => ({
+      id:
+        String(item.id),
+
+      request_id:
+        item.request_id !== null &&
+        item.request_id !== undefined
+          ? String(item.request_id)
+          : null,
+
+      quote_version_id:
+        null,
+
+      performed_by:
+        item.actor_user_id !== null &&
+        item.actor_user_id !== undefined
+          ? String(item.actor_user_id)
+          : null,
+
+      performer_role:
+        item.performer_role !== null &&
+        item.performer_role !== undefined
+          ? String(item.performer_role)
+          : null,
+
+      action:
+        item.action !== null &&
+        item.action !== undefined
+          ? String(item.action)
+          : null,
+
+      description:
+        null,
+
+      metadata:
+        item.details ?? null,
+
+      created_at:
+        toISOString(item.created_at),
+    }),
+  )
 
   // =======================================================
   // SERIALIZATION
@@ -1276,11 +1328,10 @@ await query(
           "administrator" && (
           <div className="min-w-0 max-w-full overflow-hidden">
 
-            <AdminRequestReviewCard
-              request={
-                finalRequest
-              }
-            />
+          <AdminRequestReviewCard
+  request={finalRequest}
+  adminQuote={adminQuote}
+/>
 
           </div>
         )}
@@ -1289,18 +1340,16 @@ await query(
             CLIENT
             =============================================== */}
 
-        {user.role ===
-          "client" && (
-          <div className="min-w-0 max-w-full overflow-hidden">
+    {user.role ===
+  "client" && (
+  <div className="min-w-0 max-w-full overflow-hidden">
 
-            <RequestReviewCard
-              request={
-                finalRequest
-              }
-            />
+    <RequestReviewCard
+      request={finalRequest}
+    />
 
-          </div>
-        )}
+  </div>
+)}
 
       </section>
 

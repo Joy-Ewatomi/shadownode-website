@@ -8,6 +8,14 @@ export type AdminQuoteReviewAction =
   | "adjust"
   | "submit_for_super_admin_review"
 
+export type AdminDecisionSource =
+  | "admin"
+  | "adjusted"
+  | "ai"
+  | null
+
+
+  
 /**
  * =========================================================
  * ADMIN QUOTE REVIEW
@@ -48,12 +56,14 @@ export type AdminQuoteReviewAction =
  */
 
 export async function reviewQuoteAsAdmin(
-  input: {
-    requestId: string
-    actorUserId: string
-    actorRole: string
+input: {
+  requestId: string
+  actorUserId: string
+  actorRole: string
 
-    action: AdminQuoteReviewAction
+  decision_source?: AdminDecisionSource
+
+  action: AdminQuoteReviewAction
 
     /**
      * Frontend payload fields
@@ -284,14 +294,24 @@ if (!request) {
    * waiting for administrator review.
    */
 
-  if (
-    request.status !==
-    "pending_admin_review"
-  ) {
-    throw new Error(
-      "This request is not available for administrator quote review",
-    )
-  }
+const adminReviewableStatuses = new Set([
+  "pending_admin_review",
+  "negotiation_requested",
+  "negotiating",
+  "under_negotiation",
+])
+
+if (
+  !adminReviewableStatuses.has(
+    String(request.status ?? "")
+      .trim()
+      .toLowerCase(),
+  )
+) {
+  throw new Error(
+    "This request is not currently available for Administrator quote review",
+  )
+}
 
   /*
    * =========================================================
@@ -790,11 +810,13 @@ if (!request) {
           updated_at =
             NOW()
 
-        WHERE id =
-          $1
-
-          AND status =
-            'pending_admin_review'
+        WHERE id = $1
+  AND status IN (
+    'pending_admin_review',
+    'negotiation_requested',
+    'negotiating',
+    'under_negotiation'
+  )
 
         RETURNING
           id,
@@ -890,48 +912,50 @@ if (!request) {
    * =========================================================
    */
 
-  await recordRequestAudit(
-    input.requestId,
+await recordRequestAudit(
+  input.requestId,
 
-    input.actorUserId,
+  input.actorUserId,
 
-    "admin_submitted_quote_for_super_admin",
+  "admin_submitted_quote_for_super_admin",
 
-    {
-      amount,
+  {
+    amount,
+    currency,
 
-      currency,
+    action:
+      input.action,
 
-      action:
-        input.action,
+    admin_action:
+      adminAction,
 
-      admin_action:
-        adminAction,
+    reason,
 
-      reason,
+    estimated_start:
+      estimatedStart,
 
-      estimated_start:
-        estimatedStart,
+    estimated_completion:
+      estimatedCompletion,
 
-      estimated_completion:
-        estimatedCompletion,
+    quote_version_id:
+      adminVersion.id,
 
-      quote_version_id:
-        adminVersion.id,
+    service_type:
+      request.service_type,
 
-      service_type:
-        request.service_type,
+    is_cybersecurity:
+      isCyberSecurity,
 
-      is_cybersecurity:
-        isCyberSecurity,
+    is_osint:
+      isOSINT,
 
-      is_osint:
-        isOSINT,
+    quote_stage:
+      "pending_super_admin_review",
 
-      quote_stage:
-        "pending_super_admin_review",
-    },
-  )
+    decision_source:
+      input.decision_source,
+  },
+)
 
   /*
    * =========================================================

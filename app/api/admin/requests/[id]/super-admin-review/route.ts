@@ -1,9 +1,35 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auditLog, getCurrentUser } from "@/lib/auth"
-import { reviewQuoteAsSuperAdmin } from "@/lib/services/super-admin-quote-review-service"
+
+import { getCurrentUser } from "@/lib/auth"
+
+import {
+  reviewQuoteAsSuperAdmin,
+} from "@/lib/services/super-admin-quote-review-service"
 
 type RouteContext = {
   params: Promise<{ id: string }>
+}
+
+function isSuperAdministratorRole(
+  role: string | null | undefined,
+): boolean {
+  const normalized =
+    String(role ?? "")
+      .trim()
+      .toLowerCase()
+
+  return (
+    normalized === "super_administrator" ||
+    normalized === "super-administrator"
+  )
+}
+
+function cleanString(
+  value: unknown,
+): string {
+  return typeof value === "string"
+    ? value.trim()
+    : ""
 }
 
 export async function POST(
@@ -11,26 +37,50 @@ export async function POST(
   { params }: RouteContext,
 ) {
   try {
-    const user = await getCurrentUser()
+    /*
+     * =====================================================
+     * AUTHENTICATION
+     * =====================================================
+     */
+
+    const user =
+      await getCurrentUser()
 
     if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 },
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
       )
     }
 
-    if (user.role !== "super_administrator") {
+    if (
+      !isSuperAdministratorRole(
+        user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
-            "Super administrator access required",
+            "Super Administrator access required",
         },
-        { status: 403 },
+        {
+          status: 403,
+        },
       )
     }
 
-    const { id } = await params
+    /*
+     * =====================================================
+     * REQUEST ID
+     * =====================================================
+     */
+
+    const { id } =
+      await params
 
     if (!id) {
       return NextResponse.json(
@@ -38,26 +88,46 @@ export async function POST(
           error:
             "Request id is required",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
-    const body = await request.json()
-
-
-    /**
-     * ACTION
-     * Supports new dashboard payload
-     * and old payload format
+    /*
+     * =====================================================
+     * BODY
+     * =====================================================
      */
-    const rawAction = String(
-      body.decision_action ||
-        body.action ||
-        "",
-    )
-      .trim()
-      .toLowerCase()
 
+    let body: Record<string, any>
+
+    try {
+      body =
+        await request.json()
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid JSON request body",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * =====================================================
+     * ACTION
+     * =====================================================
+     */
+
+    const rawAction =
+      cleanString(
+        body.decision_action ||
+          body.action,
+      ).toLowerCase()
 
     if (
       rawAction !== "accept" &&
@@ -69,18 +139,48 @@ export async function POST(
           error:
             "Invalid action. Use accept, adjust, or reject.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
+ /*
+  * =====================================================
+  * DECISION SOURCE
+  * =====================================================
+  */
 
-    /**
-     * QUOTE AMOUNT
-     */
+const decisionSource =
+  cleanString(
+    body.decision_source,
+  ).toLowerCase() || null
+
+if (
+  decisionSource !== null &&
+  decisionSource !== "admin" &&
+  decisionSource !== "ai" &&
+  decisionSource !== "adjusted"
+) {
+  return NextResponse.json(
+    {
+      error:
+        "Invalid decision source. Use admin, ai, or adjusted.",
+    },
+    {
+      status: 400,
+    },
+  )
+}
+
+    /*
+     * =====================================================
+     * AMOUNT
+     * ===================================================== */
+
     const amountValue =
       body.quote?.amount ??
       body.amount
-
 
     const amount =
       amountValue === null ||
@@ -89,148 +189,140 @@ export async function POST(
         ? null
         : Number(amountValue)
 
-
     if (
-      amount !== null &&
-      (!Number.isFinite(amount) ||
-        amount <= 0)
+      rawAction !== "reject" &&
+      (
+        amount === null ||
+        !Number.isFinite(amount) ||
+        amount <= 0
+      )
     ) {
       return NextResponse.json(
         {
           error:
-            "Quote amount must be greater than zero",
+            "A valid quote amount is required for accept and adjust decisions.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
-
-    /**
+    /*
+     * =====================================================
      * CURRENCY
+     * =====================================================
      */
+
     const currencyValue =
       body.quote?.currency ??
       body.currency
 
-
     const currency =
-      currencyValue !== null &&
-      currencyValue !== undefined &&
-      String(currencyValue).trim()
-        ? String(currencyValue)
-            .trim()
-            .toUpperCase()
-        : null
+      cleanString(
+        currencyValue,
+      ).toUpperCase() || null
 
-
-    /**
+    /*
+     * =====================================================
      * JUSTIFICATION
-     */
-    const notesValue =
-      body.justification?.notes ??
-      body.notes
-
-
-    const notes =
-      notesValue !== null &&
-      notesValue !== undefined
-        ? String(notesValue).trim() || null
-        : null
-
-
-    const reasonValue =
-      body.justification?.reason ??
-      body.reason
-
+     * ===================================================== */
 
     const reason =
-      reasonValue !== null &&
-      reasonValue !== undefined
-        ? String(reasonValue).trim()
-        : ""
+      cleanString(
+        body.justification?.reason ??
+          body.reason,
+      )
 
-
-    /**
-     * COMPLETION DATE
-     */
-    const estimatedCompletionValue =
-      body.quote?.estimated_completion ??
-      body.estimated_completion
-
-
-    const estimatedCompletion =
-      estimatedCompletionValue !== null &&
-      estimatedCompletionValue !== undefined
-        ? String(
-            estimatedCompletionValue,
-          ).trim() || null
-        : null
-
-
+    const notes =
+      cleanString(
+        body.justification?.notes ??
+          body.notes,
+      ) || null
 
     if (!reason) {
       return NextResponse.json(
         {
           error:
-            "A reason is required for every decision",
+            "A reason is required for every Super Administrator decision.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
+    /*
+     * =====================================================
+     * ESTIMATED COMPLETION
+     * ===================================================== */
 
+    const estimatedCompletion =
+      cleanString(
+        body.quote?.estimated_completion ??
+          body.estimated_completion,
+      ) || null
+
+    /*
+     * =====================================================
+     * BUSINESS LOGIC
+     * =====================================================
+     *
+     * The service is responsible for:
+     *
+     * - verifying the request state
+     * - verifying the actor
+     * - applying the decision
+     * - recording the workflow audit
+     * - updating the quote
+     * - enforcing concurrency protection
+     */
 
     const result =
-      await reviewQuoteAsSuperAdmin({
-        requestId: id,
-        actorUserId: user.id,
-        actorRole: user.role,
+  await reviewQuoteAsSuperAdmin({
+    requestId: id,
 
-        action: rawAction,
-
-        amount,
-
-        currency,
-
-        notes,
-
-        reason,
-
-        estimated_completion:
-          estimatedCompletion,
-      })
-
-
-
-    await auditLog(
+    actorUserId:
       user.id,
-      "super_admin_reviewed_quote",
-      request,
-      {
-        request_id: id,
-        action: rawAction,
-      },
-    )
 
+    actorRole:
+      user.role,
 
-    return NextResponse.json({
-      ...result,
-      success: true,
-    })
+    action:
+      rawAction,
 
+    amount,
 
+    currency,
+
+    notes,
+
+    reason,
+
+    estimated_completion:
+      estimatedCompletion,
+
+    decision_source:
+      decisionSource,
+  })
+
+    /*
+     * =====================================================
+     * SUCCESS
+     * =====================================================
+     */
+
+  return NextResponse.json(result)
   } catch (error) {
     console.error(
       "SUPER ADMIN QUOTE REVIEW ERROR",
       error,
     )
 
-
     const message =
       error instanceof Error
         ? error.message
-        : "Failed to process quote review"
-
+        : "Failed to process Super Administrator quote review"
 
     return NextResponse.json(
       {

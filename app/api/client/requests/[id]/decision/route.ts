@@ -13,7 +13,6 @@ import {
 
 import {
   notifyAdmins,
-  notifyUser,
 } from "@/lib/services/notification-service"
 
 import {
@@ -40,9 +39,7 @@ const QUOTE_STATUSES = [
   "revised_quote_sent",
   "client_decision_pending",
   "awaiting_client_acceptance",
-  "awaiting_payment",
 ]
-
 /*
  * =========================================================
  * REVIEW ACTIONS
@@ -546,7 +543,7 @@ async function handleDecision(
   `
     UPDATE requests
     SET
-      status = 'quote_review_requested',
+      status = 'negotiation_requested',
       client_decision_at = NOW(),
       updated_at = NOW()
     WHERE id = $1
@@ -560,48 +557,6 @@ async function handleDecision(
     QUOTE_STATUSES,
   ],
 )
-
-
-      // ======================================================
-      // NOTIFY ADMIN
-      // ======================================================
-
-      try {
-        await notifyAdmins({
-          type:
-            "quote_review_requested",
-
-          title:
-            "Client requested quote review",
-
-          message:
-            reason ||
-            "A client has requested a review of their quote.",
-
-          metadata: {
-            request_id: id,
-
-            negotiation_id:
-              negotiation.id,
-
-            requested_budget:
-              requestedBudget,
-
-            target_page:
-              "admin_request_review",
-
-            action:
-              "view_request",
-          },
-        })
-      } catch (
-        notificationError
-      ) {
-        console.error(
-          "QUOTE REVIEW NOTIFICATION ERROR:",
-          notificationError,
-        )
-      }
 
       return NextResponse.json(
         {

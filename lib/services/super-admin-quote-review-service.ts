@@ -11,11 +11,35 @@ export type SuperAdminQuoteReviewAction =
   | "adjust"
   | "reject"
 
+type SuperAdminDecisionSource =
+  | "admin"
+  | "ai"
+  | "adjusted"
+
+function isSuperAdministratorRole(
+  role: string | null | undefined,
+): boolean {
+  const normalized =
+    String(role ?? "")
+      .trim()
+      .toLowerCase()
+
+  return (
+    normalized === "super_administrator" ||
+    normalized === "super-administrator"
+  )
+}
+
 export async function reviewQuoteAsSuperAdmin(input: {
   requestId: string
   actorUserId: string
   actorRole: string
   action: SuperAdminQuoteReviewAction
+
+  decision_source?:
+    | SuperAdminDecisionSource
+    | null
+
   amount?: number | null
   currency?: string | null
   notes?: string | null
@@ -30,11 +54,15 @@ export async function reviewQuoteAsSuperAdmin(input: {
     throw new Error("Actor user id is required")
   }
 
-  if (input.actorRole !== "super_administrator") {
-    throw new Error(
-      "Only Super Administrators can perform final quote review",
-    )
-  }
+ if (
+  !isSuperAdministratorRole(
+    input.actorRole,
+  )
+) {
+  throw new Error(
+    "Only Super Administrators can perform final quote review",
+  )
+}
 
   if (
     !["accept", "adjust", "reject"].includes(
@@ -135,31 +163,28 @@ export async function reviewQuoteAsSuperAdmin(input: {
    * GET LATEST ADMIN QUOTE
    * =========================================================
    */
-
-  const adminQuoteResult = await query<{
-    id: string
-    price: number | null
-    currency: string | null
-    estimated_completion:
-      | string
-      | null
-    reasoning: string | null
-  }>(
-    `
-      SELECT
-        id,
-        price,
-        currency,
-        estimated_completion,
-        reasoning
-      FROM quote_versions
-      WHERE request_id = $1
-        AND source = 'administrator'
-      ORDER BY version_number DESC
-      LIMIT 1
-    `,
-    [input.requestId],
-  )
+const adminQuoteResult = await query<{
+  id: string
+  price: number | null
+  currency: string | null
+  estimated_completion: string | null
+  reasoning: string | null
+}>(
+  `
+    SELECT
+      id,
+      price,
+      currency,
+      estimated_completion,
+      reasoning
+    FROM quote_versions
+    WHERE request_id = $1
+      AND source = 'administrator_proposal'
+    ORDER BY version_number DESC
+    LIMIT 1
+  `,
+  [input.requestId],
+)
 
   const adminQuote =
     adminQuoteResult.rows[0]
@@ -435,7 +460,7 @@ export async function reviewQuoteAsSuperAdmin(input: {
       requestId: input.requestId,
       userId: input.actorUserId,
       role: "super_administrator",
-      source: "super_admin",
+      source: "super_admin_approval",
       price: finalAmount,
       currency: finalCurrency,
       estimated_completion:
@@ -485,20 +510,7 @@ const requestCurrencyResult = await query<{
   [input.requestId],
 )
 
-const clientCurrency =
-  requestCurrencyResult.rows[0]?.preferred_currency
-    ?.trim()
-    .toUpperCase() || "USD"
 
-const sourceCurrency =
-  String(
-    input.currency ??
-      adminQuote?.currency ??
-      request.approved_quote_currency ??
-      "USD",
-  )
-    .trim()
-    .toUpperCase()
 
   /*
    * =========================================================
@@ -586,12 +598,23 @@ await recordRequestAudit(
   input.actorUserId,
   "super_admin_approved_final_quote",
   {
-    action: input.action,
-    final_amount: finalAmount,
-    final_currency: finalCurrency,
+    action:
+      input.action,
+
+    decision_source:
+      input.decision_source,
+
+    final_amount:
+      finalAmount,
+
+    final_currency:
+      finalCurrency,
+
     estimated_completion:
       finalCompletion,
+
     reason,
+
     quote_version_id:
       finalVersion.id,
   },

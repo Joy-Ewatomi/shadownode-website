@@ -62,6 +62,8 @@ function normalizeDate(
   return date
 }
 
+
+
 function validatePositiveAmount(
   value: number | null | undefined,
   fieldName: string,
@@ -95,21 +97,20 @@ function isSuperAdministratorRole(
   )
 }
 
-function isLockedRequestStatus(
+function isAdminQuoteReviewableStatus(
   status: string | null | undefined,
 ): boolean {
   return new Set([
-    "pending_super_admin_review",
-    "super_admin_approved",
-    "quote_sent",
-    "revised_quote_sent",
-    "client_decision_pending",
+    "pending_admin_review",
     "negotiation_requested",
-    "rejected",
-    "completed",
-    "cancelled",
-  ]).has(String(status ?? ""))
+    "negotiating",
+    "under_negotiation",
+  ]).has(
+    String(status ?? "").trim().toLowerCase(),
+  )
 }
+
+
 
 /**
  * =========================================================
@@ -203,6 +204,8 @@ export async function sendQuote(input: {
 
   const actor = actorResult.rows[0]
 
+  
+
   if (!actor) {
     throw new Error(
       "Administrator account not found",
@@ -260,11 +263,12 @@ export async function sendQuote(input: {
 
   const request = requestResult.rows[0]
 
-  if (!request) {
-    throw new Error(
-      "Request not found",
-    )
-  }
+
+if (!request) {
+  throw new Error(
+    "Request not found",
+  )
+}
 
   /**
    * -------------------------------------------------------
@@ -667,11 +671,20 @@ export async function reviewQuoteAsAdmin(input: {
   requestId: string
   actorUserId: string
   actorRole: string
+
+  decision_source?:
+    | "admin"
+    | "ai"
+    | "adjust"
+    | null
+
   action: AdminQuoteReviewAction
+
   amount?: number | null
   currency?: string | null
   notes?: string | null
   reason: string
+
   estimated_start?: string | null
   estimated_completion?: string | null
 }) {
@@ -823,6 +836,8 @@ export async function reviewQuoteAsAdmin(input: {
     )
   }
 
+
+  
   /**
    * -------------------------------------------------------
    * GET REQUEST
@@ -901,16 +916,15 @@ export async function reviewQuoteAsAdmin(input: {
             "Request not found",
           )
         }
-
-        if (
-          isLockedRequestStatus(
-            locked.status,
-          )
-        ) {
-          throw new Error(
-            "This request cannot be modified in its current workflow state",
-          )
-        }
+if (
+  !isAdminQuoteReviewableStatus(
+    locked.status,
+  )
+) {
+  throw new Error(
+    "This request is not currently available for Administrator action",
+  )
+}
 
         /**
          * ---------------------------------------------------
@@ -1097,18 +1111,13 @@ export async function reviewQuoteAsAdmin(input: {
                 updated_at =
                   NOW()
 
-              WHERE id = $1
-                AND status NOT IN (
-                  'pending_super_admin_review',
-                  'super_admin_approved',
-                  'quote_sent',
-                  'revised_quote_sent',
-                  'client_decision_pending',
-                  'negotiation_requested',
-                  'rejected',
-                  'completed',
-                  'cancelled'
-                )
+WHERE id = $1
+  AND status IN (
+    'pending_admin_review',
+    'negotiation_requested',
+    'negotiating',
+    'under_negotiation'
+  )
 
               RETURNING
                 id,
@@ -1162,31 +1171,29 @@ export async function reviewQuoteAsAdmin(input: {
    * AUDIT
    * -------------------------------------------------------
    */
-  await recordRequestAudit(
-    input.requestId,
-    input.actorUserId,
-    input.action === "adjust"
-      ? "administrator_adjusted_quote_for_super_admin_review"
-      : "administrator_submitted_quote_for_super_admin_review",
-    {
-      quote_amount:
-        amount,
+await recordRequestAudit(
+  input.requestId,
+  input.actorUserId,
+  input.action === "adjust"
+    ? "administrator_adjusted_quote_for_super_admin_review"
+    : "administrator_submitted_quote_for_super_admin_review",
+  {
+    quote_amount: amount,
 
-      quote_currency:
-        currency,
+    quote_currency: currency,
 
-      reason,
+    reason,
 
-      estimated_start:
-        estimatedStart,
+    estimated_start: estimatedStart,
 
-      estimated_completion:
-        estimatedCompletion,
+    estimated_completion: estimatedCompletion,
 
-      quote_version_id:
-        quoteVersionId,
-    },
-  )
+    quote_version_id: quoteVersionId,
+
+    decision_source:
+      input.decision_source,
+  },
+)
 
   /**
    * -------------------------------------------------------

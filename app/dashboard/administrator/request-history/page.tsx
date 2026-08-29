@@ -405,7 +405,7 @@ export default function AdministratorRequestHistoryPage() {
                       {/* OPEN */}
 
                       <Link
-                        href={`/dashboard/requests/${request.id}`}
+                          href={`/dashboard/requests/${request.id}?history=true`}
                         className="inline-flex w-full shrink-0 items-center justify-center rounded border border-[#20dc73]/40 px-4 py-2 text-sm text-[#20dc73] transition hover:bg-[#20dc73]/10 sm:w-auto"
                       >
                         View Request

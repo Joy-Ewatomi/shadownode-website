@@ -1,7 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation"
 
 type RequestData = {
   id: string
@@ -58,9 +61,12 @@ type RequestWorkflow =
   | "security_assessment"
   | "investigation"
 
-/* ============================================================
-   WORKFLOW RESOLUTION
-   ============================================================ */
+const ADMIN_ACTION_STATUSES = [
+  "pending_admin_review",
+  "negotiation_requested",
+  "negotiating",
+  "under_negotiation",
+] as const
 
 function resolveWorkflow(
   serviceType: string | null,
@@ -70,21 +76,10 @@ function resolveWorkflow(
       .trim()
       .toLowerCase()
 
-  /*
-   * PROFESSIONAL TRAINING
-   */
-  if (
-    service === "professional_training"
-  ) {
+  if (service === "professional_training") {
     return "professional_training"
   }
 
-  /*
-   * CYBERSECURITY TRAINING
-   *
-   * custom_training is included because older requests
-   * may already exist in the database using that value.
-   */
   if (
     service === "cybersecurity_training" ||
     service === "custom_training" ||
@@ -96,9 +91,6 @@ function resolveWorkflow(
     return "cybersecurity_training"
   }
 
-  /*
-   * SECURITY ASSESSMENT
-   */
   if (
     service === "security_assessment" ||
     service.includes("penetration testing") ||
@@ -108,9 +100,6 @@ function resolveWorkflow(
     return "security_assessment"
   }
 
-  /*
-   * INVESTIGATION
-   */
   if (
     service === "investigation" ||
     service.includes("osint") ||
@@ -121,15 +110,8 @@ function resolveWorkflow(
     return "investigation"
   }
 
-  /*
-   * SAFETY FALLBACK
-   */
   return "investigation"
 }
-
-/* ============================================================
-   DATE HELPER
-   ============================================================ */
 
 function toDateInputValue(
   value: string | null | undefined,
@@ -144,58 +126,80 @@ function toDateInputValue(
     return ""
   }
 
-  /*
-   * Already a valid HTML date value.
-   */
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     return raw
   }
 
-  /*
-   * Handle ISO timestamps such as:
-   * 2026-08-25T00:00:00.000Z
-   */
   const isoMatch =
-    raw.match(
-      /^(\d{4}-\d{2}-\d{2})/,
-    )
+    raw.match(/^(\d{4}-\d{2}-\d{2})/)
 
   if (isoMatch) {
     return isoMatch[1]
   }
 
-  /*
-   * Last attempt for other valid date strings.
-   */
   const date = new Date(raw)
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return ""
   }
 
-  return date
-    .toISOString()
-    .slice(0, 10)
+  return date.toISOString().slice(0, 10)
 }
 
-/* ============================================================
-   COMPONENT
-   ============================================================ */
+function isValidDateValue(
+  value: string,
+): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false
+  }
+
+  const [year, month, day] =
+    value.split("-").map(Number)
+
+  const date = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+    ),
+  )
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  )
+}
+
+type AdminQuote = {
+  id: string
+  price: number | null
+  currency: string | null
+  estimated_completion: string | null
+  reasoning: string | null
+  notes: string | null
+  status: string | null
+}
 
 export default function AdminRequestReviewCard({
   request,
+  adminQuote,
 }: {
   request: RequestData
+  adminQuote?: AdminQuote | null
 }) {
   const router = useRouter()
 
-  /* ==========================================================
-     WORKFLOW
-     ========================================================== */
+  const searchParams = useSearchParams()
+
+  const isHistoryView =
+    searchParams.get("history") === "true"
+
+  /*
+   * ==========================================================
+   * WORKFLOW
+   * ==========================================================
+   */
 
   const workflow =
     resolveWorkflow(
@@ -203,50 +207,66 @@ export default function AdminRequestReviewCard({
     )
 
   const isProfessionalTraining =
-    workflow ===
-    "professional_training"
+    workflow === "professional_training"
 
   const isCyberSecurity =
-    workflow ===
-    "cybersecurity_training"
+    workflow === "cybersecurity_training"
 
   const isSecurityAssessment =
-    workflow ===
-    "security_assessment"
+    workflow === "security_assessment"
 
   const isInvestigation =
-    workflow ===
-    "investigation"
+    workflow === "investigation"
 
-  /*
-   * Both professional training and cybersecurity training
-   * use a client-requested START DATE + COMPLETION DATE.
-   */
   const hasTrainingDates =
     isProfessionalTraining ||
     isCyberSecurity
 
   /*
-   * Investigation and security assessment only need
-   * completion date.
+   * ==========================================================
+   * CURRENT ACTION STATE
+   * ==========================================================
+   *
+   * THIS controls whether the form opens.
+   *
+   * It does NOT control history.
    */
-  const isCompletionOnly =
-    isSecurityAssessment ||
-    isInvestigation
 
-  /* ==========================================================
-     PREVIOUS SUBMISSION
-     ========================================================== */
+  const normalizedStatus =
+    request.status
+      ?.trim()
+      .toLowerCase() || ""
 
-  const alreadySubmitted =
-    request.status ===
-      "pending_super_admin_review" ||
-    request.status === "approved" ||
-    request.status === "completed"
+  const adminCanAct =
+    ADMIN_ACTION_STATUSES.includes(
+      normalizedStatus as
+        (typeof ADMIN_ACTION_STATUSES)[number],
+    )
 
-  /* ==========================================================
-     STATE
-     ========================================================== */
+  /*
+   * ==========================================================
+   * PREVIOUS ADMIN HISTORY EXISTS
+   * ==========================================================
+   *
+   * This does NOT hide the form.
+   *
+   * It simply means there is something historical to display.
+   */
+
+  const previousAdminSubmissionExists =
+    Boolean(
+      request.admin_reviewed_by ||
+      request.admin_reviewed_at ||
+      request.admin_quote_action ||
+      request.admin_quote_notes ||
+      request.approved_quote_amount,
+    )
+
+  /*
+   * ==========================================================
+   * STATE
+   * ==========================================================
+   */
 
   const [loading, setLoading] =
     useState(false)
@@ -278,24 +298,24 @@ export default function AdminRequestReviewCard({
           ? toDateInputValue(
               request
                 .training_preferred_completion_date ||
-                request.approved_estimated_completion,
+              request.approved_estimated_completion,
             )
           : toDateInputValue(
               request.osint_completion_date ||
-                request.preferred_deadline ||
-                request.approved_estimated_completion,
+              request.preferred_deadline ||
+              request.approved_estimated_completion,
             ),
 
       action: "accept",
 
-      reason:
-        request.admin_quote_notes ||
-        "",
+      reason: "",
     })
 
-  /* ==========================================================
-     SYNC DATES WHEN REQUEST CHANGES
-     ========================================================== */
+  /*
+   * ==========================================================
+   * SYNC FORM WITH CURRENT REQUEST
+   * ==========================================================
+   */
 
   useEffect(() => {
     const startDate =
@@ -320,13 +340,37 @@ export default function AdminRequestReviewCard({
 
     setForm((previous) => ({
       ...previous,
+
+      amount:
+        request.approved_quote_amount !=
+        null
+          ? String(
+              request.approved_quote_amount,
+            )
+          : previous.amount,
+
+     currency: "USD",
+
       start_date:
         startDate,
+
       completion_date:
         completionDate,
+
+      /*
+       * IMPORTANT:
+       *
+       * Do not preload the previous administrator
+       * reason into a new cycle.
+       *
+       * Every new administrator action gets a fresh reason.
+       */
+      reason: previous.reason,
     }))
   }, [
     hasTrainingDates,
+    request.approved_quote_amount,
+    request.approved_quote_currency,
     request.training_preferred_start_date,
     request.training_preferred_completion_date,
     request.osint_completion_date,
@@ -334,9 +378,11 @@ export default function AdminRequestReviewCard({
     request.approved_estimated_completion,
   ])
 
-  /* ==========================================================
-     FIELD UPDATE
-     ========================================================== */
+  /*
+   * ==========================================================
+   * FIELD UPDATE
+   * ==========================================================
+   */
 
   function updateForm<
     K extends keyof FormState
@@ -350,18 +396,35 @@ export default function AdminRequestReviewCard({
     }))
   }
 
-  /* ==========================================================
-     SUBMIT
-     ========================================================== */
+  /*
+   * ==========================================================
+   * SUBMIT
+   * ==========================================================
+   */
 
   async function submit() {
     try {
       setLoading(true)
       setMessage("")
 
-      /* ------------------------------------------------------
-         AMOUNT
-         ------------------------------------------------------ */
+      /*
+       * Protect against stale UI.
+       *
+       * The page may have been opened from history while
+       * another workflow cycle is not currently active.
+       */
+
+      if (!adminCanAct) {
+        throw new Error(
+          "This request is not currently awaiting Administrator action.",
+        )
+      }
+
+      /*
+       * ------------------------------------------------------
+       * AMOUNT
+       * ------------------------------------------------------
+       */
 
       const amount =
         Number(form.amount)
@@ -375,19 +438,26 @@ export default function AdminRequestReviewCard({
         )
       }
 
-      /* ------------------------------------------------------
-         REASON
-         ------------------------------------------------------ */
+      /*
+       * ------------------------------------------------------
+       * REASON
+       * ------------------------------------------------------
+       */
 
-      if (!form.reason.trim()) {
+      const reason =
+        form.reason.trim()
+
+      if (!reason) {
         throw new Error(
           "A reason is required before submitting the quote.",
         )
       }
 
-      /* ------------------------------------------------------
-         COMPLETION DATE
-         ------------------------------------------------------ */
+      /*
+       * ------------------------------------------------------
+       * COMPLETION DATE
+       * ------------------------------------------------------
+       */
 
       if (!form.completion_date) {
         throw new Error(
@@ -396,7 +466,7 @@ export default function AdminRequestReviewCard({
       }
 
       if (
-        !/^\d{4}-\d{2}-\d{2}$/.test(
+        !isValidDateValue(
           form.completion_date,
         )
       ) {
@@ -405,9 +475,11 @@ export default function AdminRequestReviewCard({
         )
       }
 
-      /* ------------------------------------------------------
-         TRAINING START DATE
-         ------------------------------------------------------ */
+      /*
+       * ------------------------------------------------------
+       * TRAINING START DATE
+       * ------------------------------------------------------
+       */
 
       if (
         hasTrainingDates &&
@@ -420,7 +492,7 @@ export default function AdminRequestReviewCard({
 
       if (
         hasTrainingDates &&
-        !/^\d{4}-\d{2}-\d{2}$/.test(
+        !isValidDateValue(
           form.start_date,
         )
       ) {
@@ -429,35 +501,48 @@ export default function AdminRequestReviewCard({
         )
       }
 
-      /* ------------------------------------------------------
-         PAYLOAD
-         ------------------------------------------------------ */
+      /*
+       * ------------------------------------------------------
+       * PAYLOAD
+       * ------------------------------------------------------
+       *
+       * Keep the payload compatible with your current
+       * Administrator PATCH route.
+       */
 
-      const payload = {
-        action:
-          form.action === "accept"
-            ? "submit"
-            : "adjust",
+const payload = {
+  action: form.action,
 
-        approved_quote_amount:
-          amount,
+  approved_quote_amount:
+    amount,
 
-        approved_quote_currency:
-          form.currency,
+  approved_quote_currency:
+    "USD",
 
-        admin_quote_notes:
-          form.reason.trim(),
+  admin_quote_notes:
+    reason,
 
-        reason:
-          form.reason.trim(),
+  reason,
 
-        approved_estimated_completion:
-          form.completion_date,
-      }
+  approved_estimated_start:
+    hasTrainingDates
+      ? form.start_date
+      : undefined,
 
-      /* ------------------------------------------------------
-         API
-         ------------------------------------------------------ */
+  approved_estimated_completion:
+    form.completion_date,
+
+  decision_source:
+    form.action === "adjust"
+      ? "adjusted"
+      : "admin",
+}
+
+      /*
+       * ------------------------------------------------------
+       * API
+       * ------------------------------------------------------
+       */
 
       const response =
         await fetch(
@@ -498,9 +583,12 @@ export default function AdminRequestReviewCard({
         )
       }
 
-      /* ------------------------------------------------------
-         SUCCESS
-         ------------------------------------------------------ */
+      /*
+       * Return to active request list.
+       *
+       * The database now contains the newly created
+       * history entry and the new workflow state.
+       */
 
       router.push(
         "/dashboard/requests",
@@ -518,9 +606,11 @@ export default function AdminRequestReviewCard({
     }
   }
 
-  /* ==========================================================
-     RENDER
-     ========================================================== */
+  /*
+   * ==========================================================
+   * RENDER
+   * ==========================================================
+   */
 
   return (
     <div className="space-y-6">
@@ -536,7 +626,7 @@ export default function AdminRequestReviewCard({
       )}
 
       {/* ======================================================
-          REQUEST HEADER
+          HEADER
       ====================================================== */}
 
       <div className="rounded-md border border-[#143b28] bg-[#06110f] p-6">
@@ -574,6 +664,21 @@ export default function AdminRequestReviewCard({
           </div>
 
         </div>
+
+        {adminCanAct && (
+          <div className="mt-4 rounded border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-xs text-amber-200">
+            Administrator action required for the current workflow cycle.
+          </div>
+        )}
+
+        {!adminCanAct &&
+          previousAdminSubmissionExists && (
+            <div className="mt-4 rounded border border-white/10 bg-white/[0.02] px-4 py-3 text-xs text-white/40">
+              This request is not currently awaiting Administrator action.
+              Previous submissions remain available in history.
+            </div>
+          )}
+
       </div>
 
       {/* ======================================================
@@ -777,8 +882,7 @@ export default function AdminRequestReviewCard({
                 ? `${(
                     request.ai_confidence <=
                     1
-                      ? request.ai_confidence *
-                        100
+                      ? request.ai_confidence * 100
                       : request.ai_confidence
                   ).toFixed(0)}%`
                 : "Pending"}
@@ -849,8 +953,7 @@ export default function AdminRequestReviewCard({
       {/* ======================================================
           PREVIOUS ADMINISTRATOR SUBMISSION
       ====================================================== */}
-
-      {alreadySubmitted && (
+      {previousAdminSubmissionExists && (
         <div className="w-full min-w-0 overflow-hidden rounded-md border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
 
           <div className="mb-5 min-w-0 border-b border-white/10 pb-5">
@@ -864,7 +967,9 @@ export default function AdminRequestReviewCard({
             </h3>
 
             <p className="mt-1 break-words text-sm text-white/40">
-              This request has already been submitted to the Super Administrator.
+              The previous Administrator submission is retained
+              as historical record. A new workflow cycle may
+              still require another submission.
             </p>
 
           </div>
@@ -877,16 +982,14 @@ export default function AdminRequestReviewCard({
                 Submitted Quote
               </p>
 
-              <p className="mt-1 break-words text-lg font-semibold text-white">
-                {request.approved_quote_currency ||
-                  "USD"}{" "}
-                {request.approved_quote_amount !=
-                null
-                  ? Number(
-                      request.approved_quote_amount,
-                    ).toLocaleString()
-                  : "Not specified"}
-              </p>
+<p className="mt-1 break-words text-lg font-semibold text-white">
+  {adminQuote?.currency || "USD"}{" "}
+  {adminQuote?.price != null
+    ? Number(
+        adminQuote.price,
+      ).toLocaleString()
+    : "Not specified"}
+</p>
 
             </div>
 
@@ -896,10 +999,10 @@ export default function AdminRequestReviewCard({
                 Estimated Completion
               </p>
 
-              <p className="mt-1 break-words text-sm text-white">
-                {request.approved_estimated_completion ||
-                  "Not specified"}
-              </p>
+           <p className="mt-1 break-words text-sm text-white">
+  {adminQuote?.estimated_completion ||
+    "Not specified"}
+</p>
 
             </div>
 
@@ -910,7 +1013,9 @@ export default function AdminRequestReviewCard({
               </p>
 
               <p className="mt-1 break-words text-sm font-semibold uppercase text-[#20dc73]">
-                Submitted
+                {adminCanAct
+                  ? "Previous submission retained"
+                  : "Historical record"}
               </p>
 
             </div>
@@ -923,10 +1028,11 @@ export default function AdminRequestReviewCard({
 
               <div className="mt-2 w-full overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4">
 
-                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/70 [overflow-wrap:anywhere]">
-                  {request.admin_quote_notes ||
-                    "No administrator notes provided."}
-                </p>
+               <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/70 [overflow-wrap:anywhere]">
+  {adminQuote?.reasoning ||
+    adminQuote?.notes ||
+    "No administrator notes provided."}
+</p>
 
               </div>
 
@@ -954,25 +1060,35 @@ export default function AdminRequestReviewCard({
       )}
 
       {/* ======================================================
-          ADMINISTRATOR SUBMISSION
+          CURRENT ADMINISTRATOR ACTION
       ====================================================== */}
 
-      {!alreadySubmitted && (
-        <div className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
+   {adminCanAct && !isHistoryView && (
+  <div className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
 
           <div className="mb-6 border-b border-white/10 pb-5">
 
             <p className="text-xs uppercase tracking-[0.2em] text-[#20dc73]">
-              Administrator Submission
+              {normalizedStatus ===
+              "pending_admin_review"
+                ? "Administrator Submission"
+                : "Negotiation Review"}
+
             </p>
 
             <h3 className="mt-2 text-lg font-semibold text-white">
-              Submit Quote to Super Administrator
+              {normalizedStatus ===
+              "pending_admin_review"
+                ? "Submit Quote to Super Administrator"
+                : "Respond to Current Negotiation"}
+
             </h3>
 
             <p className="mt-1 text-sm text-white/40">
-              Prepare your quote based on the complete request and AI assessment.
-              The Super Administrator will make the final decision.
+              {normalizedStatus ===
+              "pending_admin_review"
+                ? "Prepare the Administrator quote for Super Administrator final review."
+                : "Prepare the Administrator response for the current client negotiation cycle."}
             </p>
 
           </div>
@@ -1017,17 +1133,20 @@ export default function AdminRequestReviewCard({
                 Quote Currency
               </span>
 
-            <input
-  type="text"
-  value="USD"
-  disabled
-  className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm font-semibold text-white"
-/>
+              <input
+                type="text"
+                value={
+                  form.currency ||
+                  "USD"
+                }
+                disabled
+                className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm font-semibold text-white"
+              />
 
               <p className="mt-2 text-xs text-white/30">
                 Administrator quotes are prepared in USD.
-                The final quote will be converted to the
-                client's preferred currency before payment.
+                The final quote is converted into the client's
+                preferred currency by the final workflow stage.
               </p>
 
             </label>
@@ -1037,30 +1156,32 @@ export default function AdminRequestReviewCard({
             ================================================== */}
 
             {hasTrainingDates && (
-            <label className="text-sm text-white/60">
-  <span className="mb-2 block">
-    Training Start Date
-  </span>
+              <label className="text-sm text-white/60">
 
-  <input
-    type="date"
-    disabled={loading}
-    value={form.start_date}
-    onChange={(event) =>
-      updateForm(
-        "start_date",
-        event.target.value,
-      )
-    }
-    className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
-  />
+                <span className="mb-2 block">
+                  Training Start Date
+                </span>
 
-  <p className="mt-2 text-xs text-white/30">
-    Administrator estimated start date.
-    If a valid client-requested date exists,
-    it is pre-filled for review.
-  </p>
-</label>
+                <input
+                  type="date"
+                  disabled={loading}
+                  value={form.start_date}
+                  onChange={(event) =>
+                    updateForm(
+                      "start_date",
+                      event.target.value,
+                    )
+                  }
+                  className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
+                />
+
+                <p className="mt-2 text-xs text-white/30">
+                  Administrator estimated start date.
+                  The client-requested training date is used
+                  as the initial reference value.
+                </p>
+
+              </label>
             )}
 
             {/* ==================================================
@@ -1115,26 +1236,26 @@ export default function AdminRequestReviewCard({
               <div className="rounded border border-[#143b28] bg-black/30 px-4 py-3">
 
                 <p className="text-[10px] uppercase tracking-widest text-white/30">
-                  Workflow
+                  Current Workflow Cycle
                 </p>
 
                 <p className="mt-1 text-sm text-white/70">
 
-                  {workflow ===
-                    "professional_training" &&
-                    "Professional training workflow — Start Date + Completion Date"}
+                  {normalizedStatus ===
+                    "pending_admin_review" &&
+                    "New client request — Administrator prepares the first quote."}
 
-                  {workflow ===
-                    "cybersecurity_training" &&
-                    "Cybersecurity training workflow — Start Date + Completion Date"}
+                  {normalizedStatus ===
+                    "negotiation_requested" &&
+                    "Negotiation cycle — Administrator reviews the client's requested quote change."}
 
-                  {workflow ===
-                    "security_assessment" &&
-                    "Security assessment workflow — Completion Date only"}
+                  {normalizedStatus ===
+                    "negotiating" &&
+                    "Active negotiation — Administrator response required."}
 
-                  {workflow ===
-                    "investigation" &&
-                    "Investigation workflow — Completion Date only"}
+                  {normalizedStatus ===
+                    "under_negotiation" &&
+                    "Active negotiation — Administrator response required."}
 
                 </p>
 
@@ -1165,19 +1286,18 @@ export default function AdminRequestReviewCard({
                   }
                   className={[
                     "rounded-md border px-4 py-3 text-left transition",
-                    form.action ===
-                    "accept"
+                    form.action === "accept"
                       ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
                       : "border-[#143b28] bg-black text-white/60 hover:border-[#20dc73]/50",
                   ].join(" ")}
                 >
 
                   <span className="block text-sm font-semibold">
-                    Accept AI Recommendation
+                    Accept Current Recommendation
                   </span>
 
                   <span className="mt-1 block text-xs opacity-60">
-                    Submit the administrator-reviewed quote
+                    Submit the current Administrator-reviewed quote
                     without marking it as an adjustment.
                   </span>
 
@@ -1194,19 +1314,18 @@ export default function AdminRequestReviewCard({
                   }
                   className={[
                     "rounded-md border px-4 py-3 text-left transition",
-                    form.action ===
-                    "adjust"
+                    form.action === "adjust"
                       ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
                       : "border-[#143b28] bg-black text-white/60 hover:border-[#20dc73]/50",
                   ].join(" ")}
                 >
 
                   <span className="block text-sm font-semibold">
-                    Adjust AI Recommendation
+                    Adjust Current Recommendation
                   </span>
 
                   <span className="mt-1 block text-xs opacity-60">
-                    Submit a quote different from the AI
+                    Submit a quote different from the current
                     recommendation.
                   </span>
 
@@ -1237,17 +1356,16 @@ export default function AdminRequestReviewCard({
                 }
                 rows={6}
                 placeholder={
-                  form.action ===
-                  "adjust"
-                    ? "Explain why you are adjusting the AI recommendation, including pricing, complexity, timeline, scope, or risk considerations..."
-                    : "Explain why you are accepting the AI recommendation and why the proposed quote and timeline are appropriate..."
+                  form.action === "adjust"
+                    ? "Explain the adjustment, pricing, complexity, scope, timeline, or risk considerations..."
+                    : "Explain why the proposed quote and timeline are appropriate..."
                 }
                 className="w-full rounded border border-[#143b28] bg-black px-3 py-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
               />
 
               <p className="mt-2 text-xs text-white/30">
-                A reason is required and will be recorded in
-                the administrator quote version and audit log.
+                This submission creates a new workflow record.
+                Previous Administrator submissions remain historical.
               </p>
 
             </label>
@@ -1269,34 +1387,61 @@ export default function AdminRequestReviewCard({
                 </p>
 
                 <p className="mt-1 text-xs text-white/40">
-                  Your administrator quote will be sent to
-                  the Super Administrator for final approval.
-                  It will not be presented to the client yet.
+                  {normalizedStatus ===
+                  "pending_admin_review"
+                    ? "The quote will move this request to Super Administrator final review."
+                    : "The current negotiation response will be recorded as a new Administrator action and sent to Super Administrator review."}
                 </p>
 
               </div>
 
               <button
                 type="button"
-                disabled={loading}
+                disabled={
+                  loading ||
+                  !adminCanAct
+                }
                 onClick={() =>
                   void submit()
                 }
                 className={[
                   "rounded-md px-6 py-3 font-semibold transition",
-                  loading
+                  loading ||
+                  !adminCanAct
                     ? "cursor-not-allowed bg-white/10 text-white/30"
                     : "bg-[#20dc73] text-black hover:bg-[#32ef82]",
                 ].join(" ")}
               >
                 {loading
                   ? "Submitting..."
-                  : "Submit to Super Administrator"}
+                  : normalizedStatus ===
+                    "pending_admin_review"
+                  ? "Submit to Super Administrator"
+                  : "Submit Negotiation Response"}
               </button>
 
             </div>
 
           </div>
+
+        </div>
+      )}
+
+      {/* ======================================================
+          NO ACTION STATE
+      ====================================================== */}
+
+     {!adminCanAct && !isHistoryView && (
+  <div className="rounded-md border border-white/10 bg-black/20 px-5 py-6 text-center">
+
+          <p className="text-sm font-medium text-white/60">
+            No Administrator action is required right now.
+          </p>
+
+          <p className="mt-1 text-xs text-white/30">
+            Historical Administrator submissions remain above,
+            while the current request stays in its active workflow state.
+          </p>
 
         </div>
       )}

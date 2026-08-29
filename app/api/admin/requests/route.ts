@@ -63,62 +63,109 @@ export async function GET() {
       )
     }
 
-    /*
-     * =====================================================
-     * ADMINISTRATOR VIEW
-     * =====================================================
-     */
+   /*
+ * =====================================================
+ * ADMINISTRATOR VIEW
+ * =====================================================
+ *
+ * Administrator must see every request that currently
+ * requires Administrator work:
+ *
+ *   pending_admin_review
+ *   negotiation_requested
+ *   negotiating
+ *   under_negotiation
+ *
+ * These requests remain in the active request list.
+ *
+ * The Administrator does NOT make the final quote decision.
+ * The Administrator only prepares/submits the quote to the
+ * Super Administrator.
+ */
 
-    if (user.role === "administrator") {
-      const requests = await query(
-        `
-          SELECT
-            r.*,
+if (user.role === "administrator") {
+  const requests = await query(
+    `
+      SELECT
+        r.*,
 
-            u.username AS client_username,
-            u.email AS account_email,
+        u.username AS client_username,
+        u.email AS account_email,
 
-            COALESCE(
-              r.client_email,
-              u.email
-            ) AS client_email,
+        COALESCE(
+          r.client_email,
+          u.email
+        ) AS client_email,
 
-            CASE
-              WHEN r.status = 'pending_admin_review'
-              THEN true
-              ELSE false
-            END AS action_required,
+        CASE
+          WHEN r.status IN (
+            'pending_admin_review',
+            'negotiation_requested',
+            'negotiating',
+            'under_negotiation'
+          )
+          THEN true
+          ELSE false
+        END AS action_required,
 
-            /*
-             * Client-facing quote information must not
-             * be exposed to Administrators.
-             */
-            NULL::numeric AS client_quote_amount,
-            NULL::text AS client_quote_currency,
-            NULL::text AS client_quote_notes,
-            NULL::text AS client_estimated_completion
+        /*
+         * Administrators must not receive the final
+         * client-facing quote fields from this endpoint.
+         */
+        NULL::numeric AS client_quote_amount,
+        NULL::text AS client_quote_currency,
+        NULL::text AS client_quote_notes,
+        NULL::text AS client_estimated_completion
 
-          FROM requests r
+      FROM requests r
 
-          LEFT JOIN app_users u
-            ON u.id = r.user_id
+      LEFT JOIN app_users u
+        ON u.id = r.user_id
 
-          /*
-           * Administrator should retain visibility of the
-           * request after submitting it.
-           *
-           * We intentionally do NOT expose every possible
-           * workflow state forever. These are the states
-           * belonging to the administrator-side lifecycle.
-           */
-         WHERE r.status = 'pending_admin_review'
-
-          ORDER BY r.created_at DESC
-        `,
+      /*
+       * ==================================================
+       * ACTIVE ADMINISTRATOR WORK
+       * ==================================================
+       *
+       * A request stays visible here while it requires
+       * Administrator action.
+       *
+       * This includes a new request and a later
+       * negotiation cycle.
+       */
+      WHERE r.status IN (
+        'pending_admin_review',
+        'negotiation_requested',
+        'negotiating',
+        'under_negotiation'
       )
 
-      return NextResponse.json(requests.rows)
-    }
+      ORDER BY
+        CASE
+          WHEN r.status = 'negotiation_requested'
+            THEN 0
+
+          WHEN r.status = 'negotiating'
+            THEN 1
+
+          WHEN r.status = 'under_negotiation'
+            THEN 2
+
+          WHEN r.status = 'pending_admin_review'
+            THEN 3
+
+          ELSE 4
+        END,
+
+        r.updated_at DESC NULLS LAST,
+        r.created_at DESC
+    `,
+  )
+
+  return NextResponse.json(
+    requests.rows,
+  )
+}
 
     /*
      * =====================================================

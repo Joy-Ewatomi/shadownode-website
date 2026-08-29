@@ -9,10 +9,9 @@ import {
 import { query } from "@/lib/db"
 
 import {
-  recordRequestAudit,
   reviewQuoteAsAdmin,
-  declineRequest,
-} from "@/lib/services/quote-workflow-service"
+} from "@/lib/services/admin-quote-review-service"
+import { declineRequest, recordRequestAudit } from "@/lib/services/quote-workflow-service"
 
 /*
  * =====================================================
@@ -50,6 +49,12 @@ type RequestWorkflow =
 
 type QuoteBody = {
   action?: string
+
+  decision_source?:
+    | "admin"
+    | "adjusted"
+    | "ai"
+    | null
 
   approved_quote_amount?: number | string
   approved_quote_currency?: string
@@ -280,6 +285,8 @@ function normalizeServiceType(
     .replace(/[\s-]+/g, "_")
 }
 
+
+
 /**
  * Determine the exact workflow for the request.
  *
@@ -299,84 +306,37 @@ function getRequestWorkflow(
   serviceType: unknown,
 ): RequestWorkflow {
   const value =
-    normalizeServiceType(
-      serviceType,
-    )
-
-  /*
-   * =================================================
-   * PROFESSIONAL TRAINING
-   * =================================================
-   */
-
-if (
-  value === "cybersecurity_training" ||
-  value === "cyber_security_training" ||
-  value === "cybersecurity_training_request" ||
-  value === "custom_training" ||
-  value.includes("cybersecurity_training") ||
-  value.includes("cyber_security_training")
-) {
-  return "cybersecurity_training"
-}
-
-  /*
-   * =================================================
-   * CYBERSECURITY TRAINING
-   * =================================================
-   */
+    normalizeServiceType(serviceType)
 
   if (
-    value ===
-      "cybersecurity_training" ||
-    value ===
-      "cyber_security_training" ||
-    value ===
-      "cybersecurity_training_request" ||
-    value.includes(
-      "cybersecurity_training",
-    ) ||
-    value.includes(
-      "cyber_security_training",
-    )
+    value === "professional_training"
+  ) {
+    return "professional_training"
+  }
+
+  if (
+    value === "cybersecurity_training" ||
+    value === "cyber_security_training" ||
+    value === "cybersecurity_training_request" ||
+    value.includes("cybersecurity_training") ||
+    value.includes("cyber_security_training")
   ) {
     return "cybersecurity_training"
   }
 
   if (
-  value === "custom_training"
-) {
-  return "custom_training"
-}
-
-  /*
-   * =================================================
-   * SECURITY ASSESSMENT
-   * =================================================
-   *
-   * A security assessment is cybersecurity-related,
-   * but it is NOT a training workflow.
-   */
+    value === "custom_training"
+  ) {
+    return "custom_training"
+  }
 
   if (
-    value ===
-      "security_assessment" ||
-    value ===
-      "cybersecurity_assessment" ||
-    value ===
-      "cyber_security_assessment"
+    value === "security_assessment" ||
+    value === "cybersecurity_assessment" ||
+    value === "cyber_security_assessment"
   ) {
     return "security_assessment"
   }
-
-  /*
-   * =================================================
-   * DEFAULT
-   * =================================================
-   *
-   * Everything else is treated as investigation/OSINT
-   * for date propagation purposes.
-   */
 
   return "investigation"
 }
@@ -482,6 +442,14 @@ export async function PATCH(
       )
     }
 
+
+   const decisionSource =
+  body.decision_source === "ai"
+    ? "ai"
+    : body.decision_source === "adjusted"
+    ? "adjusted"
+    : "admin"
+
     /*
      * =================================================
      * ACTION NORMALIZATION
@@ -505,13 +473,11 @@ export async function PATCH(
       clean(body.action)
         .toLowerCase()
 
-  const action =
+const action =
   rawAction === "submit"
     ? "submit_for_super_admin_review"
     : rawAction === "adjust"
     ? "adjust_quote"
-    : rawAction === "reject"
-    ? "reject"
     : rawAction
 
     /*
@@ -730,13 +696,7 @@ if (
      * =================================================
      */
 
-  const currency =
-  clean(
-    body.quote?.currency ||
-    body.approved_quote_currency ||
-    item.preferred_currency ||
-    "USD",
-  ).toUpperCase()
+ const currency = "USD"
 
     /*
      * =================================================
@@ -978,32 +938,41 @@ try {
        * =================================================
        */
 
-      const reviewed =
-        await reviewQuoteAsAdmin({
-          requestId: id,
+     const reviewed =
+  await reviewQuoteAsAdmin({
+    requestId: id,
 
-          actorUserId:
-            auth.user.id,
+    actorUserId:
+      auth.user.id,
 
-          actorRole:
-            auth.user.role,
+    actorRole:
+      auth.user.role,
 
-          action: "adjust",
+    action:
+      "adjust",
 
-          amount,
+    approved_quote_amount:
+      amount,
 
-          currency,
+    approved_quote_currency:
+      currency,
 
-          notes: reason,
+    approved_estimated_start:
+      estimatedStart,
 
-          reason,
+    approved_estimated_completion:
+      estimatedCompletion,
 
-          estimated_start:
-            estimatedStart,
+    admin_quote_notes:
+      reason,
 
-          estimated_completion:
-            estimatedCompletion,
-        })
+    reason,
+
+    decision_source:
+      decisionSource === "ai"
+        ? "ai"
+        : "adjusted",
+  })
 
       /*
        * =================================================
@@ -1342,32 +1311,39 @@ estimatedCompletion =
        * =================================================
        */
 
-      const reviewed =
-        await reviewQuoteAsAdmin({
-          requestId: id,
+     const reviewed =
+  await reviewQuoteAsAdmin({
+    requestId: id,
 
-          actorUserId:
-            auth.user.id,
+    actorUserId:
+      auth.user.id,
 
-          actorRole:
-            auth.user.role,
+    actorRole:
+      auth.user.role,
 
-          action: "submit",
+    action:
+      "submit_for_super_admin_review",
 
-          amount,
+    approved_quote_amount:
+      amount,
 
-          currency,
+    approved_quote_currency:
+      currency,
 
-          notes: reason,
+    approved_estimated_start:
+      estimatedStart,
 
-          reason,
+    approved_estimated_completion:
+      estimatedCompletion,
 
-          estimated_start:
-            estimatedStart,
+    admin_quote_notes:
+      reason,
 
-          estimated_completion:
-            estimatedCompletion,
-        })
+    reason,
+
+    decision_source:
+      decisionSource,
+  })
 
       /*
        * =================================================
