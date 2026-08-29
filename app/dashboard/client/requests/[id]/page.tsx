@@ -63,6 +63,21 @@ type ClientRequest = {
   created_at?: string | null
   updated_at?: string | null
 
+    client_negotiation?: {
+    id: string
+    request_id: string
+    round_number: number
+    status: string
+    requested_budget: number | null
+    currency: string | null
+    reason: string | null
+    notes: string | null
+    quote_version_id: string | null
+    quote_version_number: number | null
+    created_at: string | null
+    updated_at: string | null
+  } | null
+
   // =======================================================
   // CYBERSECURITY TRAINING
   // =======================================================
@@ -245,6 +260,46 @@ function getStatusLabel(status: string) {
       return status
         ? status.replaceAll("_", " ")
         : "Unknown Status"
+  }
+}
+
+function getNegotiationStatusLabel(
+  status: string | null | undefined,
+) {
+  switch (
+    String(status || "")
+      .trim()
+      .toLowerCase()
+  ) {
+    case "requested":
+      return "Submitted to Administrator"
+
+    case "reviewing":
+      return "Under Administrator Review"
+
+    case "approved":
+      return "Negotiation Approved"
+
+    case "rejected":
+      return "Negotiation Rejected"
+
+    case "revised_quote_sent":
+      return "Revised Quote Sent"
+
+    case "closed":
+      return "Closed"
+
+    default:
+      return (
+        status
+          ?.replaceAll("_", " ")
+          .replace(
+            /^\w/,
+            (character) =>
+              character.toUpperCase(),
+          ) ||
+        "Unknown"
+      )
   }
 }
 
@@ -2039,6 +2094,10 @@ console.log("EVIDENCE:", request.evidence_files)
 
         </section>
       )}
+    
+
+
+
 
       {/* ===================================================
           QUOTE SECTION
@@ -2255,7 +2314,7 @@ console.log("EVIDENCE:", request.evidence_files)
               NEGOTIATION
           ================================================= */}
           {action === "negotiate" && (
-            <div className="mt-5 min-w-0 rounded border border-[#20dc73]/20 bg-black/30 p-5">
+            <div className="mt-5 min-w-0 rounded border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
 
               <p className="text-sm font-semibold text-white">
                 Request Quote Negotiation
@@ -2338,7 +2397,7 @@ console.log("EVIDENCE:", request.evidence_files)
                     rows={4}
                     disabled={submitting}
                     placeholder="Explain why you are requesting a different quote..."
-                    className="mt-2 block w-full min-w-0 max-w-full resize-y rounded border border-[#143b28] bg-black/40 p-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73] disabled:opacity-50"
+                    className="mt-2 block w-full min-w-0 max-w-full resize-y rounded border border-[#143b28] p-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73] disabled:opacity-50"
                   />
 
                 </div>
@@ -2427,28 +2486,198 @@ console.log("EVIDENCE:", request.evidence_files)
         </section>
       )}
 
-      {/* ===================================================
-          NEGOTIATION STATUS
-      =================================================== */}
+
+
       {isNegotiation && (
-        <section className="mt-6 w-full min-w-0 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-5 sm:p-6">
+  <section className="w-full min-w-0 overflow-hidden rounded-md border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
 
-          <p className="text-xs uppercase tracking-[0.2em] text-yellow-300">
-            Negotiation Requested
-          </p>
+          <div className="mb-5 min-w-0 border-b border-white/10 pb-5">
 
-          <h2 className="mt-2 text-xl font-semibold">
-            Your negotiation request is under review
-          </h2>
+      <p className="text-xs uppercase tracking-[0.2em] text-yellow-300">
+        Quote Negotiation
+      </p>
 
-          <p className="mt-2 text-sm leading-7 text-white/55">
-            The Bureau has received your request. You will
-            be notified when a revised quote or response is
-            available.
-          </p>
+      <h2 className="mt-2 text-xl font-semibold text-white">
+        Your Negotiation Request
+      </h2>
 
-        </section>
-      )}
+      <p className="mt-2 text-sm leading-7 text-white/55">
+        Your requested quote revision has been recorded
+        and submitted to the Administrator for review.
+      </p>
+
+    </div>
+
+    {request.client_negotiation ? (
+      <div className="mt-5 space-y-5">
+
+        {/* ================================================
+            VERSION
+        ================================================ */}
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-white/30">
+              Quote Version
+            </p>
+
+            <p className="mt-1 text-lg font-bold text-white">
+              Version{" "}
+              {request.client_negotiation.quote_version_number ??
+                4}
+            </p>
+          </div>
+
+          <span className="rounded border border-yellow-500/20 bg-yellow-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-yellow-300">
+            {getNegotiationStatusLabel(
+              request.client_negotiation.status,
+            )}
+          </span>
+
+        </div>
+
+        {/* ================================================
+            CLIENT PROPOSAL
+        ================================================ */}
+
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+
+          <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-5">
+
+            <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+              Your Proposed Amount
+            </p>
+
+            <p className="mt-2 break-words text-2xl font-bold text-yellow-300">
+              {formatMoney(
+                request.client_negotiation.requested_budget,
+                request.client_negotiation.currency ||
+                  clientCurrency,
+              )}
+            </p>
+
+          </div>
+
+          <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-5">
+
+            <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+              Currency
+            </p>
+
+            <p className="mt-2 text-lg font-semibold text-white">
+              {request.client_negotiation.currency ||
+                clientCurrency}
+            </p>
+
+          </div>
+
+          {/* ==============================================
+              ROUND
+          ============================================== */}
+
+          <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-5">
+
+            <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+              Negotiation Round
+            </p>
+
+            <p className="mt-2 text-sm font-semibold text-white">
+              Round{" "}
+              {request.client_negotiation.round_number}
+            </p>
+
+          </div>
+
+          {/* ==============================================
+              VERSION ID
+          ============================================== */}
+
+          {request.client_negotiation.quote_version_id && (
+            <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-5">
+
+              <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+                Quote Version ID
+              </p>
+
+              <p className="mt-2 break-all font-mono text-xs text-white/45">
+                {request.client_negotiation.quote_version_id}
+              </p>
+
+            </div>
+          )}
+
+        </div>
+
+        {/* ================================================
+            REASON
+        ================================================ */}
+
+        {request.client_negotiation.reason && (
+          <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-5">
+
+            <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+              Your Reason
+            </p>
+
+            <p
+              className={`mt-2 text-sm leading-7 text-white/70 ${wrapText}`}
+            >
+              {request.client_negotiation.reason}
+            </p>
+
+          </div>
+        )}
+
+        {/* ================================================
+            NOTES
+        ================================================ */}
+
+        {request.client_negotiation.notes && (
+          <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-5">
+
+            <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+              Additional Notes
+            </p>
+
+            <p
+              className={`mt-2 text-sm leading-7 text-white/70 ${wrapText}`}
+            >
+              {request.client_negotiation.notes}
+            </p>
+
+          </div>
+        )}
+
+        {/* ================================================
+            TIMESTAMP
+        ================================================ */}
+
+        {request.client_negotiation.created_at && (
+          <div className="text-xs text-white/30">
+
+            Submitted{" "}
+            {formatDate(
+              request.client_negotiation.created_at,
+            )}
+
+          </div>
+        )}
+
+      </div>
+    ) : (
+      <div className="mt-5 rounded border border-[#143b28] bg-black/30 p-5">
+
+        <p className="text-sm text-white/50">
+          Your negotiation request has been submitted
+          successfully.
+        </p>
+
+      </div>
+    )}
+
+  </section>
+)}
 
       {/* ===================================================
           DECLINED

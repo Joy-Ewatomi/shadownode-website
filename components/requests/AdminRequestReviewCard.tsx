@@ -1,12 +1,24 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import {
+  useEffect,
+  useState,
+} from "react"
+
 import {
   useRouter,
   useSearchParams,
 } from "next/navigation"
 
+/*
+ * ==========================================================
+ * REQUEST DATA
+ * ==========================================================
+ */
+
 type RequestData = {
+  preferred_currency: string | null
+
   id: string
   case_number: string | null
   title: string | null
@@ -34,6 +46,9 @@ type RequestData = {
 
   approved_quote_amount: number | null
   approved_quote_currency: string | null
+  approved_quote_notes: string | null
+
+  approved_estimated_start: string | null
   approved_estimated_completion: string | null
 
   admin_quote_action: string | null
@@ -46,20 +61,37 @@ type RequestData = {
   training_timeline_flexible: boolean | null
 }
 
+/*
+ * ==========================================================
+ * FORM
+ * ==========================================================
+ */
+
 type FormState = {
   amount: string
   currency: string
   start_date: string
   completion_date: string
-  action: "accept" | "adjust"
   reason: string
 }
+
+/*
+ * ==========================================================
+ * WORKFLOW
+ * ==========================================================
+ */
 
 type RequestWorkflow =
   | "professional_training"
   | "cybersecurity_training"
   | "security_assessment"
   | "investigation"
+
+/*
+ * ==========================================================
+ * ADMIN ACTIVE STATUSES
+ * ==========================================================
+ */
 
 const ADMIN_ACTION_STATUSES = [
   "pending_admin_review",
@@ -68,108 +100,11 @@ const ADMIN_ACTION_STATUSES = [
   "under_negotiation",
 ] as const
 
-function resolveWorkflow(
-  serviceType: string | null,
-): RequestWorkflow {
-  const service =
-    (serviceType || "")
-      .trim()
-      .toLowerCase()
-
-  if (service === "professional_training") {
-    return "professional_training"
-  }
-
-  if (
-    service === "cybersecurity_training" ||
-    service === "custom_training" ||
-    service === "security_awareness" ||
-    service.includes("cybersecurity") ||
-    service.includes("cyber security") ||
-    service.includes("security awareness")
-  ) {
-    return "cybersecurity_training"
-  }
-
-  if (
-    service === "security_assessment" ||
-    service.includes("penetration testing") ||
-    service.includes("penetration test") ||
-    service.includes("vulnerability assessment")
-  ) {
-    return "security_assessment"
-  }
-
-  if (
-    service === "investigation" ||
-    service.includes("osint") ||
-    service.includes("open source intelligence") ||
-    service.includes("digital investigation") ||
-    service.includes("digital intelligence")
-  ) {
-    return "investigation"
-  }
-
-  return "investigation"
-}
-
-function toDateInputValue(
-  value: string | null | undefined,
-): string {
-  if (!value) {
-    return ""
-  }
-
-  const raw = String(value).trim()
-
-  if (!raw) {
-    return ""
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw
-  }
-
-  const isoMatch =
-    raw.match(/^(\d{4}-\d{2}-\d{2})/)
-
-  if (isoMatch) {
-    return isoMatch[1]
-  }
-
-  const date = new Date(raw)
-
-  if (Number.isNaN(date.getTime())) {
-    return ""
-  }
-
-  return date.toISOString().slice(0, 10)
-}
-
-function isValidDateValue(
-  value: string,
-): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false
-  }
-
-  const [year, month, day] =
-    value.split("-").map(Number)
-
-  const date = new Date(
-    Date.UTC(
-      year,
-      month - 1,
-      day,
-    ),
-  )
-
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  )
-}
+/*
+ * ==========================================================
+ * ADMIN QUOTE HISTORY
+ * ==========================================================
+ */
 
 type AdminQuote = {
   id: string
@@ -181,6 +116,219 @@ type AdminQuote = {
   status: string | null
 }
 
+/*
+ * ==========================================================
+ * CURRENT CLIENT NEGOTIATION
+ * ==========================================================
+ */
+
+type CurrentNegotiation = {
+  id: string
+  request_id: string
+  client_id: string | null
+
+  assigned_reviewer_id?: string | null
+
+  round_number: number
+
+  status: string
+
+  original_ai_estimate?: number | null
+
+  original_quote_amount?: number | null
+
+  quote_currency: string | null
+
+  requested_budget: number | null
+
+  client_reason: string | null
+  client_notes: string | null
+
+  administrator_recommendation?: string | null
+  revised_quote_amount?: number | null
+
+  created_at: string | null
+  updated_at: string | null
+}
+
+/*
+ * ==========================================================
+ * WORKFLOW RESOLVER
+ * ==========================================================
+ */
+
+function resolveWorkflow(
+  serviceType: string | null,
+): RequestWorkflow {
+  const service =
+    (serviceType || "")
+      .trim()
+      .toLowerCase()
+
+  if (
+    service ===
+    "professional_training"
+  ) {
+    return "professional_training"
+  }
+
+  if (
+    service ===
+      "cybersecurity_training" ||
+    service ===
+      "custom_training" ||
+    service ===
+      "security_awareness" ||
+    service.includes(
+      "cybersecurity",
+    ) ||
+    service.includes(
+      "cyber security",
+    ) ||
+    service.includes(
+      "security awareness",
+    )
+  ) {
+    return "cybersecurity_training"
+  }
+
+  if (
+    service ===
+      "security_assessment" ||
+    service.includes(
+      "penetration testing",
+    ) ||
+    service.includes(
+      "penetration test",
+    ) ||
+    service.includes(
+      "vulnerability assessment",
+    )
+  ) {
+    return "security_assessment"
+  }
+
+  if (
+    service ===
+      "investigation" ||
+    service.includes("osint") ||
+    service.includes(
+      "open source intelligence",
+    ) ||
+    service.includes(
+      "digital investigation",
+    ) ||
+    service.includes(
+      "digital intelligence",
+    )
+  ) {
+    return "investigation"
+  }
+
+  return "investigation"
+}
+
+/*
+ * ==========================================================
+ * DATE HELPERS
+ * ==========================================================
+ */
+
+function toDateInputValue(
+  value:
+    | string
+    | null
+    | undefined,
+): string {
+  if (!value) {
+    return ""
+  }
+
+  const raw =
+    String(value).trim()
+
+  if (!raw) {
+    return ""
+  }
+
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      raw,
+    )
+  ) {
+    return raw
+  }
+
+  const isoMatch =
+    raw.match(
+      /^(\d{4}-\d{2}-\d{2})/,
+    )
+
+  if (isoMatch) {
+    return isoMatch[1]
+  }
+
+  const date =
+    new Date(raw)
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return ""
+  }
+
+  return date
+    .toISOString()
+    .slice(0, 10)
+}
+
+function isValidDateValue(
+  value: string,
+): boolean {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      value,
+    )
+  ) {
+    return false
+  }
+
+  const [
+    year,
+    month,
+    day,
+  ] =
+    value
+      .split("-")
+      .map(Number)
+
+  const date =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day,
+      ),
+    )
+
+  return (
+    date.getUTCFullYear() ===
+      year &&
+    date.getUTCMonth() ===
+      month - 1 &&
+    date.getUTCDate() ===
+      day
+  )
+}
+
+/*
+ * ==========================================================
+ * COMPONENT
+ * ==========================================================
+ */
+
 export default function AdminRequestReviewCard({
   request,
   adminQuote,
@@ -188,17 +336,21 @@ export default function AdminRequestReviewCard({
   request: RequestData
   adminQuote?: AdminQuote | null
 }) {
-  const router = useRouter()
+  const router =
+    useRouter()
 
-  const searchParams = useSearchParams()
+  const searchParams =
+    useSearchParams()
 
   const isHistoryView =
-    searchParams.get("history") === "true"
+    searchParams.get(
+      "history",
+    ) === "true"
 
   /*
-   * ==========================================================
+   * ========================================================
    * WORKFLOW
-   * ==========================================================
+   * ========================================================
    */
 
   const workflow =
@@ -207,35 +359,46 @@ export default function AdminRequestReviewCard({
     )
 
   const isProfessionalTraining =
-    workflow === "professional_training"
+    workflow ===
+    "professional_training"
 
   const isCyberSecurity =
-    workflow === "cybersecurity_training"
+    workflow ===
+    "cybersecurity_training"
 
   const isSecurityAssessment =
-    workflow === "security_assessment"
+    workflow ===
+    "security_assessment"
 
   const isInvestigation =
-    workflow === "investigation"
+    workflow ===
+    "investigation"
 
   const hasTrainingDates =
     isProfessionalTraining ||
     isCyberSecurity
 
   /*
-   * ==========================================================
-   * CURRENT ACTION STATE
-   * ==========================================================
-   *
-   * THIS controls whether the form opens.
-   *
-   * It does NOT control history.
+   * ========================================================
+   * STATUS
+   * ========================================================
    */
 
   const normalizedStatus =
-    request.status
-      ?.trim()
-      .toLowerCase() || ""
+    String(
+      request.status ||
+        "",
+    )
+      .trim()
+      .toLowerCase()
+
+  const isNegotiation =
+    normalizedStatus ===
+      "negotiation_requested" ||
+    normalizedStatus ===
+      "negotiating" ||
+    normalizedStatus ===
+      "under_negotiation"
 
   const adminCanAct =
     ADMIN_ACTION_STATUSES.includes(
@@ -244,37 +407,67 @@ export default function AdminRequestReviewCard({
     )
 
   /*
-   * ==========================================================
-   * PREVIOUS ADMIN HISTORY EXISTS
-   * ==========================================================
-   *
-   * This does NOT hide the form.
-   *
-   * It simply means there is something historical to display.
+   * ========================================================
+   * PREVIOUS ADMIN SUBMISSION
+   * ========================================================
    */
 
   const previousAdminSubmissionExists =
     Boolean(
       request.admin_reviewed_by ||
-      request.admin_reviewed_at ||
-      request.admin_quote_action ||
-      request.admin_quote_notes ||
-      request.approved_quote_amount,
+        request.admin_reviewed_at ||
+        request.admin_quote_action ||
+        request.admin_quote_notes ||
+        request.approved_quote_amount,
     )
 
   /*
-   * ==========================================================
+   * ========================================================
    * STATE
-   * ==========================================================
+   * ========================================================
    */
 
-  const [loading, setLoading] =
+  const [
+    currentNegotiation,
+    setCurrentNegotiation,
+  ] =
+    useState<
+      CurrentNegotiation | null
+    >(null)
+
+  const [
+    negotiationLoading,
+    setNegotiationLoading,
+  ] =
     useState(false)
 
-  const [message, setMessage] =
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false)
+
+  const [
+    message,
+    setMessage,
+  ] =
     useState("")
 
-  const [form, setForm] =
+  /*
+   * ========================================================
+   * FORM
+   * ========================================================
+   *
+   * The first render uses the request itself.
+   *
+   * Negotiation values are inserted after
+   * currentNegotiation is fetched.
+   */
+
+  const [
+    form,
+    setForm,
+  ] =
     useState<FormState>({
       amount:
         request.approved_quote_amount !=
@@ -284,7 +477,9 @@ export default function AdminRequestReviewCard({
             )
           : "",
 
-      currency: "USD",
+      currency:
+        request.approved_quote_currency ||
+        "USD",
 
       start_date:
         hasTrainingDates
@@ -298,23 +493,157 @@ export default function AdminRequestReviewCard({
           ? toDateInputValue(
               request
                 .training_preferred_completion_date ||
-              request.approved_estimated_completion,
+                request.approved_estimated_completion,
             )
           : toDateInputValue(
-              request.osint_completion_date ||
-              request.preferred_deadline ||
-              request.approved_estimated_completion,
+              request
+                .osint_completion_date ||
+                request.preferred_deadline ||
+                request.approved_estimated_completion,
             ),
-
-      action: "accept",
 
       reason: "",
     })
 
   /*
-   * ==========================================================
-   * SYNC FORM WITH CURRENT REQUEST
-   * ==========================================================
+   * ========================================================
+   * LOAD CURRENT NEGOTIATION
+   * ========================================================
+   *
+   * This is what retrieves:
+   *
+   *   requested_budget
+   *   quote_currency
+   *   client_reason
+   *   client_notes
+   *
+   * for the current negotiation cycle.
+   */
+
+  useEffect(() => {
+    if (!isNegotiation) {
+      setCurrentNegotiation(
+        null,
+      )
+      return
+    }
+
+    let cancelled =
+      false
+
+    async function loadCurrentNegotiation() {
+      try {
+        setNegotiationLoading(
+          true,
+        )
+
+        const response =
+          await fetch(
+            "/api/admin/quote-negotiations",
+            {
+              method: "GET",
+
+              credentials:
+                "include",
+
+              cache:
+                "no-store",
+
+              headers: {
+                Accept:
+                  "application/json",
+              },
+            },
+          )
+
+        if (!response.ok) {
+          throw new Error(
+            "Failed to load current negotiation.",
+          )
+        }
+
+        const data =
+          await response.json()
+
+        const reviews =
+          Array.isArray(
+            data?.reviews,
+          )
+            ? data.reviews
+            : []
+
+        /*
+         * The endpoint returns the newest
+         * negotiation for each request.
+         *
+         * We still explicitly match the
+         * request id.
+         */
+
+        const negotiation =
+          reviews.find(
+            (
+              item: CurrentNegotiation,
+            ) =>
+              item.request_id ===
+                request.id &&
+              (
+                item.status ===
+                  "requested" ||
+                item.status ===
+                  "reviewing"
+              ),
+          ) || null
+
+        if (!cancelled) {
+          setCurrentNegotiation(
+            negotiation,
+          )
+        }
+      } catch (error) {
+        console.error(
+          "LOAD CURRENT NEGOTIATION ERROR",
+          error,
+        )
+
+        if (!cancelled) {
+          setCurrentNegotiation(
+            null,
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setNegotiationLoading(
+            false,
+          )
+        }
+      }
+    }
+
+    void loadCurrentNegotiation()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    isNegotiation,
+    request.id,
+  ])
+
+  /*
+   * ========================================================
+   * SYNC FORM
+   * ========================================================
+   *
+   * IMPORTANT:
+   *
+   * Negotiation:
+   *   amount   = client requested budget
+   *   currency = client currency
+   *
+   * Initial review:
+   *   amount   = current request quote/estimate
+   *   currency = USD
    */
 
   useEffect(() => {
@@ -333,55 +662,98 @@ export default function AdminRequestReviewCard({
               request.approved_estimated_completion,
           )
         : toDateInputValue(
-            request.osint_completion_date ||
+            request
+              .osint_completion_date ||
               request.preferred_deadline ||
               request.approved_estimated_completion,
           )
 
-    setForm((previous) => ({
-      ...previous,
+    setForm(
+      (previous) => {
+        /*
+         * --------------------------------------------------
+         * NEGOTIATION
+         * --------------------------------------------------
+         */
 
-      amount:
-        request.approved_quote_amount !=
-        null
-          ? String(
-              request.approved_quote_amount,
-            )
-          : previous.amount,
+        if (
+          isNegotiation &&
+          currentNegotiation
+        ) {
+          return {
+            ...previous,
 
-     currency: "USD",
+            amount:
+              currentNegotiation.requested_budget !=
+              null
+                ? String(
+                    currentNegotiation.requested_budget,
+                  )
+                : "",
 
-      start_date:
-        startDate,
+            currency:
+              currentNegotiation.quote_currency ||
+              request.preferred_currency ||
+              "NGN",
 
-      completion_date:
-        completionDate,
+            start_date:
+              startDate,
 
-      /*
-       * IMPORTANT:
-       *
-       * Do not preload the previous administrator
-       * reason into a new cycle.
-       *
-       * Every new administrator action gets a fresh reason.
-       */
-      reason: previous.reason,
-    }))
+            completion_date:
+              completionDate,
+          }
+        }
+
+        /*
+         * --------------------------------------------------
+         * INITIAL ADMIN REVIEW
+         * --------------------------------------------------
+         */
+
+        return {
+          ...previous,
+
+          amount:
+            request.approved_quote_amount !=
+            null
+              ? String(
+                  request.approved_quote_amount,
+                )
+              : "",
+
+          currency:
+            "USD",
+
+          start_date:
+            startDate,
+
+          completion_date:
+            completionDate,
+        }
+      },
+    )
   }, [
+    isNegotiation,
+    currentNegotiation,
+
     hasTrainingDates,
+
+    request.preferred_currency,
+
     request.approved_quote_amount,
-    request.approved_quote_currency,
+
     request.training_preferred_start_date,
     request.training_preferred_completion_date,
+
     request.osint_completion_date,
     request.preferred_deadline,
     request.approved_estimated_completion,
   ])
 
   /*
-   * ==========================================================
+   * ========================================================
    * FIELD UPDATE
-   * ==========================================================
+   * ========================================================
    */
 
   function updateForm<
@@ -390,16 +762,19 @@ export default function AdminRequestReviewCard({
     field: K,
     value: FormState[K],
   ) {
-    setForm((previous) => ({
-      ...previous,
-      [field]: value,
-    }))
+    setForm(
+      (previous) => ({
+        ...previous,
+        [field]:
+          value,
+      }),
+    )
   }
 
   /*
-   * ==========================================================
+   * ========================================================
    * SUBMIT
-   * ==========================================================
+   * ========================================================
    */
 
   async function submit() {
@@ -408,10 +783,9 @@ export default function AdminRequestReviewCard({
       setMessage("")
 
       /*
-       * Protect against stale UI.
-       *
-       * The page may have been opened from history while
-       * another workflow cycle is not currently active.
+       * ----------------------------------------------------
+       * CURRENT ADMIN STATE
+       * ----------------------------------------------------
        */
 
       if (!adminCanAct) {
@@ -421,27 +795,48 @@ export default function AdminRequestReviewCard({
       }
 
       /*
-       * ------------------------------------------------------
-       * AMOUNT
-       * ------------------------------------------------------
+       * ----------------------------------------------------
+       * NEGOTIATION MUST HAVE BEEN LOADED
+       * ----------------------------------------------------
        */
 
-      const amount =
-        Number(form.amount)
-
       if (
-        !Number.isFinite(amount) ||
-        amount <= 0
+        isNegotiation &&
+        !currentNegotiation?.id
       ) {
         throw new Error(
-          "Enter a valid administrator quote amount.",
+          negotiationLoading
+            ? "The current client negotiation is still loading. Please try again."
+            : "The current client negotiation could not be loaded. Please refresh and try again.",
         )
       }
 
       /*
-       * ------------------------------------------------------
+       * ----------------------------------------------------
+       * AMOUNT
+       * ----------------------------------------------------
+       */
+
+      const amount =
+        Number(
+          form.amount,
+        )
+
+      if (
+        !Number.isFinite(
+          amount,
+        ) ||
+        amount <= 0
+      ) {
+        throw new Error(
+          "Enter a valid proposed quote amount.",
+        )
+      }
+
+      /*
+       * ----------------------------------------------------
        * REASON
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        */
 
       const reason =
@@ -449,17 +844,19 @@ export default function AdminRequestReviewCard({
 
       if (!reason) {
         throw new Error(
-          "A reason is required before submitting the quote.",
+          "A reason is required before submitting the recommendation.",
         )
       }
 
       /*
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        * COMPLETION DATE
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        */
 
-      if (!form.completion_date) {
+      if (
+        !form.completion_date
+      ) {
         throw new Error(
           "An estimated completion date is required.",
         )
@@ -476,9 +873,9 @@ export default function AdminRequestReviewCard({
       }
 
       /*
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        * TRAINING START DATE
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        */
 
       if (
@@ -502,64 +899,89 @@ export default function AdminRequestReviewCard({
       }
 
       /*
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        * PAYLOAD
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        *
-       * Keep the payload compatible with your current
-       * Administrator PATCH route.
+       * INITIAL:
+       *
+       *   action = submit
+       *   amount = USD
+       *   currency = USD
+       *
+       * NEGOTIATION:
+       *
+       *   action = submit
+       *   negotiation_id = current negotiation
+       *   amount = client's negotiation currency
+       *   currency = client currency
        */
 
-const payload = {
-  action: form.action,
+      const payload = {
+        action:
+          "submit",
 
-  approved_quote_amount:
-    amount,
+        negotiation_id:
+          isNegotiation
+            ? currentNegotiation?.id
+            : undefined,
 
-  approved_quote_currency:
-    "USD",
+        approved_quote_amount:
+          amount,
 
-  admin_quote_notes:
-    reason,
+        approved_quote_currency:
+          isNegotiation
+            ? form.currency
+            : "USD",
 
-  reason,
+        approved_estimated_start:
+          hasTrainingDates
+            ? form.start_date
+            : undefined,
 
-  approved_estimated_start:
-    hasTrainingDates
-      ? form.start_date
-      : undefined,
+        approved_estimated_completion:
+          form.completion_date,
 
-  approved_estimated_completion:
-    form.completion_date,
+        admin_quote_notes:
+          reason,
 
-  decision_source:
-    form.action === "adjust"
-      ? "adjusted"
-      : "admin",
-}
+        reason,
+
+        decision_source:
+          isNegotiation
+            ? "adjusted"
+            : "admin",
+      }
 
       /*
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        * API
-       * ------------------------------------------------------
+       * ----------------------------------------------------
        */
 
       const response =
         await fetch(
-          `/api/admin/requests/${request.id}`,
+          `/api/admin/requests/${encodeURIComponent(
+            request.id,
+          )}`,
           {
             method: "PATCH",
 
-            credentials: "include",
+            credentials:
+              "include",
 
             headers: {
               "Content-Type":
                 "application/json",
+
+              Accept:
+                "application/json",
             },
 
-            body: JSON.stringify(
-              payload,
-            ),
+            body:
+              JSON.stringify(
+                payload,
+              ),
           },
         )
 
@@ -584,10 +1006,9 @@ const payload = {
       }
 
       /*
-       * Return to active request list.
-       *
-       * The database now contains the newly created
-       * history entry and the new workflow state.
+       * ----------------------------------------------------
+       * RETURN TO ACTIVE REQUEST LIST
+       * ----------------------------------------------------
        */
 
       router.push(
@@ -596,6 +1017,11 @@ const payload = {
 
       router.refresh()
     } catch (error) {
+      console.error(
+        "ADMIN REQUEST SUBMISSION ERROR",
+        error,
+      )
+
       setMessage(
         error instanceof Error
           ? error.message
@@ -607,17 +1033,17 @@ const payload = {
   }
 
   /*
-   * ==========================================================
+   * ========================================================
    * RENDER
-   * ==========================================================
+   * ========================================================
    */
 
   return (
     <div className="space-y-6">
 
-      {/* ======================================================
+      {/* ====================================================
           ERROR
-      ====================================================== */}
+      ==================================================== */}
 
       {message && (
         <div className="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -625,9 +1051,9 @@ const payload = {
         </div>
       )}
 
-      {/* ======================================================
+      {/* ====================================================
           HEADER
-      ====================================================== */}
+      ==================================================== */}
 
       <div className="rounded-md border border-[#143b28] bg-[#06110f] p-6">
 
@@ -681,9 +1107,9 @@ const payload = {
 
       </div>
 
-      {/* ======================================================
+      {/* ====================================================
           FULL CLIENT REQUEST
-      ====================================================== */}
+      ==================================================== */}
 
       <div className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
 
@@ -706,6 +1132,7 @@ const payload = {
         <div className="grid min-w-0 max-w-full gap-5 md:grid-cols-2">
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Client Username
             </p>
@@ -714,9 +1141,11 @@ const payload = {
               {request.client_username ||
                 "Not available"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Client Email
             </p>
@@ -725,9 +1154,11 @@ const payload = {
               {request.client_email ||
                 "Not available"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Service Type
             </p>
@@ -736,9 +1167,11 @@ const payload = {
               {request.service_type ||
                 "Not specified"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Category
             </p>
@@ -747,9 +1180,11 @@ const payload = {
               {request.category ||
                 "Not specified"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Priority
             </p>
@@ -758,9 +1193,11 @@ const payload = {
               {request.priority ||
                 "Not specified"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Status
             </p>
@@ -768,6 +1205,7 @@ const payload = {
             <p className="mt-1 text-sm uppercase text-[#20dc73]">
               {request.status}
             </p>
+
           </div>
 
           <div className="min-w-0 md:col-span-2">
@@ -799,9 +1237,9 @@ const payload = {
         </div>
       </div>
 
-      {/* ======================================================
+      {/* ====================================================
           AI ASSESSMENT
-      ====================================================== */}
+      ==================================================== */}
 
       <div className="rounded-md border border-[#20dc73]/20 bg-[#06110f] p-5">
 
@@ -824,6 +1262,7 @@ const payload = {
         <div className="grid min-w-0 gap-5 md:grid-cols-3">
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               AI Status
             </p>
@@ -832,9 +1271,11 @@ const payload = {
               {request.ai_status ||
                 "Pending"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               AI Estimate
             </p>
@@ -847,9 +1288,11 @@ const payload = {
                 : "Pending"}{" "}
               USD
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Complexity
             </p>
@@ -858,9 +1301,11 @@ const payload = {
               {request.ai_complexity ||
                 "Pending"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Estimated Hours
             </p>
@@ -870,9 +1315,11 @@ const payload = {
                 ? request.ai_estimated_hours
                 : "Pending"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Confidence
             </p>
@@ -887,9 +1334,11 @@ const payload = {
                   ).toFixed(0)}%`
                 : "Pending"}
             </p>
+
           </div>
 
           <div>
+
             <p className="text-xs uppercase tracking-wider text-white/40">
               Suggested Priority
             </p>
@@ -898,6 +1347,7 @@ const payload = {
               {request.ai_suggested_priority ||
                 "Pending"}
             </p>
+
           </div>
 
           <div className="md:col-span-3">
@@ -950,9 +1400,10 @@ const payload = {
         </div>
       </div>
 
-      {/* ======================================================
+      {/* ====================================================
           PREVIOUS ADMINISTRATOR SUBMISSION
-      ====================================================== */}
+      ==================================================== */}
+
       {previousAdminSubmissionExists && (
         <div className="w-full min-w-0 overflow-hidden rounded-md border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
 
@@ -982,14 +1433,18 @@ const payload = {
                 Submitted Quote
               </p>
 
-<p className="mt-1 break-words text-lg font-semibold text-white">
-  {adminQuote?.currency || "USD"}{" "}
-  {adminQuote?.price != null
-    ? Number(
-        adminQuote.price,
-      ).toLocaleString()
-    : "Not specified"}
-</p>
+              <p className="mt-1 break-words text-lg font-semibold text-white">
+
+                {adminQuote?.currency ||
+                  "USD"}{" "}
+
+                {adminQuote?.price != null
+                  ? Number(
+                      adminQuote.price,
+                    ).toLocaleString()
+                  : "Not specified"}
+
+              </p>
 
             </div>
 
@@ -999,10 +1454,10 @@ const payload = {
                 Estimated Completion
               </p>
 
-           <p className="mt-1 break-words text-sm text-white">
-  {adminQuote?.estimated_completion ||
-    "Not specified"}
-</p>
+              <p className="mt-1 break-words text-sm text-white">
+                {adminQuote?.estimated_completion ||
+                  "Not specified"}
+              </p>
 
             </div>
 
@@ -1028,11 +1483,11 @@ const payload = {
 
               <div className="mt-2 w-full overflow-hidden rounded-md border border-[#143b28] bg-black/40 p-4">
 
-               <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/70 [overflow-wrap:anywhere]">
-  {adminQuote?.reasoning ||
-    adminQuote?.notes ||
-    "No administrator notes provided."}
-</p>
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/70 [overflow-wrap:anywhere]">
+                  {adminQuote?.reasoning ||
+                    adminQuote?.notes ||
+                    "No administrator notes provided."}
+                </p>
 
               </div>
 
@@ -1059,116 +1514,364 @@ const payload = {
         </div>
       )}
 
-      {/* ======================================================
-          CURRENT ADMINISTRATOR ACTION
-      ====================================================== */}
+      {/* ====================================================
+          CURRENT CLIENT NEGOTIATION
+      ==================================================== */}
 
-   {adminCanAct && !isHistoryView && (
-  <div className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
+      {isNegotiation && (
+     <div className="w-full min-w-0 overflow-hidden rounded-md border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
 
-          <div className="mb-6 border-b border-white/10 pb-5">
+          <div className="mb-5 min-w-0 border-b border-white/10 pb-5">
 
             <p className="text-xs uppercase tracking-[0.2em] text-[#20dc73]">
-              {normalizedStatus ===
-              "pending_admin_review"
-                ? "Administrator Submission"
-                : "Negotiation Review"}
-
+              Client Negotiation
             </p>
 
             <h3 className="mt-2 text-lg font-semibold text-white">
-              {normalizedStatus ===
-              "pending_admin_review"
-                ? "Submit Quote to Super Administrator"
-                : "Respond to Current Negotiation"}
-
+              Current Client Quote Request
             </h3>
 
-            <p className="mt-1 text-sm text-white/40">
-              {normalizedStatus ===
-              "pending_admin_review"
-                ? "Prepare the Administrator quote for Super Administrator final review."
-                : "Prepare the Administrator response for the current client negotiation cycle."}
+            <p className="mt-1 text-sm leading-6 text-white/40">
+              The client has requested a change to the current
+              quote. Review the request below before submitting
+              your recommendation to the Super Administrator.
             </p>
 
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          {negotiationLoading && (
+            <div className="mb-5 rounded border border-yellow-500/20 bg-black/20 px-4 py-3 text-sm text-yellow-200">
+              Loading current negotiation...
+            </div>
+          )}
 
-            {/* ==================================================
-                QUOTE
-            ================================================== */}
+          {!negotiationLoading &&
+            !currentNegotiation && (
+              <div className="rounded border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-200">
+                The current client negotiation could not be
+                loaded. Refresh the page before submitting.
+              </div>
+            )}
 
-            <label className="text-sm text-white/60">
+          {currentNegotiation && (
+            <div className="grid min-w-0 gap-4 md:grid-cols-3">
 
-              <span className="mb-2 block">
-                Proposed Quote
-              </span>
+              {/* CLIENT REQUESTED AMOUNT */}
+              <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-4">
 
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                disabled={loading}
-                value={form.amount}
-                onChange={(event) =>
-                  updateForm(
-                    "amount",
-                    event.target.value,
-                  )
-                }
-                className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="Enter proposed amount"
-              />
+                <p className="text-xs uppercase tracking-wider text-white/40">
+                  Client Proposed Amount
+                </p>
 
-            </label>
+                <p className="mt-2 break-words text-xl font-semibold text-white">
 
-            {/* ==================================================
-                CURRENCY
-            ================================================== */}
+                  {currentNegotiation.quote_currency ||
+                    request.preferred_currency ||
+                    "NGN"}{" "}
 
-            <label className="text-sm text-white/60">
+                  {currentNegotiation.requested_budget !=
+                  null
+                    ? Number(
+                        currentNegotiation.requested_budget,
+                      ).toLocaleString()
+                    : "Not specified"}
 
-              <span className="mb-2 block">
-                Quote Currency
-              </span>
+                </p>
 
-              <input
-                type="text"
-                value={
-                  form.currency ||
-                  "USD"
-                }
-                disabled
-                className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm font-semibold text-white"
-              />
+              </div>
 
-              <p className="mt-2 text-xs text-white/30">
-                Administrator quotes are prepared in USD.
-                The final quote is converted into the client's
-                preferred currency by the final workflow stage.
+              {/* CURRENT ORIGINAL QUOTE */}
+              <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-4">
+
+                <p className="text-xs uppercase tracking-wider text-white/40">
+                  Original Quote
+                </p>
+
+                <p className="mt-2 break-words text-lg font-semibold text-white">
+
+                  {currentNegotiation.quote_currency ||
+                    request.preferred_currency ||
+                    "NGN"}{" "}
+
+                  {currentNegotiation.original_quote_amount !=
+                  null
+                    ? Number(
+                        currentNegotiation.original_quote_amount,
+                      ).toLocaleString()
+                    : request.approved_quote_amount !=
+                        null
+                      ? Number(
+                          request.approved_quote_amount,
+                        ).toLocaleString()
+                      : "Not specified"}
+
+                </p>
+
+              </div>
+
+              {/* ROUND */}
+              <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-4">
+
+                <p className="text-xs uppercase tracking-wider text-white/40">
+                  Negotiation Round
+                </p>
+
+                <p className="mt-2 text-sm font-semibold text-white">
+                  Round{" "}
+                  {currentNegotiation.round_number}
+                </p>
+
+              </div>
+
+              {/* STATUS */}
+              <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-4">
+
+                <p className="text-xs uppercase tracking-wider text-white/40">
+                  Negotiation Status
+                </p>
+
+                <p className="mt-2 break-words text-sm font-semibold uppercase text-white">
+                  {currentNegotiation.status}
+                </p>
+
+              </div>
+
+              {/* CURRENCY */}
+              <div className="min-w-0 rounded border border-[#143b28] bg-black/30 p-4">
+
+                <p className="text-xs uppercase tracking-wider text-white/40">
+                  Negotiation Currency
+                </p>
+
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {currentNegotiation.quote_currency ||
+                    request.preferred_currency ||
+                    "NGN"}
+                </p>
+
+              </div>
+
+              {/* CLIENT REASON */}
+              {currentNegotiation.client_reason && (
+                <div className="min-w-0 md:col-span-3">
+
+                  <p className="text-xs uppercase tracking-wider text-white/40">
+                    Client Reason
+                  </p>
+
+                  <div className="mt-2 rounded border border-[#143b28] bg-black/30 p-4">
+
+                    <p className="whitespace-pre-wrap break-words text-sm leading-7 text-white/70">
+                      {currentNegotiation.client_reason}
+                    </p>
+
+                  </div>
+
+                </div>
+              )}
+
+              {/* CLIENT NOTES */}
+              {currentNegotiation.client_notes && (
+                <div className="min-w-0 md:col-span-3">
+
+                  <p className="text-xs uppercase tracking-wider text-white/40">
+                    Client Notes
+                  </p>
+
+                  <div className="mt-2 rounded border border-[#143b28] bg-black/30 p-4">
+
+                    <p className="whitespace-pre-wrap break-words text-sm leading-7 text-white/70">
+                      {currentNegotiation.client_notes}
+                    </p>
+
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* ====================================================
+          CURRENT ADMINISTRATOR ACTION
+      ==================================================== */}
+
+      {adminCanAct &&
+        !isHistoryView && (
+          <div className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
+
+            <div className="mb-6 border-b border-white/10 pb-5">
+
+              <p className="text-xs uppercase tracking-[0.2em] text-[#20dc73]">
+                {isNegotiation
+                  ? "Negotiation Review"
+                  : "Administrator Submission"}
               </p>
 
-            </label>
+              <h3 className="mt-2 text-lg font-semibold text-white">
+                {isNegotiation
+                  ? "Respond to Current Negotiation"
+                  : "Submit Quote to Super Administrator"}
+              </h3>
 
-            {/* ==================================================
-                START DATE
-            ================================================== */}
+              <p className="mt-1 text-sm text-white/40">
+                {isNegotiation
+                  ? "Review the client's requested amount and prepare your recommendation for Super Administrator final review."
+                  : "Prepare the initial Administrator quote for Super Administrator final review."}
+              </p>
 
-            {hasTrainingDates && (
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+
+              {/* =================================================
+                  PROPOSED QUOTE
+              ================================================= */}
+
               <label className="text-sm text-white/60">
 
                 <span className="mb-2 block">
-                  Training Start Date
+                  {isNegotiation
+                    ? "Administrator Proposed Quote"
+                    : "Proposed Quote"}
+                </span>
+
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  disabled={
+                    loading
+                  }
+                  value={
+                    form.amount
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    updateForm(
+                      "amount",
+                      event.target.value,
+                    )
+                  }
+                  className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder={
+                    isNegotiation
+                      ? "Enter Administrator response amount"
+                      : "Enter proposed amount"
+                  }
+                />
+
+                {isNegotiation &&
+                  currentNegotiation && (
+                    <p className="mt-2 text-xs text-yellow-300/60">
+                      Client requested:{" "}
+                      {currentNegotiation.quote_currency ||
+                        request.preferred_currency ||
+                        "NGN"}{" "}
+                      {currentNegotiation.requested_budget !=
+                      null
+                        ? Number(
+                            currentNegotiation.requested_budget,
+                          ).toLocaleString()
+                        : "Not specified"}
+                    </p>
+                  )}
+
+              </label>
+
+              {/* =================================================
+                  CURRENCY
+              ================================================= */}
+
+              <label className="text-sm text-white/60">
+
+                <span className="mb-2 block">
+                  Quote Currency
+                </span>
+
+                <input
+                  type="text"
+                  value={
+                    form.currency
+                  }
+                  disabled
+                  className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm font-semibold text-white"
+                />
+
+                <p className="mt-2 text-xs text-white/30">
+
+                  {isNegotiation
+                    ? `This negotiation continues in the client's preferred currency (${form.currency}). The Administrator responds using the same currency.`
+                    : "The initial Administrator quote is prepared in USD. Currency conversion occurs during final Super Administrator approval."}
+
+                </p>
+
+              </label>
+
+              {/* =================================================
+                  TRAINING START
+              ================================================= */}
+
+              {hasTrainingDates && (
+                <label className="text-sm text-white/60">
+
+                  <span className="mb-2 block">
+                    Training Start Date
+                  </span>
+
+                  <input
+                    type="date"
+                    disabled={
+                      loading
+                    }
+                    value={
+                      form.start_date
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateForm(
+                        "start_date",
+                        event.target.value,
+                      )
+                    }
+                    className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+
+                  <p className="mt-2 text-xs text-white/30">
+                    Administrator estimated training start date.
+                  </p>
+
+                </label>
+              )}
+
+              {/* =================================================
+                  COMPLETION
+              ================================================= */}
+
+              <label className="text-sm text-white/60">
+
+                <span className="mb-2 block">
+                  Estimated Completion Date
                 </span>
 
                 <input
                   type="date"
-                  disabled={loading}
-                  value={form.start_date}
-                  onChange={(event) =>
+                  disabled={
+                    loading
+                  }
+                  value={
+                    form.completion_date
+                  }
+                  onChange={(
+                    event,
+                  ) =>
                     updateForm(
-                      "start_date",
+                      "completion_date",
                       event.target.value,
                     )
                   }
@@ -1176,275 +1879,210 @@ const payload = {
                 />
 
                 <p className="mt-2 text-xs text-white/30">
-                  Administrator estimated start date.
-                  The client-requested training date is used
-                  as the initial reference value.
+
+                  {isProfessionalTraining &&
+                    "Professional training completion date."}
+
+                  {isCyberSecurity &&
+                    "Cybersecurity training completion date."}
+
+                  {isSecurityAssessment &&
+                    "Security assessment completion date."}
+
+                  {isInvestigation &&
+                    "Investigation completion date."}
+
                 </p>
 
               </label>
-            )}
 
-            {/* ==================================================
-                COMPLETION DATE
-            ================================================== */}
+              {/* =================================================
+                  WORKFLOW
+              ================================================= */}
 
-            <label className="text-sm text-white/60">
+              <div className="md:col-span-2">
 
-              <span className="mb-2 block">
-                Estimated Completion Date
-              </span>
+                <div className="rounded border border-[#143b28] bg-black/30 px-4 py-3">
 
-              <input
-                type="date"
-                disabled={loading}
-                value={
-                  form.completion_date
-                }
-                onChange={(event) =>
-                  updateForm(
-                    "completion_date",
-                    event.target.value,
-                  )
-                }
-                className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
-              />
+                  <p className="text-[10px] uppercase tracking-widest text-white/30">
+                    Current Workflow Cycle
+                  </p>
 
-              <p className="mt-2 text-xs text-white/30">
+                  <p className="mt-2 text-sm leading-6 text-white/70">
 
-                {isProfessionalTraining &&
-                  "Professional training completion date."}
+                    {normalizedStatus ===
+                      "pending_admin_review" &&
+                      "New client request — Administrator prepares the initial quote for Super Administrator review."}
 
-                {isCyberSecurity &&
-                  "Cybersecurity training completion date."}
+                    {normalizedStatus ===
+                      "negotiation_requested" &&
+                      "Negotiation cycle — Administrator reviews the client's requested quote change."}
 
-                {isSecurityAssessment &&
-                  "Security assessment completion date."}
+                    {normalizedStatus ===
+                      "negotiating" &&
+                      "Active negotiation — Administrator response is required."}
 
-                {isInvestigation &&
-                  "Investigation completion date."}
+                    {normalizedStatus ===
+                      "under_negotiation" &&
+                      "Active negotiation — Administrator response is required."}
 
-              </p>
+                  </p>
 
-            </label>
-
-            {/* ==================================================
-                WORKFLOW
-            ================================================== */}
-
-            <div className="md:col-span-2">
-
-              <div className="rounded border border-[#143b28] bg-black/30 px-4 py-3">
-
-                <p className="text-[10px] uppercase tracking-widest text-white/30">
-                  Current Workflow Cycle
-                </p>
-
-                <p className="mt-1 text-sm text-white/70">
-
-                  {normalizedStatus ===
-                    "pending_admin_review" &&
-                    "New client request — Administrator prepares the first quote."}
-
-                  {normalizedStatus ===
-                    "negotiation_requested" &&
-                    "Negotiation cycle — Administrator reviews the client's requested quote change."}
-
-                  {normalizedStatus ===
-                    "negotiating" &&
-                    "Active negotiation — Administrator response required."}
-
-                  {normalizedStatus ===
-                    "under_negotiation" &&
-                    "Active negotiation — Administrator response required."}
-
-                </p>
+                </div>
 
               </div>
+
+              {/* =================================================
+                  ADMINISTRATOR AUTHORITY
+              ================================================= */}
+
+              <div className="md:col-span-2">
+
+                <div className="rounded border border-[#143b28] bg-black/30 px-4 py-4">
+
+                  <p className="text-[10px] uppercase tracking-widest text-white/30">
+                    Administrator Authority
+                  </p>
+
+                  <p className="mt-2 text-sm leading-6 text-white/60">
+
+                    {isNegotiation
+                      ? "The Administrator reviews the client's negotiation request and submits a recommendation to the Super Administrator. The Administrator does not make the final client-facing decision."
+                      : "The Administrator prepares the initial quote and submits it to the Super Administrator. The Administrator does not send the quote directly to the client."}
+
+                  </p>
+
+                </div>
+
+              </div>
+
+              {/* =================================================
+                  REASON
+              ================================================= */}
+
+              <label className="text-sm text-white/60 md:col-span-2">
+
+                <span className="mb-2 block">
+                  Administrator Reason
+                </span>
+
+                <textarea
+                  disabled={
+                    loading
+                  }
+                  value={
+                    form.reason
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    updateForm(
+                      "reason",
+                      event.target.value,
+                    )
+                  }
+                  rows={6}
+                  placeholder={
+                    isNegotiation
+                      ? "Explain your recommendation, pricing position, scope, complexity, timeline, or other considerations..."
+                      : "Explain why the proposed quote and timeline are appropriate..."
+                  }
+                  className="w-full rounded border border-[#143b28] bg-black px-3 py-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
+                />
+
+                <p className="mt-2 text-xs text-white/30">
+                  {isNegotiation
+                    ? "This response becomes a new Administrator negotiation record and is sent to Super Administrator review."
+                    : "This submission becomes the Administrator quote proposal and is sent to Super Administrator review."}
+                </p>
+
+              </label>
 
             </div>
 
-            {/* ==================================================
-                ADMIN ACTION
-            ================================================== */}
+            {/* =================================================
+                SUBMIT
+            ================================================= */}
 
-            <div className="md:col-span-2">
+            <div className="mt-6 border-t border-white/10 pt-6">
 
-              <p className="mb-2 text-sm text-white/60">
-                Quote Decision
-              </p>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="min-w-0">
 
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() =>
-                    updateForm(
-                      "action",
-                      "accept",
-                    )
-                  }
-                  className={[
-                    "rounded-md border px-4 py-3 text-left transition",
-                    form.action === "accept"
-                      ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                      : "border-[#143b28] bg-black text-white/60 hover:border-[#20dc73]/50",
-                  ].join(" ")}
-                >
+                  <p className="text-sm font-semibold text-white">
+                    Ready for submission?
+                  </p>
 
-                  <span className="block text-sm font-semibold">
-                    Accept Current Recommendation
-                  </span>
+                  <p className="mt-1 text-xs leading-5 text-white/40">
 
-                  <span className="mt-1 block text-xs opacity-60">
-                    Submit the current Administrator-reviewed quote
-                    without marking it as an adjustment.
-                  </span>
+                    {isNegotiation
+                      ? "The current client negotiation response will be recorded and sent to the Super Administrator for final review."
+                      : "The initial Administrator quote will be recorded and sent to the Super Administrator for final review."}
 
-                </button>
+                  </p>
+
+                </div>
 
                 <button
                   type="button"
-                  disabled={loading}
-                  onClick={() =>
-                    updateForm(
-                      "action",
-                      "adjust",
+                  disabled={
+                    loading ||
+                    !adminCanAct ||
+                    (
+                      isNegotiation &&
+                      !currentNegotiation?.id
                     )
                   }
+                  onClick={() =>
+                    void submit()
+                  }
                   className={[
-                    "rounded-md border px-4 py-3 text-left transition",
-                    form.action === "adjust"
-                      ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                      : "border-[#143b28] bg-black text-white/60 hover:border-[#20dc73]/50",
+                    "rounded-md px-6 py-3 font-semibold transition",
+
+                    loading ||
+                    !adminCanAct ||
+                    (
+                      isNegotiation &&
+                      !currentNegotiation?.id
+                    )
+                      ? "cursor-not-allowed bg-white/10 text-white/30"
+                      : "bg-[#20dc73] text-black hover:bg-[#32ef82]",
                   ].join(" ")}
                 >
 
-                  <span className="block text-sm font-semibold">
-                    Adjust Current Recommendation
-                  </span>
-
-                  <span className="mt-1 block text-xs opacity-60">
-                    Submit a quote different from the current
-                    recommendation.
-                  </span>
+                  {loading
+                    ? "Submitting..."
+                    : "Submit to Super Administrator"}
 
                 </button>
 
               </div>
-
-            </div>
-
-            {/* ==================================================
-                REASON
-            ================================================== */}
-
-            <label className="text-sm text-white/60 md:col-span-2">
-
-              <span className="mb-2 block">
-                Administrator Reason
-              </span>
-
-              <textarea
-                disabled={loading}
-                value={form.reason}
-                onChange={(event) =>
-                  updateForm(
-                    "reason",
-                    event.target.value,
-                  )
-                }
-                rows={6}
-                placeholder={
-                  form.action === "adjust"
-                    ? "Explain the adjustment, pricing, complexity, scope, timeline, or risk considerations..."
-                    : "Explain why the proposed quote and timeline are appropriate..."
-                }
-                className="w-full rounded border border-[#143b28] bg-black px-3 py-3 text-sm text-white outline-none focus:border-[#20dc73] disabled:cursor-not-allowed disabled:opacity-50"
-              />
-
-              <p className="mt-2 text-xs text-white/30">
-                This submission creates a new workflow record.
-                Previous Administrator submissions remain historical.
-              </p>
-
-            </label>
-
-          </div>
-
-          {/* ==================================================
-              SUBMIT
-          ================================================== */}
-
-          <div className="mt-6 border-t border-white/10 pt-6">
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-              <div>
-
-                <p className="text-sm font-semibold text-white">
-                  Ready for submission?
-                </p>
-
-                <p className="mt-1 text-xs text-white/40">
-                  {normalizedStatus ===
-                  "pending_admin_review"
-                    ? "The quote will move this request to Super Administrator final review."
-                    : "The current negotiation response will be recorded as a new Administrator action and sent to Super Administrator review."}
-                </p>
-
-              </div>
-
-              <button
-                type="button"
-                disabled={
-                  loading ||
-                  !adminCanAct
-                }
-                onClick={() =>
-                  void submit()
-                }
-                className={[
-                  "rounded-md px-6 py-3 font-semibold transition",
-                  loading ||
-                  !adminCanAct
-                    ? "cursor-not-allowed bg-white/10 text-white/30"
-                    : "bg-[#20dc73] text-black hover:bg-[#32ef82]",
-                ].join(" ")}
-              >
-                {loading
-                  ? "Submitting..."
-                  : normalizedStatus ===
-                    "pending_admin_review"
-                  ? "Submit to Super Administrator"
-                  : "Submit Negotiation Response"}
-              </button>
 
             </div>
 
           </div>
+        )}
 
-        </div>
-      )}
-
-      {/* ======================================================
+      {/* ====================================================
           NO ACTION STATE
-      ====================================================== */}
+      ==================================================== */}
 
-     {!adminCanAct && !isHistoryView && (
-  <div className="rounded-md border border-white/10 bg-black/20 px-5 py-6 text-center">
+      {!adminCanAct &&
+        !isHistoryView && (
+          <div className="rounded-md border border-white/10 bg-black/20 px-5 py-6 text-center">
 
-          <p className="text-sm font-medium text-white/60">
-            No Administrator action is required right now.
-          </p>
+            <p className="text-sm font-medium text-white/60">
+              No Administrator action is required right now.
+            </p>
 
-          <p className="mt-1 text-xs text-white/30">
-            Historical Administrator submissions remain above,
-            while the current request stays in its active workflow state.
-          </p>
+            <p className="mt-1 text-xs text-white/30">
+              Historical Administrator submissions remain above,
+              while the current request stays in its active workflow state.
+            </p>
 
-        </div>
-      )}
+          </div>
+        )}
 
     </div>
   )

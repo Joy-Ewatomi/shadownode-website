@@ -11,7 +11,9 @@ import { query } from "@/lib/db"
 /**
  * Safely convert a database value to a number.
  */
-function toNumber(value: unknown): number | null {
+function toNumber(
+  value: unknown,
+): number | null {
   if (
     value === null ||
     value === undefined ||
@@ -29,12 +31,10 @@ function toNumber(value: unknown): number | null {
 
 /**
  * Convert a date/time value to YYYY-MM-DD.
- *
- * Used for date-only fields such as:
- * - estimated_start
- * - estimated_completion
  */
-function toDateOnly(value: unknown): string | null {
+function toDateOnly(
+  value: unknown,
+): string | null {
   if (
     value === null ||
     value === undefined ||
@@ -64,13 +64,11 @@ function toDateOnly(value: unknown): string | null {
 }
 
 /**
- * Convert a database timestamp to a full ISO timestamp.
- *
- * This preserves both date and time, for example:
- *
- * 2026-08-26T14:35:42.123Z
+ * Convert a database timestamp to ISO.
  */
-function toISOString(value: unknown): string | null {
+function toISOString(
+  value: unknown,
+): string | null {
   if (
     value === null ||
     value === undefined ||
@@ -106,46 +104,55 @@ function toISOString(value: unknown): string | null {
  * GET CLIENT REQUEST DETAILS
  * =========================================================
  *
- * Returns a request belonging to the authenticated client.
+ * Returns the authenticated client's own request.
+ *
+ * Also returns the latest CLIENT negotiation/version
+ * information when one exists.
  *
  * IMPORTANT:
  *
- * The user_id restriction prevents a client from accessing
- * another client's request simply by changing the request ID.
- *
- * Timestamp fields are normalized to ISO strings so the
- * frontend can display the exact date and time of changes.
+ * Internal Administrator and Super Administrator
+ * information is NOT returned through client_negotiation.
  */
 export async function GET(
   req: Request,
   {
     params,
   }: {
-    params: Promise<{ id: string }>
+    params: Promise<{
+      id: string
+    }>
   },
 ) {
   try {
     /**
-     * -------------------------------------------------------
+     * =======================================================
      * AUTHENTICATION
-     * -------------------------------------------------------
+     * =======================================================
      */
-    const { user, response } =
-      await requireUser()
+
+    const {
+      user,
+      response,
+    } = await requireUser()
 
     if (!user) {
       return response
     }
 
     /**
-     * -------------------------------------------------------
-     * CLIENT-ONLY ACCESS
-     * -------------------------------------------------------
+     * =======================================================
+     * CLIENT ONLY
+     * =======================================================
      */
-    if (user.role !== "client") {
+
+    if (
+      user.role !== "client"
+    ) {
       return NextResponse.json(
         {
-          error: "Forbidden",
+          error:
+            "Forbidden",
         },
         {
           status: 403,
@@ -154,16 +161,20 @@ export async function GET(
     }
 
     /**
-     * -------------------------------------------------------
+     * =======================================================
      * REQUEST ID
-     * -------------------------------------------------------
+     * =======================================================
      */
-    const { id } = await params
 
-    if (!id) {
+    const {
+      id,
+    } = await params
+
+    if (!id?.trim()) {
       return NextResponse.json(
         {
-          error: "Request ID is required",
+          error:
+            "Request ID is required",
         },
         {
           status: 400,
@@ -172,16 +183,14 @@ export async function GET(
     }
 
     /**
-     * -------------------------------------------------------
-     * FETCH REQUEST
-     * -------------------------------------------------------
+     * =======================================================
+     * LOAD REQUEST
+     * =======================================================
      *
-     * SELECT * is intentional because the requests table
-     * contains many client-submitted and workflow fields.
-     *
-     * The user_id condition is the authorization boundary.
+     * user_id is the authorization boundary.
      */
-    const { rows } =
+
+    const requestResult =
       await query(
         `
           SELECT *
@@ -196,10 +205,13 @@ export async function GET(
         ],
       )
 
-    if (!rows[0]) {
+    if (
+      !requestResult.rows[0]
+    ) {
       return NextResponse.json(
         {
-          error: "Request not found",
+          error:
+            "Request not found",
         },
         {
           status: 404,
@@ -207,43 +219,258 @@ export async function GET(
       )
     }
 
-    const row = rows[0]
+    const row =
+      requestResult.rows[0]
 
     /**
      * =======================================================
-     * NORMALIZE REQUEST DATA
+     * CLIENT NEGOTIATION
      * =======================================================
      *
-     * JSONB fields:
+     * Find the latest negotiation belonging to this request
+     * and the latest CLIENT quote version associated with it.
      *
-     * training_details -> object
-     * supporting_links -> array
-     * evidence_uploads -> array
+     * This gives the client their own Version 4 record:
+     *
+     *   requested budget
+     *   currency
+     *   reason
+     *   notes
+     *   round
+     *   status
+     *
+     * It does not expose Administrator or Super Administrator
+     * internal reasoning.
      */
+
+    let clientNegotiation:
+      | {
+          id: string
+          request_id: string
+          round_number: number
+          status: string
+          requested_budget: number | null
+          currency: string | null
+          reason: string | null
+          notes: string | null
+          quote_version_id: string | null
+          quote_version_number:
+            | number
+            | null
+          created_at: string | null
+          updated_at: string | null
+        }
+      | null = null
+
+    try {
+      const negotiationResult =
+        await query<{
+          id: string
+          request_id: string
+          round_number: number
+          status: string
+          requested_budget:
+            | number
+            | string
+            | null
+          quote_currency:
+            | string
+            | null
+          client_reason:
+            | string
+            | null
+          client_notes:
+            | string
+            | null
+          created_at:
+            | string
+            | Date
+            | null
+          updated_at:
+            | string
+            | Date
+            | null
+        }>(
+          `
+            SELECT
+              id,
+              request_id,
+              round_number,
+              status,
+              requested_budget,
+              quote_currency,
+              client_reason,
+              client_notes,
+              created_at,
+              updated_at
+
+            FROM quote_negotiations
+
+            WHERE request_id = $1
+              AND client_id = $2
+
+            ORDER BY
+              round_number DESC,
+              created_at DESC
+
+            LIMIT 1
+          `,
+          [
+            id,
+            user.id,
+          ],
+        )
+
+      const negotiation =
+        negotiationResult.rows[0]
+
+      if (negotiation) {
+        /**
+         * ---------------------------------------------------
+         * FIND CLIENT QUOTE VERSION
+         * ---------------------------------------------------
+         *
+         * creator_role = client and source =
+         * client_negotiation identify Version 4.
+         *
+         * We select the version tied to this negotiation
+         * through its timestamp/round context by taking the
+         * latest client negotiation version for this request.
+         */
+
+        const versionResult =
+          await query<{
+            id: string
+            version_number: number
+            created_at:
+              | string
+              | Date
+              | null
+          }>(
+            `
+              SELECT
+                id,
+                version_number,
+                created_at
+
+              FROM quote_versions
+
+              WHERE request_id = $1
+                AND created_by = $2
+                AND creator_role = 'client'
+                AND source = 'client_negotiation'
+
+              ORDER BY
+                version_number DESC,
+                created_at DESC
+
+              LIMIT 1
+            `,
+            [
+              id,
+              user.id,
+            ],
+          )
+
+        const version =
+          versionResult.rows[0]
+
+        clientNegotiation = {
+          id:
+            negotiation.id,
+
+          request_id:
+            negotiation.request_id,
+
+          round_number:
+            Number(
+              negotiation.round_number,
+            ),
+
+          status:
+            negotiation.status,
+
+          requested_budget:
+            toNumber(
+              negotiation.requested_budget,
+            ),
+
+          currency:
+            negotiation.quote_currency
+              ?.trim()
+              .toUpperCase() ||
+            null,
+
+          reason:
+            negotiation.client_reason ||
+            null,
+
+          notes:
+            negotiation.client_notes ||
+            null,
+
+          quote_version_id:
+            version?.id ||
+            null,
+
+          quote_version_number:
+            version
+              ? Number(
+                  version.version_number,
+                )
+              : null,
+
+          created_at:
+            toISOString(
+              negotiation.created_at,
+            ),
+
+          updated_at:
+            toISOString(
+              negotiation.updated_at,
+            ),
+        }
+      }
+    } catch (negotiationError) {
+      /**
+       * Negotiation data must not prevent the client's
+       * main request from loading.
+       */
+      console.error(
+        "CLIENT NEGOTIATION LOAD ERROR:",
+        negotiationError,
+      )
+
+      clientNegotiation =
+        null
+    }
+
+    /**
+     * =======================================================
+     * NORMALIZED REQUEST
+     * =======================================================
+     */
+
     const normalizedRow = {
       ...row,
 
       /**
-       * -----------------------------------------------------
-       * JSONB NORMALIZATION
-       * -----------------------------------------------------
+       * JSONB
        */
       training_details:
-        row.training_details ?? {},
+        row.training_details ??
+        {},
 
       supporting_links:
-        row.supporting_links ?? [],
+        row.supporting_links ??
+        [],
 
       evidence_uploads:
-        row.evidence_uploads ?? [],
+        row.evidence_uploads ??
+        [],
 
       /**
-       * -----------------------------------------------------
-       * NUMERIC NORMALIZATION
-       * -----------------------------------------------------
-       *
-       * PostgreSQL numeric values can sometimes arrive as
-       * strings depending on the database driver.
+       * NUMERIC
        */
       ai_price_estimate:
         toNumber(
@@ -265,10 +492,13 @@ export async function GET(
           row.quote_exchange_rate,
         ),
 
+      approved_quote_base_amount:
+        toNumber(
+          row.approved_quote_base_amount,
+        ),
+
       /**
-       * -----------------------------------------------------
-       * DATE-ONLY NORMALIZATION
-       * -----------------------------------------------------
+       * DATE ONLY
        */
       estimated_start:
         toDateOnly(
@@ -290,12 +520,28 @@ export async function GET(
           row.approved_estimated_completion,
         ),
 
+      training_preferred_start_date:
+        toDateOnly(
+          row.training_preferred_start_date,
+        ),
+
+      training_preferred_completion_date:
+        toDateOnly(
+          row.training_preferred_completion_date,
+        ),
+
+      preferred_deadline:
+        toDateOnly(
+          row.preferred_deadline,
+        ),
+
+      osint_completion_date:
+        toDateOnly(
+          row.osint_completion_date,
+        ),
+
       /**
-       * -----------------------------------------------------
-       * TIMESTAMP NORMALIZATION
-       * -----------------------------------------------------
-       *
-       * These retain the exact date + time.
+       * TIMESTAMPS
        */
       created_at:
         toISOString(
@@ -331,19 +577,34 @@ export async function GET(
         toISOString(
           row.client_decision_at,
         ),
+
+      /**
+       * =====================================================
+       * CLIENT NEGOTIATION
+       * =====================================================
+       *
+       * This is intentionally a separate property.
+       *
+       * The frontend can now use:
+       *
+       * request.client_negotiation
+       */
+      client_negotiation:
+        clientNegotiation,
     }
 
     /**
-     * -------------------------------------------------------
+     * =======================================================
      * RESPONSE
-     * -------------------------------------------------------
+     * =======================================================
      */
+
     return NextResponse.json(
       normalizedRow,
     )
   } catch (error) {
     console.error(
-      "CLIENT REQUEST DETAILS GET ERROR",
+      "CLIENT REQUEST DETAILS GET ERROR:",
       error,
     )
 

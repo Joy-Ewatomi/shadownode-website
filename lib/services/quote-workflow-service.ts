@@ -2639,8 +2639,7 @@ export async function administratorReviewNegotiation(
               reasoning:
                 recommendation,
 
-              status:
-                "pending_super_admin_review",
+              status: "reviewing",
 
               previousPrice:
                 previousPrice !== null
@@ -3872,7 +3871,7 @@ export async function superAdminDecideNegotiation(
                   NOW()
 
               WHERE id = $1
-                AND status = 'reviewing'
+                AND status = 'under_negotiation'
 
               RETURNING
                 id,
