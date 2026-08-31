@@ -21,6 +21,10 @@ export async function GET(
       ) || "",
     ).trim()
 
+    console.log("PAYSTACK CALLBACK RECEIVED", {
+  reference,
+})
+
   /*
    * Where the client should land after
    * Paystack processing.
@@ -77,6 +81,8 @@ export async function GET(
       )
     }
 
+  console.log("PAYSTACK LOCAL PAYMENT", payment)
+
     const result =
       await verifyAndCompletePaystackPayment(
         reference,
@@ -114,6 +120,8 @@ export async function GET(
       )
     }
 
+    console.log("PAYSTACK VERIFICATION RESULT", result)
+
     return NextResponse.redirect(
       target,
     )
@@ -137,3 +145,4 @@ export async function GET(
     )
   }
 }
+

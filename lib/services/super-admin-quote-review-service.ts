@@ -10,11 +10,12 @@ export type SuperAdminQuoteReviewAction =
   | "accept"
   | "adjust"
   | "reject"
-
+  
 type SuperAdminDecisionSource =
   | "admin"
   | "ai"
   | "adjusted"
+  | "client_negotiated"
 
 function isSuperAdministratorRole(
   role: string | null | undefined,

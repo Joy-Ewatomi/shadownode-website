@@ -12,6 +12,8 @@ type RequestData = {
   investigation_objective: string | null
   status: string
 
+  preferred_currency: string | null
+
   ai_price_estimate: number | null
   ai_complexity: string | null
   ai_confidence: number | null
@@ -26,6 +28,7 @@ type RequestData = {
   approved_quote_amount: number | null
   approved_quote_currency: string | null
   approved_quote_notes: string | null
+  approved_estimated_start: string | null
   approved_estimated_completion: string | null
 
   admin_quote_action: string | null
@@ -50,6 +53,7 @@ type QuoteVersion = {
   source: string
   price: number | null
   currency: string | null
+  estimated_start?: string | null
   estimated_completion: string | null
   notes: string | null
   reasoning: string | null
@@ -96,6 +100,7 @@ type NegotiationHistory = {
 
 type DecisionMode =
   | "admin"
+  | "negotiated"
   | "ai"
   | "adjust"
   | "reject"
@@ -120,13 +125,21 @@ function formatMoney(
   amount: number | null | undefined,
   currency = "USD",
 ) {
-  if (amount == null) {
+  if (
+    amount === null ||
+    amount === undefined ||
+    !Number.isFinite(Number(amount))
+  ) {
     return "Not available"
   }
 
-  return `${currency} ${Number(
-    amount,
-  ).toLocaleString()}`
+  return `${currency} ${Number(amount).toLocaleString(
+    "en-US",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  )}`
 }
 
 function formatDate(
@@ -136,7 +149,38 @@ function formatDate(
     return "Not specified"
   }
 
-  const parsed = new Date(date)
+  const raw = String(date).trim()
+
+  if (!raw) {
+    return "Not specified"
+  }
+
+  const dateOnlyMatch =
+    raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+
+  if (dateOnlyMatch) {
+    const [, year, month, day] =
+      dateOnlyMatch
+
+    const parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+    )
+
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString(
+        "en-GB",
+        {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        },
+      )
+    }
+  }
+
+  const parsed = new Date(raw)
 
   if (Number.isNaN(parsed.getTime())) {
     return "Not specified"
@@ -167,11 +211,15 @@ function confidencePercent(
     return null
   }
 
-  const number = Number(value)
+  const numeric = Number(value)
 
-  return number <= 1
-    ? number * 100
-    : number
+  if (!Number.isFinite(numeric)) {
+    return null
+  }
+
+  return numeric <= 1
+    ? numeric * 100
+    : numeric
 }
 
 function getAuditReason(
@@ -183,14 +231,64 @@ function getAuditReason(
     "reason" in details
   ) {
     return String(
-      (details as {
-        reason?: unknown
-      }).reason ??
+      (
+        details as {
+          reason?: unknown
+        }
+      ).reason ??
         "No reason provided",
     )
   }
 
   return "No reason provided"
+}
+
+function normalizeQuoteSource(
+  quote: QuoteVersion,
+) {
+  return (
+    quote.source
+      ?.trim()
+      .toLowerCase() || ""
+  )
+}
+
+function isAdministratorQuote(
+  quote: QuoteVersion,
+) {
+  const source =
+    normalizeQuoteSource(quote)
+
+  const role =
+    quote.creator_role
+      ?.trim()
+      .toLowerCase()
+
+  return (
+    source === "administrator" ||
+    source === "administrator_proposal" ||
+    source === "admin" ||
+    role === "administrator"
+  )
+}
+
+function isAIQuote(
+  quote: QuoteVersion,
+) {
+  const source =
+    normalizeQuoteSource(quote)
+
+  const role =
+    quote.creator_role
+      ?.trim()
+      .toLowerCase()
+
+  return (
+    source === "ai" ||
+    source === "ai_estimate" ||
+    source === "ai_recommendation" ||
+    role === "ai"
+  )
 }
 
 export default function SuperAdminRequestReviewCard({
@@ -215,22 +313,28 @@ export default function SuperAdminRequestReviewCard({
    * =========================================================
    * HISTORY VIEW
    * =========================================================
-   *
-   * This is controlled ONLY by the URL.
-   *
-   * /dashboard/requests/[id]?history=true
-   *
-   * When true:
-   *
-   * - show the request information
-   * - show quote history
-   * - show audit history
-   * - show negotiation history
-   * - NEVER show active decision controls
    */
 
   const isHistoryView =
-    searchParams.get("history") === "true"
+    searchParams.get("history") ===
+    "true"
+
+  /*
+   * =========================================================
+   * STATUS
+   * =========================================================
+   */
+
+  const normalizedStatus =
+    String(
+      request.status || "",
+    )
+      .trim()
+      .toLowerCase()
+
+  const superAdminCanAct =
+    normalizedStatus ===
+    "pending_super_admin_review"
 
   /*
    * =========================================================
@@ -239,53 +343,106 @@ export default function SuperAdminRequestReviewCard({
    */
 
   const latestAdminQuote =
-    [...quoteHistory]
-      .filter((quote) => {
-        const source =
-          quote.source
-            ?.trim()
-            .toLowerCase()
-
-        const role =
-          quote.creator_role
-            ?.trim()
-            .toLowerCase()
-
-        return (
-          source ===
-            "administrator" ||
-          source ===
-            "administrator_proposal" ||
-          role ===
-            "administrator"
-        )
-      })
+    [
+      ...quoteHistory,
+      ...(adminQuote
+        ? [adminQuote]
+        : []),
+    ]
+      .filter(
+        isAdministratorQuote,
+      )
       .sort(
         (a, b) =>
-          (b.version_number ?? 0) -
-          (a.version_number ?? 0),
+          Number(
+            b.version_number || 0,
+          ) -
+          Number(
+            a.version_number || 0,
+          ),
       )[0] ?? null
 
   /*
    * =========================================================
-   * CURRENT SUPER ADMIN STATE
+   * LATEST AI QUOTE
+   * =========================================================
+   */
+
+  const latestAIQuote =
+    [
+      ...quoteHistory,
+      ...(aiQuote
+        ? [aiQuote]
+        : []),
+    ]
+      .filter(isAIQuote)
+      .sort(
+        (a, b) =>
+          Number(
+            b.version_number || 0,
+          ) -
+          Number(
+            a.version_number || 0,
+          ),
+      )[0] ?? aiQuote
+
+  /*
+   * =========================================================
+   * CURRENT NEGOTIATION
    * =========================================================
    *
    * IMPORTANT:
    *
-   * History does NOT determine this.
+   * Only an active negotiation is selected here.
    *
-   * Only the current request status does.
+   * requested:
+   *   waiting for Administrator
+   *
+   * reviewing:
+   *   Administrator has responded and the negotiation
+   *   is waiting for Super Administrator.
+   *
+   * For the Super Administrator active decision,
+   * "reviewing" is the important state.
    */
 
-  const normalizedStatus =
-    request.status
-      ?.trim()
-      .toLowerCase() || ""
+  const currentNegotiation =
+    [...negotiationHistory]
+      .filter((negotiation) => {
+        const status =
+          negotiation.status
+            ?.trim()
+            .toLowerCase()
 
-  const superAdminCanAct =
-    normalizedStatus ===
-    "pending_super_admin_review"
+        return (
+          status === "requested" ||
+          status === "reviewing"
+        )
+      })
+      .sort(
+        (a, b) =>
+          Number(
+            b.round_number || 0,
+          ) -
+          Number(
+            a.round_number || 0,
+          ),
+      )[0] ?? null
+
+  /*
+   * =========================================================
+   * NEGOTIATION REVIEW DETECTION
+   * =========================================================
+   *
+   * This MUST come AFTER currentNegotiation exists.
+   */
+
+  const isNegotiationReview =
+    superAdminCanAct &&
+    currentNegotiation !== null &&
+    currentNegotiation.status
+      ?.trim()
+      .toLowerCase() === "reviewing"
 
   /*
    * =========================================================
@@ -305,34 +462,54 @@ export default function SuperAdminRequestReviewCard({
   ] =
     useState<DecisionMode>(null)
 
-  const [form, setForm] = useState({
-    amount:
-      latestAdminQuote?.price !=
-      null
-        ? String(
-            latestAdminQuote.price,
-          )
-        : request.approved_quote_amount !=
-            null
+  const [form, setForm] =
+    useState({
+      amount:
+        isNegotiationReview
           ? String(
-              request.approved_quote_amount,
+              currentNegotiation?.revised_quote_amount ??
+                currentNegotiation?.requested_budget ??
+                latestAdminQuote?.price ??
+                request.approved_quote_amount ??
+                "",
             )
-          : "",
+          : String(
+              latestAdminQuote?.price ??
+                request.approved_quote_amount ??
+                "",
+            ),
 
-    currency:
-      latestAdminQuote?.currency ||
-      request.approved_quote_currency ||
-      "USD",
+      currency:
+        isNegotiationReview
+          ? (
+              currentNegotiation?.quote_currency ||
+              request.preferred_currency ||
+              latestAdminQuote?.currency ||
+              "NGN"
+            )
+          : (
+              latestAdminQuote?.currency ||
+              request.approved_quote_currency ||
+              "USD"
+            ),
 
-    notes: "",
+      notes: "",
 
-    reason: "",
+      reason: "",
 
-    estimated_completion:
-      latestAdminQuote?.estimated_completion ||
-      request.approved_estimated_completion ||
-      "",
-  })
+      estimated_completion:
+        isNegotiationReview
+          ? (
+              latestAdminQuote?.estimated_completion ||
+              request.approved_estimated_completion ||
+              ""
+            )
+          : (
+              latestAdminQuote?.estimated_completion ||
+              request.approved_estimated_completion ||
+              ""
+            ),
+    })
 
   /*
    * =========================================================
@@ -341,20 +518,27 @@ export default function SuperAdminRequestReviewCard({
    */
 
   const superAdminHistory =
-    auditHistory.filter((event) =>
-      [
-        "super admin approved final quote",
-        "super administrator approved final quote",
-        "super admin adjusted quote",
-        "super administrator adjusted quote",
-        "super admin rejected request",
-        "super_admin_approved_final_quote",
-        "super_admin_rejected_quote",
-      ].includes(
-        event.action
-          .trim()
-          .toLowerCase(),
-      ),
+    auditHistory.filter(
+      (event) => {
+        const action =
+          event.action
+            ?.trim()
+            .toLowerCase() || ""
+
+        return [
+          "super admin approved final quote",
+          "super administrator approved final quote",
+          "super admin adjusted quote",
+          "super administrator adjusted quote",
+          "super admin rejected request",
+          "super administrator rejected request",
+          "super_admin_approved_final_quote",
+          "super_admin_rejected_quote",
+          "super_admin_approved_revised_quote",
+          "super_admin_rejected_negotiation",
+          "super_admin_approved_revised_quote",
+        ].includes(action)
+      },
     )
 
   /*
@@ -368,28 +552,27 @@ export default function SuperAdminRequestReviewCard({
       return
     }
 
+    const amount =
+      latestAdminQuote?.price ??
+      request.approved_quote_amount
+
+    const currency =
+      latestAdminQuote?.currency ||
+      request.approved_quote_currency ||
+      request.preferred_currency ||
+      "USD"
+
     setDecisionMode("admin")
 
     setForm((current) => ({
       ...current,
 
       amount:
-        latestAdminQuote?.price !=
-        null
-          ? String(
-              latestAdminQuote.price,
-            )
-          : request.approved_quote_amount !=
-              null
-            ? String(
-                request.approved_quote_amount,
-              )
-            : current.amount,
+        amount != null
+          ? String(amount)
+          : current.amount,
 
-      currency:
-        latestAdminQuote?.currency ||
-        request.approved_quote_currency ||
-        "USD",
+      currency,
 
       reason:
         latestAdminQuote?.reasoning ||
@@ -399,7 +582,6 @@ export default function SuperAdminRequestReviewCard({
 
       notes:
         latestAdminQuote?.notes ||
-        request.admin_quote_notes ||
         "",
 
       estimated_completion:
@@ -420,46 +602,112 @@ export default function SuperAdminRequestReviewCard({
       return
     }
 
+    const amount =
+      request.ai_price_estimate ??
+      latestAIQuote?.price
+
+    const currency =
+      latestAIQuote?.currency ||
+      request.ai_price_currency ||
+      "USD"
+
     setDecisionMode("ai")
 
     setForm((current) => ({
       ...current,
 
       amount:
-        request.ai_price_estimate !=
-        null
-          ? String(
-              request.ai_price_estimate,
-            )
-          : aiQuote?.price !=
-              null
-            ? String(
-                aiQuote.price,
-              )
-            : current.amount,
+        amount != null
+          ? String(amount)
+          : current.amount,
 
-      currency:
-        aiQuote?.currency ||
-        "USD",
+      currency,
 
       reason:
         request.ai_reasoning ||
-        aiQuote?.reasoning ||
+        latestAIQuote?.reasoning ||
         "",
 
       notes:
-        aiQuote?.notes ||
+        latestAIQuote?.notes ||
         "",
 
       estimated_completion:
-        aiQuote?.estimated_completion ||
+        latestAIQuote?.estimated_completion ||
         current.estimated_completion,
     }))
   }
 
   /*
    * =========================================================
-   * ADJUST
+   * SELECT NEGOTIATED RECOMMENDATION
+   * =========================================================
+   *
+   * This uses the Administrator's recommendation from the
+   * current negotiation cycle.
+   *
+   * Currency ALWAYS remains the client's negotiation currency.
+   */
+
+  function selectNegotiatedRecommendation() {
+    if (
+      !superAdminCanAct ||
+      !isNegotiationReview ||
+      !currentNegotiation
+    ) {
+      return
+    }
+
+    const amount =
+      currentNegotiation.revised_quote_amount ??
+      currentNegotiation.requested_budget ??
+      latestAdminQuote?.price ??
+      request.approved_quote_amount
+
+    const currency =
+      currentNegotiation.quote_currency ||
+      request.preferred_currency ||
+      "NGN"
+
+    setDecisionMode("negotiated")
+
+    setForm((current) => ({
+      ...current,
+
+      amount:
+        amount != null
+          ? String(amount)
+          : current.amount,
+
+      currency,
+
+      /*
+       * Administrator recommendation should be
+       * visible in the decision reason.
+       */
+
+      reason:
+        currentNegotiation.administrator_recommendation ||
+        latestAdminQuote?.reasoning ||
+        latestAdminQuote?.notes ||
+        request.admin_quote_notes ||
+        "",
+
+      notes:
+        latestAdminQuote?.notes ||
+        request.admin_quote_notes ||
+        "",
+
+      estimated_completion:
+        latestAdminQuote?.estimated_completion ||
+        request.approved_estimated_completion ||
+        current.estimated_completion,
+    }))
+  }
+
+  /*
+   * =========================================================
+   * ADJUSTMENT
    * =========================================================
    */
 
@@ -468,11 +716,47 @@ export default function SuperAdminRequestReviewCard({
       return
     }
 
+    const amount =
+      isNegotiationReview
+        ? (
+            currentNegotiation?.revised_quote_amount ??
+            currentNegotiation?.requested_budget ??
+            latestAdminQuote?.price ??
+            request.approved_quote_amount
+          )
+        : (
+            latestAdminQuote?.price ??
+            request.approved_quote_amount
+          )
+
+    const currency =
+      isNegotiationReview
+        ? (
+            currentNegotiation?.quote_currency ||
+            request.preferred_currency ||
+            "NGN"
+          )
+        : (
+            latestAdminQuote?.currency ||
+            request.approved_quote_currency ||
+            request.preferred_currency ||
+            "USD"
+          )
+
     setDecisionMode("adjust")
 
     setForm((current) => ({
       ...current,
+
+      amount:
+        amount != null
+          ? String(amount)
+          : current.amount,
+
+      currency,
+
       reason: "",
+
       notes: "",
     }))
   }
@@ -499,7 +783,7 @@ export default function SuperAdminRequestReviewCard({
 
   /*
    * =========================================================
-   * SUBMIT FINAL DECISION
+   * SUBMIT
    * =========================================================
    */
 
@@ -514,7 +798,9 @@ export default function SuperAdminRequestReviewCard({
       setMessage("")
 
       /*
-       * Never submit from history.
+       * -------------------------------------------------------
+       * HISTORY PROTECTION
+       * -------------------------------------------------------
        */
 
       if (isHistoryView) {
@@ -524,8 +810,9 @@ export default function SuperAdminRequestReviewCard({
       }
 
       /*
-       * Current status must still be awaiting
-       * Super Administrator review.
+       * -------------------------------------------------------
+       * CURRENT WORKFLOW PROTECTION
+       * -------------------------------------------------------
        */
 
       if (!superAdminCanAct) {
@@ -535,7 +822,56 @@ export default function SuperAdminRequestReviewCard({
       }
 
       /*
-       * Reason is mandatory.
+       * -------------------------------------------------------
+       * DECISION PATH
+       * -------------------------------------------------------
+       */
+
+      if (!decisionMode) {
+        throw new Error(
+          "Please select a decision path.",
+        )
+      }
+
+      /*
+       * -------------------------------------------------------
+       * DECISION / MODE CONSISTENCY
+       * -------------------------------------------------------
+       */
+
+      if (
+        action === "reject" &&
+        decisionMode !== "reject"
+      ) {
+        throw new Error(
+          "Please select Reject Request before rejecting.",
+        )
+      }
+
+      if (
+        action === "adjust" &&
+        decisionMode !== "adjust"
+      ) {
+        throw new Error(
+          "Please select Adjust Quote before submitting an adjustment.",
+        )
+      }
+
+      if (
+        action === "accept" &&
+        decisionMode !== "admin" &&
+        decisionMode !== "ai" &&
+        decisionMode !== "negotiated"
+      ) {
+        throw new Error(
+          "Please select a valid approval path.",
+        )
+      }
+
+      /*
+       * -------------------------------------------------------
+       * REASON
+       * -------------------------------------------------------
        */
 
       const reason =
@@ -548,45 +884,168 @@ export default function SuperAdminRequestReviewCard({
       }
 
       /*
-       * Reject does not need quote amount validation.
+       * -------------------------------------------------------
+       * REJECT
+       * -------------------------------------------------------
        */
 
-      if (
-        action !== "reject"
-      ) {
-        const amount =
-          Number(form.amount)
+      if (action === "reject") {
+        const payload = {
+          decision_action: "reject",
 
-        if (
-          !Number.isFinite(
-            amount,
-          ) ||
-          amount <= 0
-        ) {
+          decision_source:
+            isNegotiationReview
+              ? "client_negotiated"
+              : "adjusted",
+
+          justification: {
+            reason,
+
+            notes:
+              form.notes.trim(),
+          },
+
+          metadata: {
+            reviewed_from:
+              "super_admin_dashboard",
+
+            decision_mode:
+              "reject",
+
+            request_status:
+              normalizedStatus,
+
+            negotiation_id:
+              isNegotiationReview
+                ? currentNegotiation?.id ??
+                  null
+                : null,
+          },
+        }
+
+        const response =
+          await fetch(
+            `/api/admin/requests/${request.id}/super-admin-review`,
+            {
+              method: "POST",
+
+              credentials: "include",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+
+                Accept:
+                  "application/json",
+              },
+
+              body: JSON.stringify(
+                payload,
+              ),
+            },
+          )
+
+        const data =
+          await response.json().catch(
+            () => ({}),
+          )
+
+        if (!response.ok) {
           throw new Error(
-            "Please enter a valid quote amount.",
+            data?.error ||
+              data?.message ||
+              "Super Administrator rejection failed.",
           )
         }
 
-        if (
-          !form.currency ||
-          !CURRENCIES.includes(
-            form.currency,
+        router.push(
+          "/dashboard/requests",
+        )
+
+        router.refresh()
+
+        return
+      }
+
+      /*
+       * -------------------------------------------------------
+       * AMOUNT
+       * -------------------------------------------------------
+       */
+
+      const amount =
+        Number(form.amount)
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        throw new Error(
+          "Please enter a valid quote amount.",
+        )
+      }
+
+      /*
+       * -------------------------------------------------------
+       * CURRENCY
+       * -------------------------------------------------------
+       */
+
+      const currency =
+        String(
+          form.currency || "",
+        )
+          .trim()
+          .toUpperCase()
+
+      if (
+        !CURRENCIES.includes(
+          currency,
+        )
+      ) {
+        throw new Error(
+          "Please select a valid quote currency.",
+        )
+      }
+
+      /*
+       * -------------------------------------------------------
+       * NEGOTIATION CURRENCY LOCK
+       * -------------------------------------------------------
+       *
+       * Negotiations remain in the client's currency.
+       */
+
+      if (
+        isNegotiationReview &&
+        currentNegotiation
+      ) {
+        const negotiationCurrency =
+          (
+            currentNegotiation.quote_currency ||
+            request.preferred_currency ||
+            "NGN"
           )
+            .trim()
+            .toUpperCase()
+
+        if (
+          currency !==
+          negotiationCurrency
         ) {
           throw new Error(
-            "Please select a valid quote currency.",
+            `Negotiated quote must remain in ${negotiationCurrency}.`,
           )
         }
       }
 
       /*
-       * Completion is required for
-       * accepted/adjusted quotes.
+       * -------------------------------------------------------
+       * COMPLETION
+       * -------------------------------------------------------
        */
 
       if (
-        action !== "reject" &&
         !form.estimated_completion
       ) {
         throw new Error(
@@ -595,46 +1054,70 @@ export default function SuperAdminRequestReviewCard({
       }
 
       /*
-       * =====================================================
-       * PAYLOAD
-       * =====================================================
+       * -------------------------------------------------------
+       * DECISION SOURCE
+       * -------------------------------------------------------
        */
 
-   const payload = {
-  decision_action: action,
+      const decisionSource =
+        decisionMode === "negotiated"
+          ? "client_negotiated"
+          : decisionMode === "admin"
+            ? "admin"
+            : decisionMode === "ai"
+              ? "ai"
+              : "adjusted"
 
-  decision_source:
-    decisionMode === "admin"
-      ? "admin"
-      : decisionMode === "ai"
-      ? "ai"
-      : "adjusted",
+      /*
+       * -------------------------------------------------------
+       * FINAL PAYLOAD
+       * -------------------------------------------------------
+       */
 
-  quote:
-    action === "reject"
-      ? undefined
-      : {
-          amount: Number(form.amount),
-          currency: form.currency,
+      const payload = {
+        decision_action: action,
+
+        decision_source:
+          decisionSource,
+
+        quote: {
+          amount,
+
+          currency,
+
           estimated_completion:
             form.estimated_completion,
         },
 
-  justification: {
-    reason,
-    notes: form.notes.trim(),
-  },
+        justification: {
+          reason,
 
-  metadata: {
-    reviewed_from:
-      "super_admin_dashboard",
-  },
-}
+          notes:
+            form.notes.trim(),
+        },
+
+        metadata: {
+          reviewed_from:
+            "super_admin_dashboard",
+
+          decision_mode:
+            decisionMode,
+
+          request_status:
+            normalizedStatus,
+
+          negotiation_id:
+            isNegotiationReview
+              ? currentNegotiation?.id ??
+                null
+              : null,
+        },
+      }
 
       /*
-       * =====================================================
+       * -------------------------------------------------------
        * API
-       * =====================================================
+       * -------------------------------------------------------
        */
 
       const response =
@@ -643,11 +1126,13 @@ export default function SuperAdminRequestReviewCard({
           {
             method: "POST",
 
-            credentials:
-              "include",
+            credentials: "include",
 
             headers: {
               "Content-Type":
+                "application/json",
+
+              Accept:
                 "application/json",
             },
 
@@ -657,29 +1142,23 @@ export default function SuperAdminRequestReviewCard({
           },
         )
 
-      let data: {
-        error?: string
-        message?: string
-      } = {}
-
-      try {
-        data =
-          await response.json()
-      } catch {
-        data = {}
-      }
+      const data =
+        await response.json().catch(
+          () => ({}),
+        )
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
-            data.message ||
+          data?.error ||
+            data?.message ||
             "Super Administrator review failed.",
         )
       }
 
       /*
-       * Return to active request
-       * list after final decision.
+       * -------------------------------------------------------
+       * SUCCESS
+       * -------------------------------------------------------
        */
 
       router.push(
@@ -688,6 +1167,11 @@ export default function SuperAdminRequestReviewCard({
 
       router.refresh()
     } catch (error) {
+      console.error(
+        "SUPER ADMIN REVIEW ERROR",
+        error,
+      )
+
       setMessage(
         error instanceof Error
           ? error.message
@@ -719,6 +1203,7 @@ export default function SuperAdminRequestReviewCard({
           </div>
 
           <div className="min-w-0 flex-1">
+
             <p className="font-semibold">
               Review Error
             </p>
@@ -726,6 +1211,7 @@ export default function SuperAdminRequestReviewCard({
             <p className="mt-1 break-words text-red-300/80">
               {message}
             </p>
+
           </div>
 
           <button
@@ -762,6 +1248,12 @@ export default function SuperAdminRequestReviewCard({
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] uppercase tracking-wider text-white/40">
                 Final Authority
               </span>
+
+              {isNegotiationReview && (
+                <span className="rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] uppercase tracking-wider text-yellow-300">
+                  Negotiation Review
+                </span>
+              )}
 
               {isHistoryView && (
                 <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[10px] uppercase tracking-wider text-amber-300">
@@ -855,12 +1347,39 @@ export default function SuperAdminRequestReviewCard({
           <div className="border-b border-[#143b28] p-5 md:px-6">
 
             <p className="text-[10px] uppercase tracking-wider text-white/30">
+              Preferred Currency
+            </p>
+
+            <p className="mt-2 text-sm font-semibold text-white">
+              {request.preferred_currency ||
+                "NGN"}
+            </p>
+
+          </div>
+
+          <div className="border-b border-[#143b28] p-5 md:border-r md:px-6">
+
+            <p className="text-[10px] uppercase tracking-wider text-white/30">
               Service Type
             </p>
 
             <p className="mt-2 break-words text-sm text-white">
               {request.service_type ||
                 "Not specified"}
+            </p>
+
+          </div>
+
+          <div className="border-b border-[#143b28] p-5 md:px-6">
+
+            <p className="text-[10px] uppercase tracking-wider text-white/30">
+              Status
+            </p>
+
+            <p className="mt-2 text-sm font-semibold uppercase text-[#20dc73]">
+              {statusLabel(
+                request.status,
+              )}
             </p>
 
           </div>
@@ -948,9 +1467,10 @@ export default function SuperAdminRequestReviewCard({
             <p className="mt-3 break-words text-xl font-bold text-white">
               {request.ai_price_estimate !=
               null
-                ? `USD ${Number(
+                ? formatMoney(
                     request.ai_price_estimate,
-                  ).toLocaleString()}`
+                    "USD",
+                  )
                 : "Pending"}
             </p>
 
@@ -1096,6 +1616,7 @@ export default function SuperAdminRequestReviewCard({
                   request.approved_quote_amount,
                 latestAdminQuote?.currency ??
                   request.approved_quote_currency ??
+                  request.preferred_currency ??
                   "USD",
               )}
             </p>
@@ -1119,16 +1640,13 @@ export default function SuperAdminRequestReviewCard({
           <div className="min-w-0 rounded-xl border border-[#143b28] bg-black/30 p-4">
 
             <p className="text-[10px] uppercase tracking-wider text-white/30">
-              Status
+              Quote Currency
             </p>
 
-            <p className="mt-2 text-sm font-semibold uppercase text-[#20dc73]">
-              {latestAdminQuote
-                ? statusLabel(
-                    latestAdminQuote.status ??
-                      "submitted",
-                  )
-                : "Pending"}
+            <p className="mt-2 text-lg font-semibold text-white">
+              {latestAdminQuote?.currency ||
+                request.approved_quote_currency ||
+                "USD"}
             </p>
 
           </div>
@@ -1159,9 +1677,10 @@ export default function SuperAdminRequestReviewCard({
             </p>
 
             <p className="mt-2 text-sm text-white">
-              {latestAdminQuote?.estimated_completion ||
-                request.approved_estimated_completion ||
-                "Not specified"}
+              {formatDate(
+                latestAdminQuote?.estimated_completion ||
+                  request.approved_estimated_completion,
+              )}
             </p>
 
           </div>
@@ -1169,6 +1688,189 @@ export default function SuperAdminRequestReviewCard({
         </div>
 
       </section>
+
+      {/* =====================================================
+          CURRENT NEGOTIATION
+          ===================================================== */}
+
+      {currentNegotiation && (
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-yellow-500/20 bg-[#06110f] shadow-lg">
+
+          <div className="border-b border-yellow-500/20 bg-yellow-500/5 px-5 py-5 md:px-6">
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+              <div>
+
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-yellow-300">
+                  Client Negotiation
+                </p>
+
+                <h3 className="mt-2 text-xl font-semibold text-white">
+                  Current Negotiation Cycle
+                </h3>
+
+                <p className="mt-1 text-sm text-white/40">
+                  The client requested a quote change.
+                  The Administrator has reviewed the request
+                  and submitted a recommendation.
+                </p>
+
+              </div>
+
+              <span className="shrink-0 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[9px] font-semibold uppercase tracking-wider text-yellow-300">
+                Round{" "}
+                {currentNegotiation.round_number ??
+                  "—"}
+              </span>
+
+            </div>
+
+          </div>
+
+          <div className="p-5 md:p-6">
+
+            <div className="grid min-w-0 gap-4 md:grid-cols-3">
+
+              {/* CLIENT REQUEST */}
+
+              <div className="rounded-xl border border-yellow-500/15 bg-yellow-500/[0.03] p-5">
+
+                <p className="text-[10px] uppercase tracking-wider text-yellow-300/60">
+                  Client Requested Quote
+                </p>
+
+                <p className="mt-3 break-words text-2xl font-bold text-yellow-300">
+                  {formatMoney(
+                    currentNegotiation.requested_budget,
+                    currentNegotiation.quote_currency ||
+                      request.preferred_currency ||
+                      "NGN",
+                  )}
+                </p>
+
+                <p className="mt-2 text-xs text-white/30">
+                  Client-proposed negotiation amount
+                </p>
+
+              </div>
+
+              {/* ADMIN RECOMMENDATION */}
+
+              <div className="rounded-xl border border-[#20dc73]/15 bg-[#20dc73]/[0.03] p-5">
+
+                <p className="text-[10px] uppercase tracking-wider text-[#20dc73]/60">
+                  Administrator Recommendation
+                </p>
+
+                <p className="mt-3 break-words text-2xl font-bold text-[#20dc73]">
+                  {formatMoney(
+                    currentNegotiation.revised_quote_amount ??
+                      currentNegotiation.requested_budget,
+                    currentNegotiation.quote_currency ||
+                      request.preferred_currency ||
+                      "NGN",
+                  )}
+                </p>
+
+                <p className="mt-2 text-xs text-white/30">
+                  Proposed amount for Super Administrator review
+                </p>
+
+              </div>
+
+              {/* CURRENCY */}
+
+              <div className="rounded-xl border border-[#143b28] bg-black/30 p-5">
+
+                <p className="text-[10px] uppercase tracking-wider text-white/30">
+                  Negotiation Currency
+                </p>
+
+                <p className="mt-3 text-xl font-bold text-white">
+                  {currentNegotiation.quote_currency ||
+                    request.preferred_currency ||
+                    "NGN"}
+                </p>
+
+                <p className="mt-2 text-xs text-white/30">
+                  Negotiations remain in the client's preferred currency.
+                </p>
+
+              </div>
+
+            </div>
+
+            {/* CLIENT REASON */}
+
+            {currentNegotiation.client_reason && (
+              <div className="mt-5">
+
+                <p className="text-[10px] uppercase tracking-wider text-white/30">
+                  Client Reason
+                </p>
+
+                <div className="mt-2 rounded-xl border border-white/5 bg-black/30 p-5">
+
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-7 text-white/70">
+                    {
+                      currentNegotiation.client_reason
+                    }
+                  </p>
+
+                </div>
+
+              </div>
+            )}
+
+            {/* CLIENT NOTES */}
+
+            {currentNegotiation.client_notes && (
+              <div className="mt-4">
+
+                <p className="text-[10px] uppercase tracking-wider text-white/30">
+                  Client Notes
+                </p>
+
+                <div className="mt-2 rounded-xl border border-white/5 bg-black/30 p-5">
+
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-7 text-white/70">
+                    {
+                      currentNegotiation.client_notes
+                    }
+                  </p>
+
+                </div>
+
+              </div>
+            )}
+
+            {/* ADMINISTRATOR RECOMMENDATION */}
+
+            {currentNegotiation.administrator_recommendation && (
+              <div className="mt-4">
+
+                <p className="text-[10px] uppercase tracking-wider text-white/30">
+                  Administrator Recommendation
+                </p>
+
+                <div className="mt-2 rounded-xl border border-[#20dc73]/10 bg-[#20dc73]/[0.02] p-5">
+
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-7 text-white/70">
+                    {
+                      currentNegotiation.administrator_recommendation
+                    }
+                  </p>
+
+                </div>
+
+              </div>
+            )}
+
+          </div>
+
+        </section>
+      )}
 
       {/* =====================================================
           COMPLETE QUOTE HISTORY
@@ -1194,11 +1896,14 @@ export default function SuperAdminRequestReviewCard({
 
         <div className="p-5 md:p-6">
 
-          {quoteHistory.length === 0 ? (
+          {quoteHistory.length ===
+          0 ? (
             <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-8 text-center">
+
               <p className="text-sm text-white/40">
                 No quote versions recorded.
               </p>
+
             </div>
           ) : (
             <div className="space-y-4">
@@ -1290,12 +1995,21 @@ export default function SuperAdminRequestReviewCard({
 
                     <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-white/5 pt-4 text-[10px] text-white/25">
 
+                      {quote.estimated_start && (
+                        <span>
+                          Start:{" "}
+                          {formatDate(
+                            quote.estimated_start,
+                          )}
+                        </span>
+                      )}
+
                       {quote.estimated_completion && (
                         <span>
                           Completion:{" "}
-                          {
-                            quote.estimated_completion
-                          }
+                          {formatDate(
+                            quote.estimated_completion,
+                          )}
                         </span>
                       )}
 
@@ -1458,6 +2172,25 @@ export default function SuperAdminRequestReviewCard({
                       </div>
                     )}
 
+                    {negotiation.revised_quote_amount !=
+                      null && (
+                      <div className="mt-5">
+
+                        <p className="text-[10px] uppercase tracking-wider text-white/30">
+                          Administrator Revised Quote
+                        </p>
+
+                        <p className="mt-2 text-lg font-bold text-[#20dc73]">
+                          {formatMoney(
+                            negotiation.revised_quote_amount,
+                            negotiation.quote_currency ||
+                              "USD",
+                          )}
+                        </p>
+
+                      </div>
+                    )}
+
                     {negotiation.owner_decision && (
                       <div className="mt-5 border-t border-[#143b28] pt-5">
 
@@ -1523,7 +2256,8 @@ export default function SuperAdminRequestReviewCard({
 
         <div className="p-5 md:p-6">
 
-          {auditHistory.length === 0 ? (
+          {auditHistory.length ===
+          0 ? (
             <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-8 text-center">
 
               <p className="text-sm text-white/40">
@@ -1598,19 +2332,53 @@ export default function SuperAdminRequestReviewCard({
 
       <section className="min-w-0 overflow-hidden rounded-2xl border border-[#143b28] bg-[#06110f] shadow-lg">
 
-        <div className="border-b border-[#143b28] px-5 py-5 md:px-6">
+        <div className="border-b border-[#143b28] bg-gradient-to-r from-[#20dc73]/5 via-transparent to-transparent px-5 py-5 md:px-6">
 
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#20dc73]">
-            Super Administrator History
-          </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
-          <h3 className="mt-2 text-xl font-semibold text-white">
-            Previous Final Authority Actions
-          </h3>
+            <div className="min-w-0">
 
-          <p className="mt-1 text-sm text-white/40">
-            Actions previously performed by the Super Administrator role.
-          </p>
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#20dc73]/20 bg-[#20dc73]/10 text-[#20dc73]">
+                  ✓
+                </div>
+
+                <div>
+
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#20dc73]">
+                    Super Administrator History
+                  </p>
+
+                  <h3 className="mt-1 text-xl font-semibold text-white">
+                    Previous Final Authority Actions
+                  </h3>
+
+                </div>
+
+              </div>
+
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/40">
+                A chronological record of decisions previously made
+                by the Super Administrator during the governance
+                lifecycle of this request.
+              </p>
+
+            </div>
+
+            <div className="shrink-0 rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+
+              <p className="text-[9px] uppercase tracking-[0.18em] text-white/30">
+                Recorded Actions
+              </p>
+
+              <p className="mt-1 text-lg font-bold text-white">
+                {superAdminHistory.length}
+              </p>
+
+            </div>
+
+          </div>
 
         </div>
 
@@ -1618,74 +2386,307 @@ export default function SuperAdminRequestReviewCard({
 
           {superAdminHistory.length ===
           0 ? (
-            <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-8 text-center">
 
-              <p className="text-sm text-white/40">
-                No Super Administrator decisions recorded yet.
+            <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 py-10 text-center">
+
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-xl text-white/30">
+                —
+              </div>
+
+              <h4 className="mt-4 text-sm font-semibold text-white/70">
+                No final authority actions yet
+              </h4>
+
+              <p className="mx-auto mt-2 max-w-md text-xs leading-6 text-white/30">
+                No Super Administrator decision has been recorded
+                for this request yet. Once a decision is made, it
+                will appear here as part of the permanent governance
+                record.
               </p>
 
             </div>
+
           ) : (
-            <div className="space-y-4">
 
-              {superAdminHistory.map(
-                (action) => (
-                  <div
-                    key={action.id}
-                    className="rounded-xl border border-[#143b28] bg-black/30 p-5"
-                  >
+            <div className="relative">
 
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="absolute left-[19px] top-3 bottom-3 hidden w-px bg-gradient-to-b from-[#20dc73]/40 via-[#143b28] to-transparent sm:block" />
 
-                      <div>
+              <div className="space-y-5">
 
-                        <p className="font-semibold text-white">
-                          {statusLabel(
-                            action.action,
+                {superAdminHistory.map(
+                  (event, index) => {
+
+                    const action =
+                      event.action
+                        ?.trim()
+                        .toLowerCase() || ""
+
+                    const isApproval =
+                      action.includes(
+                        "approved",
+                      ) ||
+                      action.includes(
+                        "approve",
+                      )
+
+                    const isRejection =
+                      action.includes(
+                        "rejected",
+                      ) ||
+                      action.includes(
+                        "reject",
+                      )
+
+                    const isAdjustment =
+                      action.includes(
+                        "adjusted",
+                      ) ||
+                      action.includes(
+                        "modified",
+                      )
+
+                    const actionTitle =
+                      isApproval
+                        ? "Quote Approved"
+                        : isRejection
+                          ? "Request Rejected"
+                          : isAdjustment
+                            ? "Quote Adjusted"
+                            : statusLabel(
+                                event.action,
+                              )
+
+                    const actionDescription =
+                      isApproval
+                        ? "The Super Administrator approved the current quote for the next stage of the workflow."
+                        : isRejection
+                          ? "The Super Administrator rejected the request during final governance review."
+                          : isAdjustment
+                            ? "The Super Administrator modified the quote before finalizing the workflow."
+                            : "A final authority action was recorded against this request."
+
+                    const reason =
+                      getAuditReason(
+                        event.details,
+                      )
+
+                    return (
+                      <div
+                        key={
+                          event.id
+                        }
+                        className="relative sm:pl-12"
+                      >
+
+                        <div className="absolute left-0 top-1 hidden h-10 w-10 items-center justify-center rounded-full border border-[#143b28] bg-[#06110f] sm:flex">
+
+                          <div
+                            className={[
+                              "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
+
+                              isRejection
+                                ? "bg-red-500/10 text-red-300"
+                                : isAdjustment
+                                  ? "bg-yellow-500/10 text-yellow-300"
+                                  : "bg-[#20dc73]/10 text-[#20dc73]",
+                            ].join(" ")}
+                          >
+
+                            {isRejection
+                              ? "×"
+                              : isAdjustment
+                                ? "↔"
+                                : "✓"}
+
+                          </div>
+
+                        </div>
+
+                        <div
+                          className={[
+                            "overflow-hidden rounded-2xl border bg-black/25 transition",
+
+                            isRejection
+                              ? "border-red-500/15 hover:border-red-500/30"
+                              : isAdjustment
+                                ? "border-yellow-500/15 hover:border-yellow-500/30"
+                                : "border-[#143b28] hover:border-[#20dc73]/25",
+                          ].join(" ")}
+                        >
+
+                          <div className="flex flex-col gap-4 border-b border-white/5 p-5 sm:flex-row sm:items-start sm:justify-between">
+
+                            <div className="min-w-0">
+
+                              <div className="flex flex-wrap items-center gap-2">
+
+                                <span
+                                  className={[
+                                    "rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em]",
+
+                                    isRejection
+                                      ? "border-red-500/20 bg-red-500/5 text-red-300"
+                                      : isAdjustment
+                                        ? "border-yellow-500/20 bg-yellow-500/5 text-yellow-300"
+                                        : "border-[#20dc73]/20 bg-[#20dc73]/5 text-[#20dc73]",
+                                  ].join(" ")}
+                                >
+                                  {isRejection
+                                    ? "Rejected"
+                                    : isAdjustment
+                                      ? "Adjusted"
+                                      : isApproval
+                                        ? "Approved"
+                                        : "Recorded"}
+                                </span>
+
+                                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[9px] uppercase tracking-wider text-white/30">
+                                  Final Authority
+                                </span>
+
+                                <span className="text-[10px] text-white/20">
+                                  Action{" "}
+                                  {index + 1}
+                                </span>
+
+                              </div>
+
+                              <h4 className="mt-3 break-words text-base font-semibold text-white">
+                                {actionTitle}
+                              </h4>
+
+                              <p className="mt-1 max-w-2xl text-xs leading-5 text-white/35">
+                                {
+                                  actionDescription
+                                }
+                              </p>
+
+                            </div>
+
+                            <div className="shrink-0 sm:text-right">
+
+                              <p className="text-[9px] uppercase tracking-[0.18em] text-white/25">
+                                Recorded
+                              </p>
+
+                              <p className="mt-1 text-xs font-medium text-white/50">
+                                {formatDate(
+                                  event.created_at,
+                                )}
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                          <div className="grid gap-5 p-5 md:grid-cols-2">
+
+                            <div className="min-w-0 md:col-span-2">
+
+                              <div className="flex items-center justify-between gap-3">
+
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/25">
+                                  Decision Reason
+                                </p>
+
+                                <span className="text-[9px] uppercase tracking-wider text-white/20">
+                                  Governance Record
+                                </span>
+
+                              </div>
+
+                              <div
+                                className={[
+                                  "mt-2 rounded-xl border p-4",
+
+                                  isRejection
+                                    ? "border-red-500/10 bg-red-500/[0.03]"
+                                    : isAdjustment
+                                      ? "border-yellow-500/10 bg-yellow-500/[0.03]"
+                                      : "border-[#143b28] bg-black/30",
+                                ].join(" ")}
+                              >
+
+                                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-7 text-white/65">
+                                  {reason}
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                            <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.015] p-4">
+
+                              <p className="text-[9px] uppercase tracking-[0.18em] text-white/25">
+                                Reviewing Authority
+                              </p>
+
+                              <p className="mt-2 break-all font-mono text-xs text-white/50">
+                                {event.actor_user_id ||
+                                  "System"}
+                              </p>
+
+                              <p className="mt-1 text-[10px] text-white/20">
+                                Super Administrator
+                              </p>
+
+                            </div>
+
+                            <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.015] p-4">
+
+                              <p className="text-[9px] uppercase tracking-[0.18em] text-white/25">
+                                Workflow Event
+                              </p>
+
+                              <p className="mt-2 break-words text-xs font-medium text-white/50">
+                                {statusLabel(
+                                  event.action,
+                                )}
+                              </p>
+
+                              <p className="mt-1 text-[10px] text-white/20">
+                                Immutable audit entry
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                          {event.details !=
+                            null && (
+                            <details className="border-t border-white/5">
+
+                              <summary className="cursor-pointer select-none px-5 py-4 text-[10px] uppercase tracking-[0.18em] text-white/25 transition hover:text-white/50">
+                                View audit metadata
+                              </summary>
+
+                              <div className="px-5 pb-5">
+
+                                <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-xl border border-white/5 bg-black/60 p-4 font-mono text-[10px] leading-5 text-white/35">
+                                  {typeof event.details ===
+                                  "string"
+                                    ? event.details
+                                    : JSON.stringify(
+                                        event.details,
+                                        null,
+                                        2,
+                                      )}
+                                </pre>
+
+                              </div>
+
+                            </details>
                           )}
-                        </p>
 
-                        <p className="mt-1 text-xs text-white/30">
-                          {formatDate(
-                            action.created_at,
-                          )}
-                        </p>
+                        </div>
 
                       </div>
+                    )
+                  },
+                )}
 
-                    </div>
-
-                    <div className="mt-5">
-
-                      <p className="text-xs uppercase tracking-wider text-white/30">
-                        Reason
-                      </p>
-
-                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-white/70">
-                        {getAuditReason(
-                          action.details,
-                        )}
-                      </p>
-
-                    </div>
-
-                    {action.details !=
-                      null && (
-                      <pre className="mt-4 overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-white/5 bg-black/60 p-4 font-mono text-xs leading-5 text-white/40">
-                        {typeof action.details ===
-                        "string"
-                          ? action.details
-                          : JSON.stringify(
-                              action.details,
-                              null,
-                              2,
-                            )}
-                      </pre>
-                    )}
-
-                  </div>
-                ),
-              )}
+              </div>
 
             </div>
           )}
@@ -1696,23 +2697,6 @@ export default function SuperAdminRequestReviewCard({
 
       {/* =====================================================
           FINAL AUTHORITY ACTION AREA
-          =====================================================
-          
-          THIS IS THE CRITICAL PART.
-
-          Exactly ONE condition controls the action form:
-
-          1. History view:
-             show historical message only
-
-          2. Current pending review:
-             show complete active form
-
-          3. Everything else:
-             show completed/no-action state
-
-          There is NO duplicate decision form outside
-          this conditional.
           ===================================================== */}
 
       <section className="min-w-0 overflow-hidden rounded-2xl border border-[#143b28] bg-[#06110f] shadow-lg">
@@ -1728,7 +2712,9 @@ export default function SuperAdminRequestReviewCard({
           </h3>
 
           <p className="mt-1 text-sm text-white/40">
-            Final governance decision for the request.
+            {isNegotiationReview
+              ? "Final governance decision for the current client negotiation."
+              : "Final governance decision for the request."}
           </p>
 
         </div>
@@ -1799,6 +2785,7 @@ export default function SuperAdminRequestReviewCard({
                         {formatMoney(
                           request.approved_quote_amount,
                           request.approved_quote_currency ||
+                            request.preferred_currency ||
                             "USD",
                         )}
                       </p>
@@ -1812,9 +2799,9 @@ export default function SuperAdminRequestReviewCard({
                       </p>
 
                       <p className="mt-2 text-sm text-white/70">
-                        {request.approved_estimated_completion ||
-                          latestAdminQuote?.estimated_completion ||
-                          "Not specified"}
+                        {formatDate(
+                          request.approved_estimated_completion,
+                        )}
                       </p>
 
                     </div>
@@ -1843,252 +2830,407 @@ export default function SuperAdminRequestReviewCard({
 
           ) : superAdminCanAct ? (
 
-            /*
-             * =================================================
-             * ACTIVE FORM
-             * =================================================
-             */
-
             <>
 
-              {/* ===============================================
-                  DECISION SOURCE
-                  =============================================== */}
+              {/* =================================================
+                  DECISION PATH
+                  ================================================= */}
 
               <div>
 
                 <div className="mb-4">
 
                   <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
-                    Select Decision Path
+                    {isNegotiationReview
+                      ? "Negotiation Decision"
+                      : "Select Decision Path"}
                   </p>
 
                   <p className="mt-1 text-sm text-white/30">
-                    Choose the recommendation you want to act on,
-                    or create a custom adjustment.
+                    {isNegotiationReview
+                      ? "Choose whether to accept the negotiated recommendation, adjust it, or reject the request."
+                      : "Choose the recommendation you want to act on, or create a custom adjustment."}
                   </p>
 
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {isNegotiationReview ? (
 
-                  {/* ADMIN */}
+                  <div className="grid gap-3 md:grid-cols-3">
 
-                  <button
-                    type="button"
-                    disabled={
-                      loading
-                    }
-                    onClick={
-                      selectAdministratorQuote
-                    }
-                    className={[
-                      "group min-w-0 rounded-xl border p-4 text-left transition",
-                      decisionMode ===
-                        "admin"
-                        ? "border-[#20dc73]/50 bg-[#20dc73]/10 shadow-lg shadow-[#20dc73]/5"
-                        : "border-[#143b28] bg-black/30 hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5",
-                    ].join(
-                      " ",
-                    )}
-                  >
+                    {/* NEGOTIATED */}
 
-                    <div className="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      disabled={
+                        loading
+                      }
+                      onClick={
+                        selectNegotiatedRecommendation
+                      }
+                      className={[
+                        "group min-w-0 rounded-xl border p-5 text-left transition",
+                        decisionMode ===
+                          "negotiated"
+                          ? "border-[#20dc73]/50 bg-[#20dc73]/10 shadow-lg shadow-[#20dc73]/5"
+                          : "border-[#143b28] bg-black/30 hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5",
+                      ].join(" ")}
+                    >
 
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-300">
-                        A
+                      <div className="flex items-start justify-between gap-3">
+
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#20dc73]/10 text-[#20dc73]">
+                          ✓
+                        </div>
+
+                        {decisionMode ===
+                          "negotiated" && (
+                          <span className="text-[#20dc73]">
+                            ✓
+                          </span>
+                        )}
+
                       </div>
 
-                      {decisionMode ===
-                        "admin" && (
-                        <span className="text-[#20dc73]">
-                          ✓
-                        </span>
-                      )}
+                      <p className="mt-4 font-semibold text-white">
+                        Accept Negotiated Recommendation
+                      </p>
 
-                    </div>
+                      <p className="mt-1 text-xs leading-5 text-white/35">
+                        Accept the Administrator's recommendation
+                        after reviewing the client's requested change.
+                      </p>
 
-                    <p className="mt-4 font-semibold text-white">
-                      Accept Administrator
-                    </p>
+                      <p className="mt-4 break-words text-lg font-bold text-[#20dc73]">
+                        {formatMoney(
+                          currentNegotiation?.revised_quote_amount ??
+                            currentNegotiation?.requested_budget ??
+                            latestAdminQuote?.price ??
+                            request.approved_quote_amount,
+                          currentNegotiation?.quote_currency ||
+                            request.preferred_currency ||
+                            "NGN",
+                        )}
+                      </p>
 
-                    <p className="mt-1 text-xs leading-5 text-white/35">
-                      Use the administrator's submitted quote.
-                    </p>
+                    </button>
 
-                    <p className="mt-3 break-words text-sm font-bold text-white/80">
-                      {formatMoney(
-                        latestAdminQuote?.price ??
-                          request.approved_quote_amount,
-                        latestAdminQuote?.currency ??
-                          request.approved_quote_currency ??
-                          "USD",
-                      )}
-                    </p>
+                    {/* ADJUST */}
 
-                  </button>
+                    <button
+                      type="button"
+                      disabled={
+                        loading
+                      }
+                      onClick={
+                        selectAdjustment
+                      }
+                      className={[
+                        "group min-w-0 rounded-xl border p-5 text-left transition",
+                        decisionMode ===
+                          "adjust"
+                          ? "border-yellow-500/50 bg-yellow-500/10"
+                          : "border-[#143b28] bg-black/30 hover:border-yellow-500/30 hover:bg-yellow-500/5",
+                      ].join(" ")}
+                    >
 
-                  {/* AI */}
+                      <div className="flex items-start justify-between gap-3">
 
-                  <button
-                    type="button"
-                    disabled={
-                      loading
-                    }
-                    onClick={
-                      selectAIQuote
-                    }
-                    className={[
-                      "group min-w-0 rounded-xl border p-4 text-left transition",
-                      decisionMode ===
-                        "ai"
-                        ? "border-[#20dc73]/50 bg-[#20dc73]/10 shadow-lg shadow-[#20dc73]/5"
-                        : "border-[#143b28] bg-black/30 hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5",
-                    ].join(
-                      " ",
-                    )}
-                  >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-yellow-500/10 text-yellow-300">
+                          ↔
+                        </div>
 
-                    <div className="flex items-start justify-between gap-3">
+                        {decisionMode ===
+                          "adjust" && (
+                          <span className="text-yellow-300">
+                            ✓
+                          </span>
+                        )}
 
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-300">
-                        AI
                       </div>
 
-                      {decisionMode ===
-                        "ai" && (
-                        <span className="text-[#20dc73]">
-                          ✓
-                        </span>
-                      )}
+                      <p className="mt-4 font-semibold text-white">
+                        Adjust Negotiated Quote
+                      </p>
 
-                    </div>
+                      <p className="mt-1 text-xs leading-5 text-white/35">
+                        Set a different final amount while
+                        remaining in the client's currency.
+                      </p>
 
-                    <p className="mt-4 font-semibold text-white">
-                      Accept AI Recommendation
-                    </p>
+                      <p className="mt-4 text-sm font-bold text-yellow-300">
+                        Custom adjustment
+                      </p>
 
-                    <p className="mt-1 text-xs leading-5 text-white/35">
-                      Use the automated USD estimate.
-                    </p>
+                    </button>
 
-                    <p className="mt-3 break-words text-sm font-bold text-white/80">
-                      {formatMoney(
-                        request.ai_price_estimate,
-                        "USD",
-                      )}
-                    </p>
+                    {/* REJECT */}
 
-                  </button>
+                    <button
+                      type="button"
+                      disabled={
+                        loading
+                      }
+                      onClick={
+                        selectReject
+                      }
+                      className={[
+                        "group min-w-0 rounded-xl border p-5 text-left transition",
+                        decisionMode ===
+                          "reject"
+                          ? "border-red-500/50 bg-red-500/10"
+                          : "border-[#143b28] bg-black/30 hover:border-red-500/30 hover:bg-red-500/5",
+                      ].join(" ")}
+                    >
 
-                  {/* ADJUST */}
+                      <div className="flex items-start justify-between gap-3">
 
-                  <button
-                    type="button"
-                    disabled={
-                      loading
-                    }
-                    onClick={
-                      selectAdjustment
-                    }
-                    className={[
-                      "group min-w-0 rounded-xl border p-4 text-left transition",
-                      decisionMode ===
-                        "adjust"
-                        ? "border-[#20dc73]/50 bg-[#20dc73]/10 shadow-lg shadow-[#20dc73]/5"
-                        : "border-[#143b28] bg-black/30 hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5",
-                    ].join(
-                      " ",
-                    )}
-                  >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-300">
+                          ×
+                        </div>
 
-                    <div className="flex items-start justify-between gap-3">
+                        {decisionMode ===
+                          "reject" && (
+                          <span className="text-red-300">
+                            ✓
+                          </span>
+                        )}
 
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-yellow-500/10 text-yellow-300">
-                        ↔
                       </div>
 
-                      {decisionMode ===
-                        "adjust" && (
-                        <span className="text-[#20dc73]">
-                          ✓
-                        </span>
-                      )}
+                      <p className="mt-4 font-semibold text-white">
+                        Reject Request
+                      </p>
 
-                    </div>
+                      <p className="mt-1 text-xs leading-5 text-white/35">
+                        Reject the request during final governance review.
+                      </p>
 
-                    <p className="mt-4 font-semibold text-white">
-                      Adjust Quote
-                    </p>
+                      <p className="mt-4 text-sm font-bold text-red-300">
+                        Final rejection
+                      </p>
 
-                    <p className="mt-1 text-xs leading-5 text-white/35">
-                      Set a custom amount, currency,
-                      date and reasoning.
-                    </p>
+                    </button>
 
-                    <p className="mt-3 text-sm font-bold text-yellow-300">
-                      Custom
-                    </p>
+                  </div>
 
-                  </button>
+                ) : (
 
-                  {/* REJECT */}
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 
-                  <button
-                    type="button"
-                    disabled={
-                      loading
-                    }
-                    onClick={
-                      selectReject
-                    }
-                    className={[
-                      "group min-w-0 rounded-xl border p-4 text-left transition",
-                      decisionMode ===
-                        "reject"
-                        ? "border-red-500/50 bg-red-500/10"
-                        : "border-[#143b28] bg-black/30 hover:border-red-500/30 hover:bg-red-500/5",
-                    ].join(
-                      " ",
-                    )}
-                  >
+                    {/* ADMINISTRATOR */}
 
-                    <div className="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      disabled={
+                        loading
+                      }
+                      onClick={
+                        selectAdministratorQuote
+                      }
+                      className={[
+                        "group min-w-0 rounded-xl border p-4 text-left transition",
+                        decisionMode ===
+                          "admin"
+                          ? "border-[#20dc73]/50 bg-[#20dc73]/10 shadow-lg shadow-[#20dc73]/5"
+                          : "border-[#143b28] bg-black/30 hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5",
+                      ].join(" ")}
+                    >
 
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-300">
-                        ×
+                      <div className="flex items-start justify-between gap-3">
+
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-300">
+                          A
+                        </div>
+
+                        {decisionMode ===
+                          "admin" && (
+                          <span className="text-[#20dc73]">
+                            ✓
+                          </span>
+                        )}
+
                       </div>
 
-                      {decisionMode ===
-                        "reject" && (
-                        <span className="text-red-300">
-                          ✓
-                        </span>
-                      )}
+                      <p className="mt-4 font-semibold text-white">
+                        Accept Administrator
+                      </p>
 
-                    </div>
+                      <p className="mt-1 text-xs leading-5 text-white/35">
+                        Use the Administrator's submitted quote.
+                      </p>
 
-                    <p className="mt-4 font-semibold text-white">
-                      Reject Request
-                    </p>
+                      <p className="mt-3 break-words text-sm font-bold text-white/80">
+                        {formatMoney(
+                          latestAdminQuote?.price ??
+                            request.approved_quote_amount,
+                          latestAdminQuote?.currency ??
+                            request.approved_quote_currency ??
+                            "USD",
+                        )}
+                      </p>
 
-                    <p className="mt-1 text-xs leading-5 text-white/35">
-                      Decline the proposed quote and request.
-                    </p>
+                    </button>
 
-                    <p className="mt-3 text-sm font-bold text-red-300">
-                      Final rejection
-                    </p>
+                    {/* AI */}
 
-                  </button>
+                    <button
+                      type="button"
+                      disabled={
+                        loading
+                      }
+                      onClick={
+                        selectAIQuote
+                      }
+                      className={[
+                        "group min-w-0 rounded-xl border p-4 text-left transition",
+                        decisionMode ===
+                          "ai"
+                          ? "border-[#20dc73]/50 bg-[#20dc73]/10 shadow-lg shadow-[#20dc73]/5"
+                          : "border-[#143b28] bg-black/30 hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5",
+                      ].join(" ")}
+                    >
 
-                </div>
+                      <div className="flex items-start justify-between gap-3">
+
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-300">
+                          AI
+                        </div>
+
+                        {decisionMode ===
+                          "ai" && (
+                          <span className="text-[#20dc73]">
+                            ✓
+                          </span>
+                        )}
+
+                      </div>
+
+                      <p className="mt-4 font-semibold text-white">
+                        Accept AI Recommendation
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-white/35">
+                        Use the automated USD estimate.
+                      </p>
+
+                      <p className="mt-3 break-words text-sm font-bold text-white/80">
+                        {formatMoney(
+                          request.ai_price_estimate ??
+                            latestAIQuote?.price,
+                          latestAIQuote?.currency ||
+                            request.ai_price_currency ||
+                            "USD",
+                        )}
+                      </p>
+
+                    </button>
+
+                    {/* ADJUST */}
+
+                    <button
+                      type="button"
+                      disabled={
+                        loading
+                      }
+                      onClick={
+                        selectAdjustment
+                      }
+                      className={[
+                        "group min-w-0 rounded-xl border p-4 text-left transition",
+                        decisionMode ===
+                          "adjust"
+                          ? "border-yellow-500/50 bg-yellow-500/10"
+                          : "border-[#143b28] bg-black/30 hover:border-yellow-500/30 hover:bg-yellow-500/5",
+                      ].join(" ")}
+                    >
+
+                      <div className="flex items-start justify-between gap-3">
+
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-yellow-500/10 text-yellow-300">
+                          ↔
+                        </div>
+
+                        {decisionMode ===
+                          "adjust" && (
+                          <span className="text-yellow-300">
+                            ✓
+                          </span>
+                        )}
+
+                      </div>
+
+                      <p className="mt-4 font-semibold text-white">
+                        Adjust Quote
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-white/35">
+                        Set a custom amount, currency, date and reasoning.
+                      </p>
+
+                      <p className="mt-3 text-sm font-bold text-yellow-300">
+                        Custom
+                      </p>
+
+                    </button>
+
+                    {/* REJECT */}
+
+                    <button
+                      type="button"
+                      disabled={
+                        loading
+                      }
+                      onClick={
+                        selectReject
+                      }
+                      className={[
+                        "group min-w-0 rounded-xl border p-4 text-left transition",
+                        decisionMode ===
+                          "reject"
+                          ? "border-red-500/50 bg-red-500/10"
+                          : "border-[#143b28] bg-black/30 hover:border-red-500/30 hover:bg-red-500/5",
+                      ].join(" ")}
+                    >
+
+                      <div className="flex items-start justify-between gap-3">
+
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-300">
+                          ×
+                        </div>
+
+                        {decisionMode ===
+                          "reject" && (
+                          <span className="text-red-300">
+                            ✓
+                          </span>
+                        )}
+
+                      </div>
+
+                      <p className="mt-4 font-semibold text-white">
+                        Reject Request
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-white/35">
+                        Decline the request at final governance review.
+                      </p>
+
+                      <p className="mt-3 text-sm font-bold text-red-300">
+                        Final rejection
+                      </p>
+
+                    </button>
+
+                  </div>
+
+                )}
 
               </div>
 
-              {/* ===============================================
+              {/* =================================================
                   DECISION EDITOR
-                  =============================================== */}
+                  ================================================= */}
 
               <div className="rounded-2xl border border-[#143b28] bg-black/30">
 
@@ -2103,9 +3245,11 @@ export default function SuperAdminRequestReviewCard({
                       </p>
 
                       <p className="mt-1 font-semibold text-white">
-
                         {decisionMode ===
-                        "admin"
+                        "negotiated"
+                          ? "Negotiated Recommendation"
+                          : decisionMode ===
+                            "admin"
                           ? "Administrator Quote"
                           : decisionMode ===
                             "ai"
@@ -2117,16 +3261,25 @@ export default function SuperAdminRequestReviewCard({
                             "reject"
                           ? "Rejection"
                           : "Select a decision path above"}
-
                       </p>
 
                     </div>
 
                     {decisionMode && (
-                      <span className="rounded-full border border-[#20dc73]/20 bg-[#20dc73]/5 px-3 py-1 text-[9px] font-semibold uppercase tracking-wider text-[#20dc73]">
-                        {
-                          decisionMode
-                        }
+                      <span
+                        className={[
+                          "rounded-full px-3 py-1 text-[9px] font-semibold uppercase tracking-wider",
+
+                          decisionMode ===
+                          "reject"
+                            ? "border border-red-500/20 bg-red-500/5 text-red-300"
+                            : decisionMode ===
+                              "adjust"
+                            ? "border border-yellow-500/20 bg-yellow-500/5 text-yellow-300"
+                            : "border border-[#20dc73]/20 bg-[#20dc73]/5 text-[#20dc73]",
+                        ].join(" ")}
+                      >
+                        {decisionMode}
                       </span>
                     )}
 
@@ -2141,12 +3294,14 @@ export default function SuperAdminRequestReviewCard({
                   <label className="min-w-0 text-sm text-white/60">
 
                     <span className="mb-2 block text-[10px] uppercase tracking-wider text-white/30">
-                      Approved Quote Amount
+                      {isNegotiationReview
+                        ? "Final Negotiated Amount"
+                        : "Approved Quote Amount"}
                     </span>
 
                     <input
                       type="number"
-                      min="0"
+                      min="0.01"
                       step="0.01"
                       value={
                         form.amount
@@ -2185,53 +3340,73 @@ export default function SuperAdminRequestReviewCard({
                       Currency
                     </span>
 
-                    <select
-                      value={
-                        form.currency
-                      }
-                      disabled={
-                        loading ||
-                        decisionMode ===
-                          "reject"
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        setForm(
+                    {isNegotiationReview ? (
+
+                      <div className="flex h-12 items-center rounded-xl border border-yellow-500/20 bg-yellow-500/[0.04] px-4">
+
+                        <span className="font-semibold text-yellow-300">
+                          {form.currency}
+                        </span>
+
+                      </div>
+
+                    ) : (
+
+                      <select
+                        value={
+                          form.currency
+                        }
+                        disabled={
+                          loading ||
+                          decisionMode ===
+                            "reject"
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setForm(
+                            (
+                              current,
+                            ) => ({
+                              ...current,
+                              currency:
+                                event
+                                  .target
+                                  .value,
+                            }),
+                          )
+                        }
+                        className="h-12 w-full min-w-0 rounded-xl border border-[#143b28] bg-black px-4 text-sm font-semibold text-white outline-none transition focus:border-[#20dc73] focus:ring-2 focus:ring-[#20dc73]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+
+                        {CURRENCIES.map(
                           (
-                            current,
-                          ) => ({
-                            ...current,
-                            currency:
-                              event
-                                .target
-                                .value,
-                          }),
-                        )
-                      }
-                      className="h-12 w-full min-w-0 rounded-xl border border-[#143b28] bg-black px-4 text-sm font-semibold text-white outline-none transition focus:border-[#20dc73] focus:ring-2 focus:ring-[#20dc73]/10 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
+                            currency,
+                          ) => (
+                            <option
+                              key={
+                                currency
+                              }
+                              value={
+                                currency
+                              }
+                            >
+                              {
+                                currency
+                              }
+                            </option>
+                          ),
+                        )}
 
-                      {CURRENCIES.map(
-                        (
-                          currency,
-                        ) => (
-                          <option
-                            key={
-                              currency
-                            }
-                            value={
-                              currency
-                            }
-                          >
-                            {
-                              currency
-                            }
-                          </option>
-                        ),
-                      )}
+                      </select>
 
-                    </select>
+                    )}
+
+                    {isNegotiationReview && (
+                      <p className="mt-2 text-xs text-yellow-300/50">
+                        Negotiation currency is fixed to the client's preferred currency.
+                      </p>
+                    )}
 
                   </label>
 
@@ -2306,7 +3481,10 @@ export default function SuperAdminRequestReviewCard({
                       rows={5}
                       placeholder={
                         decisionMode ===
-                        "reject"
+                        "negotiated"
+                          ? "Explain why the negotiated recommendation is being accepted..."
+                          : decisionMode ===
+                            "reject"
                           ? "Explain why this request is being rejected..."
                           : "Explain the final pricing and operational decision..."
                       }
@@ -2356,21 +3534,23 @@ export default function SuperAdminRequestReviewCard({
 
               </div>
 
-              {/* ===============================================
+              {/* =================================================
                   DECISION SUMMARY
-                  =============================================== */}
+                  ================================================= */}
 
               {decisionMode && (
                 <div
                   className={[
                     "rounded-xl border p-4",
+
                     decisionMode ===
                     "reject"
                       ? "border-red-500/20 bg-red-500/5"
+                      : decisionMode ===
+                        "adjust"
+                      ? "border-yellow-500/20 bg-yellow-500/5"
                       : "border-[#20dc73]/20 bg-[#20dc73]/5",
-                  ].join(
-                    " ",
-                  )}
+                  ].join(" ")}
                 >
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2382,9 +3562,11 @@ export default function SuperAdminRequestReviewCard({
                       </p>
 
                       <p className="mt-1 break-words text-sm font-semibold text-white">
-
                         {decisionMode ===
-                        "admin"
+                        "negotiated"
+                          ? "Accept Negotiated Recommendation"
+                          : decisionMode ===
+                            "admin"
                           ? "Accept Administrator Quote"
                           : decisionMode ===
                             "ai"
@@ -2393,7 +3575,6 @@ export default function SuperAdminRequestReviewCard({
                             "adjust"
                           ? "Submit Adjusted Quote"
                           : "Reject Request"}
-
                       </p>
 
                     </div>
@@ -2407,9 +3588,13 @@ export default function SuperAdminRequestReviewCard({
                       <p
                         className={[
                           "mt-1 text-lg font-bold",
+
                           decisionMode ===
                           "reject"
                             ? "text-red-300"
+                            : decisionMode ===
+                              "adjust"
+                            ? "text-yellow-300"
                             : "text-[#20dc73]",
                         ].join(
                           " ",
@@ -2433,9 +3618,9 @@ export default function SuperAdminRequestReviewCard({
                 </div>
               )}
 
-              {/* ===============================================
+              {/* =================================================
                   ACTIONS
-                  =============================================== */}
+                  ================================================= */}
 
               <div className="flex flex-col-reverse gap-3 border-t border-[#143b28] pt-6 sm:flex-row sm:flex-wrap sm:justify-end">
 
@@ -2478,7 +3663,9 @@ export default function SuperAdminRequestReviewCard({
                   decisionMode ===
                     "adjust"
                     ? "Adjusting..."
-                    : "Submit Adjustment"}
+                    : isNegotiationReview
+                      ? "Submit Negotiated Adjustment"
+                      : "Submit Adjustment"}
                 </button>
 
                 <button
@@ -2489,7 +3676,9 @@ export default function SuperAdminRequestReviewCard({
                       decisionMode ===
                         "admin" ||
                       decisionMode ===
-                        "ai"
+                        "ai" ||
+                      decisionMode ===
+                        "negotiated"
                     )
                   }
                   onClick={() =>
@@ -2504,9 +3693,14 @@ export default function SuperAdminRequestReviewCard({
                     decisionMode ===
                       "admin" ||
                     decisionMode ===
-                      "ai"
+                      "ai" ||
+                    decisionMode ===
+                      "negotiated"
                   )
                     ? "Approving..."
+                    : decisionMode ===
+                      "negotiated"
+                    ? "Accept Negotiated Recommendation"
                     : decisionMode ===
                       "admin"
                     ? "Accept Administrator Quote"
@@ -2593,6 +3787,7 @@ export default function SuperAdminRequestReviewCard({
                         {formatMoney(
                           request.approved_quote_amount,
                           request.approved_quote_currency ||
+                            request.preferred_currency ||
                             "USD",
                         )}
                       </p>
@@ -2606,9 +3801,9 @@ export default function SuperAdminRequestReviewCard({
                       </p>
 
                       <p className="mt-2 text-sm text-white/70">
-                        {request.approved_estimated_completion ||
-                          latestAdminQuote?.estimated_completion ||
-                          "Not specified"}
+                        {formatDate(
+                          request.approved_estimated_completion,
+                        )}
                       </p>
 
                     </div>

@@ -10,6 +10,17 @@ type RouteContext = {
   params: Promise<{ id: string }>
 }
 
+type DecisionAction =
+  | "accept"
+  | "adjust"
+  | "reject"
+
+type DecisionSource =
+  | "admin"
+  | "ai"
+  | "adjusted"
+  | "client_negotiated"
+
 function isSuperAdministratorRole(
   role: string | null | undefined,
 ): boolean {
@@ -19,8 +30,12 @@ function isSuperAdministratorRole(
       .toLowerCase()
 
   return (
-    normalized === "super_administrator" ||
-    normalized === "super-administrator"
+    normalized ===
+      "super_administrator" ||
+    normalized ===
+      "super-administrator" ||
+    normalized ===
+      "super_admin"
   )
 }
 
@@ -56,6 +71,12 @@ export async function POST(
         },
       )
     }
+
+    /*
+     * =====================================================
+     * ROLE
+     * =====================================================
+     */
 
     if (
       !isSuperAdministratorRole(
@@ -100,7 +121,10 @@ export async function POST(
      * =====================================================
      */
 
-    let body: Record<string, any>
+    let body: Record<
+      string,
+      unknown
+    >
 
     try {
       body =
@@ -121,13 +145,26 @@ export async function POST(
      * =====================================================
      * ACTION
      * =====================================================
+     *
+     * Accept:
+     *   Administrator quote
+     *   AI quote
+     *   Negotiated quote
+     *
+     * Adjust:
+     *   Super Administrator changes quote
+     *
+     * Reject:
+     *   Super Administrator rejects request
      */
 
     const rawAction =
       cleanString(
-        body.decision_action ||
+        body.decision_action ??
           body.action,
-      ).toLowerCase()
+      ).toLowerCase() as
+        | DecisionAction
+        | ""
 
     if (
       rawAction !== "accept" &&
@@ -145,55 +182,94 @@ export async function POST(
       )
     }
 
- /*
-  * =====================================================
-  * DECISION SOURCE
-  * =====================================================
-  */
+    /*
+     * =====================================================
+     * DECISION SOURCE
+     * =====================================================
+     *
+     * admin
+     * ai
+     * adjusted
+     * client_negotiated
+     */
 
-const decisionSource =
-  cleanString(
-    body.decision_source,
-  ).toLowerCase() || null
+    const decisionSourceRaw =
+      cleanString(
+        body.decision_source,
+      ).toLowerCase()
 
-if (
-  decisionSource !== null &&
-  decisionSource !== "admin" &&
-  decisionSource !== "ai" &&
-  decisionSource !== "adjusted"
-) {
-  return NextResponse.json(
-    {
-      error:
-        "Invalid decision source. Use admin, ai, or adjusted.",
-    },
-    {
-      status: 400,
-    },
-  )
-}
+    const decisionSource =
+      decisionSourceRaw === ""
+        ? null
+        : (
+            decisionSourceRaw as
+              | DecisionSource
+          )
+
+    if (
+      decisionSource !== null &&
+      decisionSource !== "admin" &&
+      decisionSource !== "ai" &&
+      decisionSource !== "adjusted" &&
+      decisionSource !==
+        "client_negotiated"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid decision source. Use admin, ai, adjusted, or client_negotiated.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     /*
      * =====================================================
      * AMOUNT
-     * ===================================================== */
+     * =====================================================
+     */
+
+    const quoteObject =
+      typeof body.quote ===
+        "object" &&
+      body.quote !== null
+        ? (
+            body.quote as Record<
+              string,
+              unknown
+            >
+          )
+        : null
 
     const amountValue =
-      body.quote?.amount ??
+      quoteObject?.amount ??
       body.amount
 
     const amount =
-      amountValue === null ||
-      amountValue === undefined ||
+      amountValue ===
+        null ||
+      amountValue ===
+        undefined ||
       amountValue === ""
         ? null
-        : Number(amountValue)
+        : Number(
+            amountValue,
+          )
+
+    /*
+     * Reject does not require
+     * a quote amount.
+     */
 
     if (
       rawAction !== "reject" &&
       (
         amount === null ||
-        !Number.isFinite(amount) ||
+        !Number.isFinite(
+          amount,
+        ) ||
         amount <= 0
       )
     ) {
@@ -215,7 +291,7 @@ if (
      */
 
     const currencyValue =
-      body.quote?.currency ??
+      quoteObject?.currency ??
       body.currency
 
     const currency =
@@ -224,21 +300,89 @@ if (
       ).toUpperCase() || null
 
     /*
+     * A quote decision must always
+     * specify a currency except rejection.
+     */
+
+    if (
+      rawAction !== "reject" &&
+      !currency
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Quote currency is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * =====================================================
+     * NEGOTIATED CURRENCY RULE
+     * =====================================================
+     *
+     * client_negotiated means the quote stays in the
+     * client's negotiation currency.
+     *
+     * The actual authoritative verification is performed
+     * by reviewQuoteAsSuperAdmin().
+     *
+     * This route simply makes the intent explicit.
+     */
+
+    if (
+      decisionSource ===
+        "client_negotiated" &&
+      rawAction !== "reject" &&
+      !currency
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Negotiated decisions require the client's negotiation currency.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
      * =====================================================
      * JUSTIFICATION
-     * ===================================================== */
+     * =====================================================
+     */
+
+    const justificationObject =
+      typeof body.justification ===
+        "object" &&
+      body.justification !== null
+        ? (
+            body.justification as Record<
+              string,
+              unknown
+            >
+          )
+        : null
 
     const reason =
       cleanString(
-        body.justification?.reason ??
+        justificationObject?.reason ??
           body.reason,
       )
 
     const notes =
       cleanString(
-        body.justification?.notes ??
+        justificationObject?.notes ??
           body.notes,
       ) || null
+
+    /*
+     * Every decision requires a reason.
+     */
 
     if (!reason) {
       return NextResponse.json(
@@ -255,56 +399,104 @@ if (
     /*
      * =====================================================
      * ESTIMATED COMPLETION
-     * ===================================================== */
+     * =====================================================
+     */
 
     const estimatedCompletion =
       cleanString(
-        body.quote?.estimated_completion ??
+        quoteObject?.estimated_completion ??
           body.estimated_completion,
       ) || null
+
+    /*
+     * =====================================================
+     * DECISION-SOURCE CONSISTENCY
+     * =====================================================
+     */
+
+    if (
+      rawAction === "adjust" &&
+      decisionSource !==
+        "adjusted"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Adjusted decisions must use decision_source='adjusted'.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Negotiated approval must explicitly
+     * identify itself as negotiated.
+     */
+
+    if (
+      decisionSource ===
+        "client_negotiated" &&
+      rawAction !== "accept"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "client_negotiated can only be used for an accepted negotiated quote.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     /*
      * =====================================================
      * BUSINESS LOGIC
      * =====================================================
      *
-     * The service is responsible for:
+     * reviewQuoteAsSuperAdmin() is the authoritative layer
+     * responsible for:
      *
-     * - verifying the request state
-     * - verifying the actor
-     * - applying the decision
-     * - recording the workflow audit
-     * - updating the quote
-     * - enforcing concurrency protection
+     * - actor verification
+     * - request state verification
+     * - negotiation state verification
+     * - currency consistency
+     * - quote version creation
+     * - final request update
+     * - audit recording
+     * - concurrency protection
      */
 
     const result =
-  await reviewQuoteAsSuperAdmin({
-    requestId: id,
+      await reviewQuoteAsSuperAdmin({
+        requestId:
+          id,
 
-    actorUserId:
-      user.id,
+        actorUserId:
+          user.id,
 
-    actorRole:
-      user.role,
+        actorRole:
+          user.role,
 
-    action:
-      rawAction,
+        action:
+          rawAction,
 
-    amount,
+        amount,
 
-    currency,
+        currency,
 
-    notes,
+        notes,
 
-    reason,
+        reason,
 
-    estimated_completion:
-      estimatedCompletion,
+        estimated_completion:
+          estimatedCompletion,
 
-    decision_source:
-      decisionSource,
-  })
+        decision_source:
+          decisionSource,
+      })
 
     /*
      * =====================================================
@@ -312,7 +504,13 @@ if (
      * =====================================================
      */
 
-  return NextResponse.json(result)
+    return NextResponse.json(
+      result,
+      {
+        status: 200,
+      },
+    )
+
   } catch (error) {
     console.error(
       "SUPER ADMIN QUOTE REVIEW ERROR",
@@ -326,7 +524,8 @@ if (
 
     return NextResponse.json(
       {
-        error: message,
+        error:
+          message,
       },
       {
         status: 400,

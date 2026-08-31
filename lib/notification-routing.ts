@@ -72,16 +72,11 @@ case "client_quote_review":
 
 
       case "payment":
-
-      case "client_payment":
-
-      case "payment_required":
-
-        return caseId
-          ? `/dashboard/client/payments/${caseId}`
-          : requestId
-            ? `/dashboard/client/payments/${requestId}`
-            : "/dashboard/client/payments"
+case "client_payment":
+case "payment_required":
+  return requestId
+    ? `/dashboard/client/requests/${requestId}`
+    : "/dashboard/client/requests"
 
 
 
@@ -120,16 +115,10 @@ case "super_admin_quote_review":
 
 
 
- if (
-  type === "payment_required"
-) {
-
+if (type === "payment_required") {
   return requestId
     ? `/dashboard/client/requests/${requestId}`
-    : caseId
-      ? `/dashboard/client/payments/${caseId}`
-      : "/dashboard/client/requests"
-
+    : "/dashboard/client/requests"
 }
 
 

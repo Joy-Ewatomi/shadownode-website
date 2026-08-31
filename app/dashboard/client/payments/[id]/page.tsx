@@ -79,8 +79,13 @@ export default function ClientPaymentDetailPage({
           return
         }
 
-        const data =
-          await res.json()
+       const data =
+  await res.json()
+
+console.log("PAYMENT INITIALIZE STATUS:", res.status)
+console.log("PAYMENT INITIALIZE DATA:", data)
+
+
 
         setRequest(data)
       } catch (err) {
@@ -121,6 +126,7 @@ export default function ClientPaymentDetailPage({
   }, [searchParams])
 
   async function handlePayment() {
+    
     if (!request?.id) {
       return
     }
@@ -147,6 +153,8 @@ export default function ClientPaymentDetailPage({
           },
         )
 
+        
+
       const data =
         await response.json()
 
@@ -170,6 +178,11 @@ export default function ClientPaymentDetailPage({
        */
       window.location.href =
         data.authorization_url
+
+        console.log(
+  "AUTHORIZATION URL:",
+  data.authorization_url,
+)
     } catch (err) {
       console.error(
         "PAYMENT INITIALIZATION ERROR",

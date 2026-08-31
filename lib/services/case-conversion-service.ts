@@ -373,7 +373,7 @@ export async function convertAcceptedRequestToCase(
           metadata: {
             request_id: requestId,
             case_id: caseId,
-            target_page: "payment",
+            target_page: "client_request",
             action: "pay_now",
           },
         },

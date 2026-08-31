@@ -2462,29 +2462,149 @@ console.log("EVIDENCE:", request.evidence_files)
 
         </section>
       )}
+{/* ===================================================
+    ACCEPTED / AWAITING PAYMENT
+=================================================== */}
 
-      {/* ===================================================
-          ACCEPTED
-      =================================================== */}
-      {isAccepted && (
-        <section className="mt-6 w-full min-w-0 rounded-lg border border-[#20dc73]/30 bg-[#20dc73]/5 p-5 sm:p-6">
+{(isAccepted ||
+  status === "awaiting_payment") && (
+  <section className="mt-6 w-full min-w-0 overflow-hidden rounded-2xl border border-[#20dc73]/30 bg-gradient-to-br from-[#071711] via-[#06110f] to-black shadow-xl">
 
-          <p className="text-xs uppercase tracking-[0.2em] text-[#20dc73]">
+    {/* HEADER */}
+
+    <div className="border-b border-[#20dc73]/15 bg-[#20dc73]/5 p-5 sm:p-6">
+
+      <div className="flex items-start gap-4">
+
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#20dc73]/30 bg-[#20dc73]/10 text-[#20dc73]">
+          ✓
+        </div>
+
+        <div className="min-w-0">
+
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#20dc73]">
             Quote Accepted
           </p>
 
-          <h2 className="mt-2 text-xl font-semibold">
+          <h2 className="mt-2 break-words text-xl font-semibold text-white sm:text-2xl">
             Your quote has been accepted
           </h2>
 
-          <p className="mt-2 text-sm leading-7 text-white/55">
-            ShadowNode has recorded your acceptance. The
-            request will proceed to the next stage of the
-            Bureau workflow.
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-white/55">
+            ShadowNode has recorded your acceptance.
+            Payment is the next step before the
+            investigation can begin.
           </p>
 
-        </section>
-      )}
+        </div>
+
+      </div>
+
+    </div>
+
+    {/* PAYMENT CONTENT */}
+
+    <div className="p-5 sm:p-6">
+
+      {/* PAYMENT STATUS */}
+
+      <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-5">
+
+        <div className="flex items-start gap-4">
+
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yellow-500/10 text-yellow-300">
+            ₦
+          </div>
+
+          <div className="min-w-0">
+
+            <p className="text-sm font-semibold text-yellow-200">
+              Payment required
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-white/45">
+              Your request has been moved into the
+              payment stage. The investigation will not
+              begin until payment has been confirmed.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* QUOTE SUMMARY */}
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+
+        <div className="rounded-xl border border-[#143b28] bg-black/30 p-5">
+
+          <p className="text-[10px] uppercase tracking-[0.18em] text-white/30">
+            Accepted Quote
+          </p>
+
+          <p className="mt-2 break-words text-2xl font-bold text-[#20dc73]">
+            {formatMoney(
+              request.approved_quote_amount,
+              clientCurrency,
+            )}
+          </p>
+
+        </div>
+
+        <div className="rounded-xl border border-[#143b28] bg-black/30 p-5">
+
+          <p className="text-[10px] uppercase tracking-[0.18em] text-white/30">
+            Currency
+          </p>
+
+          <p className="mt-2 text-lg font-semibold text-white">
+            {clientCurrency}
+          </p>
+
+        </div>
+
+      </div>
+
+      {/* PAYMENT ACTION */}
+
+      <div className="mt-6 rounded-xl border border-[#20dc73]/20 bg-[#20dc73]/[0.03] p-5">
+
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+          <div className="min-w-0">
+
+            <p className="text-sm font-semibold text-white">
+              Ready to continue?
+            </p>
+
+            <p className="mt-1 text-xs leading-6 text-white/35">
+              Open the secure payment page to complete
+              your payment through the existing Paystack
+              workflow.
+            </p>
+
+          </div>
+
+          {request.id && (
+            <Link
+              href={`/dashboard/client/payments/${request.id}`}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#20dc73] px-6 py-3 text-sm font-bold text-black shadow-lg shadow-[#20dc73]/10 transition hover:bg-[#32ef82]"
+            >
+              Make Payment
+            </Link>
+          )}
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+)}
+
 
 
 

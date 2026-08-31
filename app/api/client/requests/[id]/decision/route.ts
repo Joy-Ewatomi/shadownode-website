@@ -40,6 +40,7 @@ const QUOTE_STATUSES = [
   "client_decision_pending",
   "awaiting_client_acceptance",
 ]
+
 /*
  * =========================================================
  * REVIEW ACTIONS
@@ -159,7 +160,7 @@ async function handleDecision(
     // ACCEPTING A QUOTE DOES NOT MEAN THE INVESTIGATION
     // HAS STARTED.
     //
-    // The sequence is:
+    // Sequence:
     //
     // quote
     //   ↓
@@ -167,17 +168,21 @@ async function handleDecision(
     //   ↓
     // case created as awaiting_payment
     //   ↓
-    // Paystack payment
+    // payment
     //   ↓
     // payment verified
     //   ↓
     // case becomes active
     //
-    // Therefore we deliberately do NOT mark the case active
-    // here.
     // ========================================================
 
     if (action === "accept") {
+      /*
+       * Find the client's active quote.
+       *
+       * converted_case_id must still be NULL because the
+       * conversion happens exactly once here.
+       */
       const eligible = await query<{
         id: string
         status: string
@@ -201,6 +206,7 @@ async function handleDecision(
           WHERE id = $1
             AND user_id = $2
             AND status = ANY($3::varchar[])
+            AND converted_case_id IS NULL
           LIMIT 1
         `,
         [
@@ -226,46 +232,8 @@ async function handleDecision(
       }
 
       // ------------------------------------------------------
-      // ALREADY ACCEPTED / WAITING FOR PAYMENT
+      // APPROVED QUOTE AMOUNT
       // ------------------------------------------------------
-
-      if (
-        eligibleRequest.status ===
-          "awaiting_payment" &&
-        eligibleRequest.converted_case_id
-      ) {
-        return NextResponse.json({
-          success: true,
-          decision: "accept",
-          payment_required: true,
-          request_id: id,
-          case_id:
-            eligibleRequest.converted_case_id,
-          message:
-            "Quote already accepted. Payment is required before the investigation can begin.",
-        })
-      }
-
-      // ------------------------------------------------------
-      // APPROVED QUOTE MUST EXIST
-      // ------------------------------------------------------
-
-      if (
-        eligibleRequest.approved_quote_amount ===
-          null ||
-        eligibleRequest.approved_quote_amount ===
-          undefined
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "No approved quote amount is available for payment.",
-          },
-          {
-            status: 400,
-          },
-        )
-      }
 
       const quoteAmount = Number(
         eligibleRequest.approved_quote_amount,
@@ -280,7 +248,7 @@ async function handleDecision(
         return NextResponse.json(
           {
             error:
-              "The approved quote amount is invalid.",
+              "The approved quote amount is invalid",
           },
           {
             status: 400,
@@ -288,8 +256,13 @@ async function handleDecision(
         )
       }
 
+      // ------------------------------------------------------
+      // APPROVED QUOTE CURRENCY
+      // ------------------------------------------------------
+
       if (
-        !eligibleRequest.approved_quote_currency
+        !eligibleRequest
+          .approved_quote_currency
       ) {
         return NextResponse.json(
           {
@@ -306,11 +279,17 @@ async function handleDecision(
       // CONVERT REQUEST TO PAYMENT-PENDING CASE
       // ------------------------------------------------------
       //
-      // Your existing conversion service should create the
-      // case with awaiting_payment status.
+      // The conversion service:
       //
-      // It must NOT make the case active.
+      // - creates the case
+      // - sets case status to awaiting_payment
+      // - sets payment_status to pending
+      // - stores converted_case_id on the request
+      // - changes request status to awaiting_payment
+      // - creates the payment_required notification
       //
+      // It must NOT activate the investigation.
+      // ------------------------------------------------------
 
       const caseId =
         await convertAcceptedRequestToCase(
@@ -319,7 +298,7 @@ async function handleDecision(
         )
 
       // ------------------------------------------------------
-      // RECORD CLIENT ACCEPTANCE
+      // REQUEST AUDIT
       // ------------------------------------------------------
 
       await recordRequestAudit(
@@ -328,12 +307,8 @@ async function handleDecision(
         "client_accepted_quote",
         {
           case_id: caseId,
-
           payment_required: true,
-
-          amount:
-            quoteAmount,
-
+          amount: quoteAmount,
           currency:
             eligibleRequest
               .approved_quote_currency,
@@ -341,7 +316,7 @@ async function handleDecision(
       )
 
       // ------------------------------------------------------
-      // AUDIT LOG
+      // SYSTEM AUDIT LOG
       // ------------------------------------------------------
 
       await auditLog(
@@ -350,34 +325,23 @@ async function handleDecision(
         request,
         {
           request_id: id,
-
           case_id: caseId,
-
           payment_required: true,
-
-          amount:
-            quoteAmount,
-
+          amount: quoteAmount,
           currency:
             eligibleRequest
               .approved_quote_currency,
         },
       )
+
       // ------------------------------------------------------
-      // IMPORTANT RESPONSE
+      // SUCCESS RESPONSE
       // ------------------------------------------------------
-      //
-      // Tell frontend that acceptance succeeded BUT payment
-      // is the next step.
-      //
 
       return NextResponse.json({
         success: true,
-
         decision: "accept",
-
         request_id: id,
-
         case_id: caseId,
 
         payment_required: true,
@@ -385,8 +349,7 @@ async function handleDecision(
         payment_status:
           "awaiting_payment",
 
-        amount:
-          quoteAmount,
+        amount: quoteAmount,
 
         currency:
           eligibleRequest
@@ -482,12 +445,7 @@ async function handleDecision(
           [
             id,
             user.id,
-            [
-              "quote_sent",
-              "revised_quote_sent",
-              "client_decision_pending",
-              "awaiting_client_acceptance",
-            ],
+            QUOTE_STATUSES,
           ],
         )
 
@@ -538,25 +496,32 @@ async function handleDecision(
             notes || null,
         })
 
+      // ======================================================
+      // UPDATE REQUEST STATUS
+      // ======================================================
 
-  await query(
-  `
-    UPDATE requests
-    SET
-      status = 'negotiation_requested',
-      client_decision_at = NOW(),
-      updated_at = NOW()
-    WHERE id = $1
-      AND user_id = $2
-      AND status = ANY($3::varchar[])
-      AND converted_case_id IS NULL
-  `,
-  [
-    id,
-    user.id,
-    QUOTE_STATUSES,
-  ],
-)
+      await query(
+        `
+          UPDATE requests
+          SET
+            status = 'negotiation_requested',
+            client_decision_at = NOW(),
+            updated_at = NOW()
+          WHERE id = $1
+            AND user_id = $2
+            AND status = ANY($3::varchar[])
+            AND converted_case_id IS NULL
+        `,
+        [
+          id,
+          user.id,
+          QUOTE_STATUSES,
+        ],
+      )
+
+      // ======================================================
+      // RESPONSE
+      // ======================================================
 
       return NextResponse.json(
         {
@@ -641,12 +606,7 @@ async function handleDecision(
             id,
             user.id,
             safeReason,
-            [
-              "quote_sent",
-              "revised_quote_sent",
-              "client_decision_pending",
-              "awaiting_client_acceptance",
-            ],
+            QUOTE_STATUSES,
           ],
         )
 
@@ -748,7 +708,7 @@ async function handleDecision(
     )
   } catch (error) {
     console.error(
-      "CLIENT QUOTE DECISION ERROR:",
+      "CLIENT QUOTE DECISION ERROR",
       error,
     )
 
