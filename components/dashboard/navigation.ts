@@ -11,23 +11,30 @@ import {
   Activity,
   ClipboardList,
   History,
+  GraduationCap,
 } from "lucide-react"
+import type { ElementType } from "react"
 
 import type { Permission } from "@/lib/permission"
 
 export type NavigationItem = {
   label: string
   href: string
-  icon: React.ElementType
+  icon: ElementType
   permission: Permission
 }
 
 export function getNavigation(role: string): NavigationItem[] {
   const isClient = role === "client"
   const isAdministrator = role === "administrator"
-  const isSuperAdministrator = role === "super_administrator"
+  const isSuperAdministrator =
+    role === "super_administrator"
 
   return [
+    // =====================================================
+    // DASHBOARD
+    // =====================================================
+
     {
       label: "Dashboard",
       href: isClient
@@ -37,6 +44,10 @@ export function getNavigation(role: string): NavigationItem[] {
       permission: "dashboard:view",
     },
 
+    // =====================================================
+    // INVESTIGATION CASES
+    // =====================================================
+
     {
       label: "Cases",
       href: isClient
@@ -44,6 +55,42 @@ export function getNavigation(role: string): NavigationItem[] {
         : "/dashboard/cases",
       icon: Shield,
       permission: "cases:view",
+    },
+
+    // =====================================================
+    // TRAINING ENGAGEMENTS
+    // =====================================================
+    //
+    // Training is intentionally separate from Cases.
+    //
+    // Investigation:
+    // Request → Case
+    //
+    // Training:
+    // Request → Training Engagement
+    //
+    // The individual engagement will have its own
+    // workspace for:
+    //
+    // Overview
+    // Training Plan
+    // Materials
+    // Schedule
+    // Progress
+    // Updates
+    // Tasks
+    // Feedback
+    // Certificate
+    //
+    // =====================================================
+
+    {
+      label: "Training",
+      href: isClient
+        ? "/dashboard/client/training"
+        : "/dashboard/training",
+      icon: GraduationCap,
+      permission: "training:view",
     },
 
     // =====================================================
@@ -69,7 +116,8 @@ export function getNavigation(role: string): NavigationItem[] {
             label: "Request History",
             href: "/dashboard/administrator/request-history",
             icon: History,
-            permission: "requests:history:view" as Permission,
+            permission:
+              "requests:history:view" as Permission,
           },
         ]
       : []),
@@ -80,13 +128,14 @@ export function getNavigation(role: string): NavigationItem[] {
             label: "Request History",
             href: "/dashboard/super-administrator/request-history",
             icon: History,
-            permission: "requests:history:view" as Permission,
+            permission:
+              "requests:history:view" as Permission,
           },
         ]
       : []),
 
     // =====================================================
-    // CLIENT DOES NOT NEED INTERNAL REQUEST HISTORY
+    // TEAM
     // =====================================================
 
     {
@@ -95,6 +144,10 @@ export function getNavigation(role: string): NavigationItem[] {
       icon: Users,
       permission: "team:view",
     },
+
+    // =====================================================
+    // REPORTS
+    // =====================================================
 
     {
       label: "Reports",
@@ -105,12 +158,20 @@ export function getNavigation(role: string): NavigationItem[] {
       permission: "reports:view",
     },
 
+    // =====================================================
+    // MESSAGES
+    // =====================================================
+
     {
       label: "Messages",
       href: "/dashboard/messages",
       icon: MessageSquare,
       permission: "messages:view",
     },
+
+    // =====================================================
+    // NOTIFICATIONS
+    // =====================================================
 
     {
       label: "Notifications",
@@ -121,12 +182,20 @@ export function getNavigation(role: string): NavigationItem[] {
       permission: "notifications:view",
     },
 
+    // =====================================================
+    // SETTINGS
+    // =====================================================
+
     {
       label: "Settings",
       href: "/dashboard/settings",
       icon: Settings,
       permission: "settings:view",
     },
+
+    // =====================================================
+    // INTELLIGENCE
+    // =====================================================
 
     {
       label: "Intelligence",
@@ -135,12 +204,20 @@ export function getNavigation(role: string): NavigationItem[] {
       permission: "intelligence:access",
     },
 
+    // =====================================================
+    // EVIDENCE VAULT
+    // =====================================================
+
     {
       label: "Evidence Vault",
       href: "/dashboard/evidence",
       icon: Database,
       permission: "evidence:view",
     },
+
+    // =====================================================
+    // INVESTIGATION
+    // =====================================================
 
     {
       label: "Investigation",
@@ -149,12 +226,20 @@ export function getNavigation(role: string): NavigationItem[] {
       permission: "investigation:view",
     },
 
+    // =====================================================
+    // MISSION CONTROL
+    // =====================================================
+
     {
       label: "Mission Control",
       href: "/dashboard/administrator",
       icon: Activity,
       permission: "mission:view",
     },
+
+    // =====================================================
+    // AUDIT LOGS
+    // =====================================================
 
     {
       label: "Audit Logs",

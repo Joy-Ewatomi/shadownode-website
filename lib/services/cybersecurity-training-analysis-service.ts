@@ -1,5 +1,3 @@
-// lib/services/cybersecurity-training-analysis-service.ts
-
 import { estimatePrice } from "@/lib/pricing"
 
 // ============================================================
@@ -45,10 +43,15 @@ export type CybersecurityTrainingAnalysisInput = {
   assessmentRequired?: boolean
   labsRequired?: boolean
 
+  assignments?: boolean
+  chatSupport?: boolean
+  careerGuidance?: boolean
+  specialization?: string | null
+
   startDate?: string | null
   completionDate?: string | null
   timelineFlexible?: boolean
-   
+
   timeline?: string | null
   urgency?: string | null
 
@@ -69,6 +72,9 @@ export type CybersecurityTrainingAnalysis = {
   suggestedPriority: string
 
   suggestedPrice: number
+  minPrice: number
+  maxPrice: number
+
   currency: string
 
   confidence: number
@@ -81,10 +87,38 @@ export type CybersecurityTrainingAnalysis = {
     topicCount: number
     labsRequired: boolean
     assessmentRequired: boolean
+    assignments: boolean
+    materialsRequired: boolean
+    chatSupport: boolean
+    certification: boolean
+    careerGuidance: boolean
+    specialization: boolean
     format: string
     duration: string
+    trainingWeeks: number
+    sessionsPerWeek: number
+    hoursPerSession: number
+    trainingHours: number
     urgency: string
     confidentialityLevel: string
+  }
+
+  pricing: {
+    baseHourlyRate: number
+    trainingMultiplier: number
+    urgencyMultiplier: number
+    estimatedPrice: number
+    minPrice: number
+    maxPrice: number
+    breakdown: {
+      baseService: string
+      complexity: string
+      urgency: string
+      depth: string
+      confidentiality: string
+      subject: string
+      training: string
+    }
   }
 }
 
@@ -132,6 +166,8 @@ function clean(value: unknown): string {
     : ""
 }
 
+// ============================================================
+
 function numberValue(
   value: unknown,
   fallback = 0,
@@ -150,6 +186,8 @@ function numberValue(
     ? parsed
     : fallback
 }
+
+// ============================================================
 
 function normalizeArray(
   value: unknown,
@@ -174,6 +212,8 @@ function normalizeArray(
   return []
 }
 
+// ============================================================
+
 function normalizeService(
   serviceType: string,
 ): string {
@@ -184,32 +224,18 @@ function normalizeService(
     return "cybersecurity-training"
   }
 
+  /**
+   * This analysis service is exclusively for
+   * cybersecurity training.
+   *
+   * Unknown service values are therefore still
+   * normalized to cybersecurity training rather
+   * than allowing another pricing model through.
+   */
   return "cybersecurity-training"
 }
 
-
-function normalizeList(
-  value: string[] | string | null | undefined,
-): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .filter(
-        (item): item is string =>
-          typeof item === "string" &&
-          item.trim().length > 0,
-      )
-      .map((item) => item.trim())
-  }
-
-  if (typeof value === "string") {
-    return value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-  }
-
-  return []
-}
+// ============================================================
 
 function normalizeSkillLevel(
   value: unknown,
@@ -222,6 +248,8 @@ function normalizeSkillLevel(
     : "beginner"
 }
 
+// ============================================================
+
 function normalizeFormat(
   value: unknown,
 ): string {
@@ -232,6 +260,8 @@ function normalizeFormat(
     ? normalized
     : "online"
 }
+
+// ============================================================
 
 function normalizeUrgency(
   urgency: unknown,
@@ -255,8 +285,152 @@ function normalizeUrgency(
     return "high"
   }
 
+  if (
+    normalizedTimeline === "flexible"
+  ) {
+    return "low"
+  }
+
   return "normal"
 }
+
+// ============================================================
+// TRAINING DELIVERY NORMALIZATION
+// ============================================================
+//
+// Maps the training form's format values into the
+// pricing engine's delivery model.
+//
+// Pricing engine accepts:
+//
+//   one_on_one
+//   small_group
+//   group
+//   corporate
+//
+// The form's "online / onsite / hybrid" describes
+// delivery format, not engagement size.
+//
+// Therefore we infer the engagement model primarily
+// from participant count / client type.
+//
+
+function normalizeTrainingDelivery(
+  participantCount: number,
+  clientType?: string | null,
+): "one_on_one" | "small_group" | "group" | "corporate" {
+  const normalizedClientType =
+    clean(clientType).toLowerCase()
+
+  if (
+    normalizedClientType.includes(
+      "corporate",
+    ) ||
+    normalizedClientType.includes(
+      "company",
+    ) ||
+    normalizedClientType.includes(
+      "organization",
+    ) ||
+    normalizedClientType.includes(
+      "business",
+    )
+  ) {
+    return "corporate"
+  }
+
+  if (participantCount <= 1) {
+    return "one_on_one"
+  }
+
+  if (participantCount <= 8) {
+    return "small_group"
+  }
+
+  return "group"
+}
+
+// ============================================================
+// TRAINING WEEKS
+// ============================================================
+//
+// Attempts to extract a numeric week count from
+// the structured duration fields.
+//
+// Examples:
+//
+//   "13 weeks"      -> 13
+//   "12 weeks"      -> 12
+//   "long-term"     -> 0
+//
+// If the form provides customTrainingPeriod,
+// the function also attempts to extract a number.
+//
+// ============================================================
+
+function extractWeeks(
+  duration?: string | null,
+  trainingPeriod?: string | null,
+): number {
+  const candidates = [
+    clean(duration),
+    clean(trainingPeriod),
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue
+    }
+
+    const weekMatch =
+      candidate.match(
+        /(\d+(?:\.\d+)?)\s*(?:weeks?|wks?|week)/i,
+      )
+
+    if (weekMatch) {
+      const weeks = Number(
+        weekMatch[1],
+      )
+
+      if (
+        Number.isFinite(weeks) &&
+        weeks > 0
+      ) {
+        return weeks
+      }
+    }
+
+    /**
+     * If the value is simply numeric,
+     * interpret it as weeks.
+     */
+    const numeric =
+      Number(candidate)
+
+    if (
+      Number.isFinite(numeric) &&
+      numeric > 0
+    ) {
+      return numeric
+    }
+  }
+
+  return 0
+}
+
+// ============================================================
+// TRAINING DAYS
+// ============================================================
+
+function countTrainingDays(
+  value: string[] | string | null | undefined,
+): number {
+  return normalizeArray(value).length
+}
+
+// ============================================================
+// DESCRIPTION BUILDER
+// ============================================================
 
 function buildDescription(
   input: CybersecurityTrainingAnalysisInput,
@@ -270,6 +444,24 @@ function buildDescription(
     parts.push(description)
   }
 
+  const organization =
+    clean(input.organizationName)
+
+  if (organization) {
+    parts.push(
+      `Organization: ${organization}`,
+    )
+  }
+
+  const clientType =
+    clean(input.clientType)
+
+  if (clientType) {
+    parts.push(
+      `Client type: ${clientType}`,
+    )
+  }
+
   const goal =
     clean(input.goal)
 
@@ -279,22 +471,21 @@ function buildDescription(
     )
   }
 
- const objectives = normalizeList(
-  input.objectives,
-)
+  const objectives =
+    normalizeArray(input.objectives)
 
-  if (objectives) {
+  if (objectives.length > 0) {
     parts.push(
-      `Training objective: ${objectives}`,
+      `Training objectives: ${objectives.join(", ")}`,
     )
   }
-const topics = normalizeList(
-  input.topics,
-)
+
+  const topics =
+    normalizeArray(input.topics)
 
   if (topics.length > 0) {
     parts.push(
-      `Topics: ${topics.join(", ")}`,
+      `Training topics: ${topics.join(", ")}`,
     )
   }
 
@@ -316,6 +507,62 @@ const topics = normalizeList(
     )
   }
 
+  const format =
+    clean(input.format)
+
+  if (format) {
+    parts.push(
+      `Training format: ${format}`,
+    )
+  }
+
+  const duration =
+    clean(input.duration)
+
+  if (duration) {
+    parts.push(
+      `Training duration: ${duration}`,
+    )
+  }
+
+  const trainingPeriod =
+    clean(input.trainingPeriod)
+
+  if (trainingPeriod) {
+    parts.push(
+      `Training period: ${trainingPeriod}`,
+    )
+  }
+
+  const materials =
+    normalizeArray(input.materials)
+
+  if (materials.length > 0) {
+    parts.push(
+      `Training materials: ${materials.join(", ")}`,
+    )
+  }
+
+  const compliance =
+    normalizeArray(input.compliance)
+
+  if (compliance.length > 0) {
+    parts.push(
+      `Compliance requirements: ${compliance.join(", ")}`,
+    )
+  }
+
+  const expectedOutcomes =
+    normalizeArray(
+      input.expectedOutcomes,
+    )
+
+  if (expectedOutcomes.length > 0) {
+    parts.push(
+      `Expected outcomes: ${expectedOutcomes.join(", ")}`,
+    )
+  }
+
   return parts.join("\n")
 }
 
@@ -326,6 +573,10 @@ const topics = normalizeList(
 export function analyzeCybersecurityTrainingRequest(
   input: CybersecurityTrainingAnalysisInput,
 ): CybersecurityTrainingAnalysis {
+  // ==========================================================
+  // NORMALIZATION
+  // ==========================================================
+
   const description =
     buildDescription(input)
 
@@ -334,15 +585,16 @@ export function analyzeCybersecurityTrainingRequest(
       input.serviceType,
     )
 
-  const participantCount = Math.max(
-    0,
-    Math.round(
-      numberValue(
-        input.participantCount,
-        1,
+  const participantCount =
+    Math.max(
+      1,
+      Math.round(
+        numberValue(
+          input.participantCount,
+          1,
+        ),
       ),
-    ),
-  )
+    )
 
   const skillLevel =
     normalizeSkillLevel(
@@ -350,7 +602,9 @@ export function analyzeCybersecurityTrainingRequest(
     )
 
   const format =
-    normalizeFormat(input.format)
+    normalizeFormat(
+      input.format,
+    )
 
   const urgency =
     normalizeUrgency(
@@ -372,11 +626,41 @@ export function analyzeCybersecurityTrainingRequest(
       input.expectedOutcomes,
     )
 
+  const objectives =
+    normalizeArray(
+      input.objectives,
+    )
+
+  const trainingDays =
+    normalizeArray(
+      input.trainingDays,
+    )
+
   const labsRequired =
     input.labsRequired === true
 
   const assessmentRequired =
     input.assessmentRequired === true
+
+  const assignments =
+    input.assignments === true
+
+  const chatSupport =
+    input.chatSupport === true
+
+  const careerGuidance =
+    input.careerGuidance === true
+
+  const certification =
+    clean(input.certificate).length > 0 &&
+    clean(
+      input.certificate,
+    ).toLowerCase() !== "none"
+
+  const specialization =
+    clean(
+      input.specialization,
+    ).length > 0
 
   const duration =
     clean(input.duration) ||
@@ -391,12 +675,77 @@ export function analyzeCybersecurityTrainingRequest(
     clean(input.currency) || "USD"
 
   // ==========================================================
-  // COMPLEXITY FACTORS
+  // STRUCTURED TRAINING HOURS
+  // ==========================================================
+
+  const sessionsPerWeek =
+    Math.max(
+      0,
+      numberValue(
+        input.sessionsPerWeek,
+        0,
+      ),
+    )
+
+  const hoursPerSession =
+    Math.max(
+      0,
+      numberValue(
+        input.hoursPerSession,
+        0,
+      ),
+    )
+
+  const trainingWeeks =
+    Math.max(
+      0,
+      extractWeeks(
+        input.duration,
+        input.trainingPeriod,
+      ),
+    )
+
+  /**
+   * If the duration field is a known textual
+   * duration but doesn't contain an exact week
+   * count, we deliberately leave weeks as 0.
+   *
+   * This prevents us from inventing training hours.
+   */
+
+  const trainingHours =
+    trainingWeeks > 0 &&
+    sessionsPerWeek > 0 &&
+    hoursPerSession > 0
+      ? Number(
+          (
+            trainingWeeks *
+            sessionsPerWeek *
+            hoursPerSession
+          ).toFixed(2),
+        )
+      : 0
+
+  // ==========================================================
+  // TRAINING DELIVERY MODEL
+  // ==========================================================
+
+  const trainingDelivery =
+    normalizeTrainingDelivery(
+      participantCount,
+      input.clientType,
+    )
+
+  // ==========================================================
+  // COMPLEXITY SCORE
   // ==========================================================
 
   let complexityScore = 1
 
+  // ----------------------------------------------------------
   // Participant count
+  // ----------------------------------------------------------
+
   if (participantCount >= 50) {
     complexityScore += 0.45
   } else if (participantCount >= 25) {
@@ -405,18 +754,26 @@ export function analyzeCybersecurityTrainingRequest(
     complexityScore += 0.15
   }
 
+  // ----------------------------------------------------------
   // Skill level
+  // ----------------------------------------------------------
+
   if (skillLevel === "advanced") {
     complexityScore += 0.30
   } else if (skillLevel === "expert") {
     complexityScore += 0.40
   } else if (skillLevel === "mixed") {
     complexityScore += 0.25
-  } else if (skillLevel === "intermediate") {
+  } else if (
+    skillLevel === "intermediate"
+  ) {
     complexityScore += 0.15
   }
 
+  // ----------------------------------------------------------
   // Number of topics
+  // ----------------------------------------------------------
+
   if (topics.length >= 8) {
     complexityScore += 0.40
   } else if (topics.length >= 5) {
@@ -425,19 +782,50 @@ export function analyzeCybersecurityTrainingRequest(
     complexityScore += 0.15
   }
 
+  // ----------------------------------------------------------
+  // Objectives
+  // ----------------------------------------------------------
+
+  if (objectives.length >= 5) {
+    complexityScore += 0.20
+  } else if (
+    objectives.length >= 3
+  ) {
+    complexityScore += 0.10
+  }
+
+  // ----------------------------------------------------------
   // Practical labs
+  // ----------------------------------------------------------
+
   if (labsRequired) {
     complexityScore += 0.35
   }
 
+  // ----------------------------------------------------------
   // Assessment
+  // ----------------------------------------------------------
+
   if (assessmentRequired) {
     complexityScore += 0.15
   }
 
+  // ----------------------------------------------------------
+  // Assignments
+  // ----------------------------------------------------------
+
+  if (assignments) {
+    complexityScore += 0.10
+  }
+
+  // ----------------------------------------------------------
   // Format
-  if (format === "onsite" ||
-      format === "in_person") {
+  // ----------------------------------------------------------
+
+  if (
+    format === "onsite" ||
+    format === "in_person"
+  ) {
     complexityScore += 0.15
   }
 
@@ -445,22 +833,46 @@ export function analyzeCybersecurityTrainingRequest(
     complexityScore += 0.25
   }
 
+  // ----------------------------------------------------------
   // Compliance
+  // ----------------------------------------------------------
+
   if (compliance.length > 0) {
     complexityScore += 0.15
   }
 
+  // ----------------------------------------------------------
   // Materials
+  // ----------------------------------------------------------
+
   if (materials.length >= 4) {
     complexityScore += 0.15
   }
 
+  // ----------------------------------------------------------
   // Expected outcomes
+  // ----------------------------------------------------------
+
   if (expectedOutcomes.length >= 3) {
     complexityScore += 0.10
   }
 
+  // ----------------------------------------------------------
+  // Training duration
+  // ----------------------------------------------------------
+
+  if (trainingWeeks >= 24) {
+    complexityScore += 0.25
+  } else if (trainingWeeks >= 13) {
+    complexityScore += 0.15
+  } else if (trainingWeeks >= 5) {
+    complexityScore += 0.05
+  }
+
+  // ----------------------------------------------------------
   // Confidentiality
+  // ----------------------------------------------------------
+
   if (
     confidentialityLevel ===
     "confidential"
@@ -470,7 +882,9 @@ export function analyzeCybersecurityTrainingRequest(
 
   if (
     confidentialityLevel ===
-    "high"
+    "high" ||
+    confidentialityLevel ===
+    "highly_confidential"
   ) {
     complexityScore += 0.25
   }
@@ -487,53 +901,119 @@ export function analyzeCybersecurityTrainingRequest(
         : "low"
 
   // ==========================================================
-  // HOURS
+  // ESTIMATED WORKING HOURS
+  // ==========================================================
+  //
+  // IMPORTANT:
+  //
+  // These are internal workload estimates.
+  //
+  // For structured training schedules, live training
+  // hours are used as the primary workload.
+  //
+  // Additional preparation/support time is then added
+  // for labs, assessments, materials, etc.
+  //
   // ==========================================================
 
   let estimatedHours =
-    complexity === "high"
-      ? 24
-      : complexity === "medium"
-        ? 12
-        : 6
+    trainingHours > 0
+      ? trainingHours
+      : complexity === "high"
+        ? 24
+        : complexity === "medium"
+          ? 12
+          : 6
 
-  // Participant scaling
-  if (participantCount >= 50) {
-    estimatedHours += 8
-  } else if (participantCount >= 25) {
-    estimatedHours += 4
-  } else if (participantCount >= 10) {
-    estimatedHours += 2
+  // ----------------------------------------------------------
+  // Additional participant handling
+  // ----------------------------------------------------------
+
+  if (
+    trainingHours <= 0
+  ) {
+    if (participantCount >= 50) {
+      estimatedHours += 8
+    } else if (
+      participantCount >= 25
+    ) {
+      estimatedHours += 4
+    } else if (
+      participantCount >= 10
+    ) {
+      estimatedHours += 2
+    }
   }
 
-  // Labs require preparation and
-  // technical environment setup.
+  // ----------------------------------------------------------
+  // Labs
+  // ----------------------------------------------------------
+
   if (labsRequired) {
-    estimatedHours += 6
+    estimatedHours +=
+      trainingHours > 0
+        ? Math.max(
+            2,
+            trainingHours * 0.15,
+          )
+        : 6
   }
+
+  // ----------------------------------------------------------
+  // Assessment
+  // ----------------------------------------------------------
 
   if (assessmentRequired) {
     estimatedHours += 3
   }
 
+  // ----------------------------------------------------------
+  // Assignments
+  // ----------------------------------------------------------
+
+  if (assignments) {
+    estimatedHours +=
+      trainingHours > 0
+        ? Math.max(
+            2,
+            trainingHours * 0.08,
+          )
+        : 2
+  }
+
+  // ----------------------------------------------------------
+  // Materials
+  // ----------------------------------------------------------
+
   if (materials.length >= 4) {
     estimatedHours += 3
+  } else if (
+    materials.length > 0
+  ) {
+    estimatedHours += 1
   }
+
+  // ----------------------------------------------------------
+  // Hybrid delivery
+  // ----------------------------------------------------------
 
   if (format === "hybrid") {
     estimatedHours += 2
   }
 
-  if (
-    duration === "long-term" ||
-    duration === "extended"
-  ) {
-    estimatedHours += 8
+  // ----------------------------------------------------------
+  // Career guidance
+  // ----------------------------------------------------------
+
+  if (careerGuidance) {
+    estimatedHours += 2
   }
 
   estimatedHours = Math.max(
     4,
-    Math.round(estimatedHours),
+    Math.round(
+      estimatedHours,
+    ),
   )
 
   // ==========================================================
@@ -543,7 +1023,9 @@ export function analyzeCybersecurityTrainingRequest(
   let suggestedPriority =
     "normal"
 
-  if (urgency === "critical") {
+  if (
+    urgency === "critical"
+  ) {
     suggestedPriority =
       "critical"
   } else if (
@@ -561,11 +1043,19 @@ export function analyzeCybersecurityTrainingRequest(
   // ==========================================================
   // PRICING
   // ==========================================================
+  //
+  // This is the important part.
+  //
+  // The pricing engine receives the actual structured
+  // training engagement instead of receiving only the
+  // description.
+  //
+  // ==========================================================
 
   const estimate =
     estimatePrice({
-     serviceType:
-  "cybersecurity-training",
+      serviceType:
+        "cybersecurity-training",
 
       description,
 
@@ -573,20 +1063,67 @@ export function analyzeCybersecurityTrainingRequest(
         urgency === "critical" ||
         urgency === "high"
           ? "urgent"
-          : "standard",
+          : urgency === "low"
+            ? "flexible"
+            : "standard",
 
+      trainingDurationWeeks:
+        trainingWeeks > 0
+          ? trainingWeeks
+          : null,
+
+      sessionsPerWeek:
+        sessionsPerWeek > 0
+          ? sessionsPerWeek
+          : null,
+
+      sessionDurationHours:
+        hoursPerSession > 0
+          ? hoursPerSession
+          : null,
+
+      trainingDelivery,
+
+      specialization:
+        specialization
+          ? clean(
+              input.specialization,
+            )
+          : null,
+
+      practicalLabs:
+        labsRequired,
+
+      assignments,
+
+      materials:
+        materials.length > 0,
+
+      chatSupport,
+
+      assessment:
+        assessmentRequired,
+
+      certification,
+
+      careerGuidance,
+
+      /**
+       * Investigation-only fields are intentionally
+       * neutralized for training.
+       */
       investigationDepth:
-        complexity === "high"
-          ? "deep"
-          : complexity === "medium"
-            ? "standard"
-            : "light",
+        null,
 
       confidentialityLevel,
 
       subjectType:
-        "organization",
+        null,
     })
+
+  // ==========================================================
+  // PRICE SAFETY
+  // ==========================================================
 
   let suggestedPrice =
     Number(
@@ -601,69 +1138,25 @@ export function analyzeCybersecurityTrainingRequest(
     suggestedPrice = 0
   }
 
-  // Training-specific scaling.
-  //
-  // estimatePrice() gives the base service estimate.
-  // The following adjustments account for the
-  // actual training delivery requirements.
-
-  if (participantCount >= 50) {
-    suggestedPrice *= 1.35
-  } else if (participantCount >= 25) {
-    suggestedPrice *= 1.20
-  } else if (participantCount >= 10) {
-    suggestedPrice *= 1.10
-  }
-
-  if (labsRequired) {
-    suggestedPrice *= 1.20
-  }
-
-  if (assessmentRequired) {
-    suggestedPrice *= 1.10
-  }
-
-  if (format === "onsite" ||
-      format === "in_person") {
-    suggestedPrice *= 1.15
-  }
-
-  if (format === "hybrid") {
-    suggestedPrice *= 1.20
-  }
-
-  if (skillLevel === "advanced") {
-    suggestedPrice *= 1.15
-  }
-
-  if (skillLevel === "expert") {
-    suggestedPrice *= 1.25
-  }
-
-  if (compliance.length > 0) {
-    suggestedPrice *= 1.10
-  }
-
-  if (
-    urgency === "critical"
-  ) {
-    suggestedPrice *= 1.35
-  } else if (
-    urgency === "high"
-  ) {
-    suggestedPrice *= 1.20
-  }
-
-  suggestedPrice =
-    Math.round(
-      suggestedPrice,
+  const minPrice =
+    Number.isFinite(
+      estimate.minPrice,
     )
+      ? estimate.minPrice
+      : suggestedPrice
+
+  const maxPrice =
+    Number.isFinite(
+      estimate.maxPrice,
+    )
+      ? estimate.maxPrice
+      : suggestedPrice
 
   // ==========================================================
   // CONFIDENCE
   // ==========================================================
 
-  let confidence = 0.55
+  let confidence = 0.50
 
   if (
     description.length >= 100
@@ -694,14 +1187,25 @@ export function analyzeCybersecurityTrainingRequest(
   }
 
   if (
-    input.goal ||
-    input.objective
+    trainingWeeks > 0
+  ) {
+    confidence += 0.05
+  }
+
+  if (
+    sessionsPerWeek > 0
+  ) {
+    confidence += 0.05
+  }
+
+  if (
+    hoursPerSession > 0
   ) {
     confidence += 0.05
   }
 
   confidence = Math.min(
-    0.90,
+    0.95,
     Number(
       confidence.toFixed(2),
     ),
@@ -711,14 +1215,23 @@ export function analyzeCybersecurityTrainingRequest(
   // REASONING
   // ==========================================================
 
+  const scheduleDescription =
+    trainingHours > 0
+      ? `${trainingWeeks} week(s) × ${sessionsPerWeek} session(s)/week × ${hoursPerSession} hour(s)/session = ${trainingHours} live training hours.`
+      : "A complete structured training schedule was not provided, so the pricing estimate requires additional admin review."
+
   const reasoningParts = [
-    `Cybersecurity training estimate based on ${participantCount || "unspecified"} participant(s).`,
+    `Cybersecurity training estimate based on ${participantCount} participant(s).`,
 
     `Skill level: ${skillLevel}.`,
 
     `Training format: ${format}.`,
 
+    `Training delivery model: ${trainingDelivery}.`,
+
     `Training duration: ${duration}.`,
+
+    scheduleDescription,
 
     `The request contains ${topics.length} selected topic(s).`,
 
@@ -730,20 +1243,52 @@ export function analyzeCybersecurityTrainingRequest(
       ? "Assessment is required."
       : "Assessment is not required.",
 
+    assignments
+      ? "Assignments are included."
+      : "Assignments are not included.",
+
+    materials.length > 0
+      ? `${materials.length} training material/resource item(s) were requested.`
+      : "No specific training materials were requested.",
+
     compliance.length > 0
       ? `Compliance requirements include ${compliance.join(", ")}.`
       : "No specific compliance requirements were provided.",
+
+    certification
+      ? "Certification is included."
+      : "Certification is not explicitly included.",
+
+    careerGuidance
+      ? "Career guidance is included."
+      : "Career guidance is not included.",
+
+    specialization
+      ? `Specialization requested: ${clean(input.specialization)}.`
+      : "No specific specialization was provided.",
 
     `Internal complexity score: ${complexityScore.toFixed(2)}.`,
 
     `Classified complexity: ${complexity}.`,
 
-    `Estimated working time: ${estimatedHours} hours.`,
+    `Estimated internal workload: ${estimatedHours} hours.`,
 
     `Recommended priority: ${suggestedPriority}.`,
 
+    `Pricing model: training engagement rather than investigation pricing.`,
+
     `Recommended internal estimate: ${currency} ${suggestedPrice.toLocaleString()}.`,
+
+    `Recommended internal range: ${currency} ${minPrice.toLocaleString()}–${maxPrice.toLocaleString()}.`,
+
+    `Pricing confidence: ${Math.round(confidence * 100)}%.`,
+
+    "This is an internal AI-generated recommendation and is not the final client quote. Final pricing requires ShadowNode admin review and approval.",
   ]
+
+  // ==========================================================
+  // RETURN
+  // ==========================================================
 
   return {
     complexity,
@@ -756,6 +1301,10 @@ export function analyzeCybersecurityTrainingRequest(
     suggestedPriority,
 
     suggestedPrice,
+
+    minPrice,
+
+    maxPrice,
 
     currency,
 
@@ -776,19 +1325,64 @@ export function analyzeCybersecurityTrainingRequest(
 
       assessmentRequired,
 
+      assignments,
+
+      materialsRequired:
+        materials.length > 0,
+
+      chatSupport,
+
+      certification,
+
+      careerGuidance,
+
+      specialization,
+
       format,
 
       duration,
 
+      trainingWeeks,
+
+      sessionsPerWeek,
+
+      hoursPerSession,
+
+      trainingHours,
+
       urgency,
 
       confidentialityLevel,
+    },
+
+    pricing: {
+      baseHourlyRate:
+        estimate.basePrice,
+
+      trainingMultiplier:
+        estimate.trainingMultiplier,
+
+      urgencyMultiplier:
+        estimate.urgencyMultiplier,
+
+      estimatedPrice:
+        estimate.estimatedPrice,
+
+      minPrice:
+        estimate.minPrice,
+
+      maxPrice:
+        estimate.maxPrice,
+
+      breakdown:
+        estimate.breakdown,
     },
   }
 }
 
 // ============================================================
 // ALIAS
+// ============================================================
 //
 // Allows the route to use either naming convention.
 // ============================================================

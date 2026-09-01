@@ -12,6 +12,8 @@ type RequestData = {
   investigation_objective: string | null
   status: string
 
+  preferred_currency: string | null
+
   ai_price_estimate: number | null
   ai_price_currency: string | null
   ai_complexity: string | null
@@ -24,6 +26,7 @@ type RequestData = {
   approved_quote_amount: number | null
   approved_quote_currency: string | null
   approved_quote_notes: string | null
+  approved_estimated_start: string | null
   approved_estimated_completion: string | null
 
   admin_quote_action: string | null
@@ -139,6 +142,8 @@ export default async function SuperAdministratorRequestDetailPage({
       investigation_objective,
       status,
 
+      preferred_currency,
+
       ai_price_estimate,
       currency AS ai_price_currency,
       ai_complexity,
@@ -151,6 +156,7 @@ export default async function SuperAdministratorRequestDetailPage({
       approved_quote_amount,
       approved_quote_currency,
       approved_quote_notes,
+      approved_estimated_start,
       approved_estimated_completion,
 
       admin_quote_action,

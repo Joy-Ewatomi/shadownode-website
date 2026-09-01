@@ -12,6 +12,10 @@ import {
 } from "@/lib/services/case-conversion-service"
 
 import {
+  convertAcceptedRequestToTrainingEngagement,
+} from "@/lib/services/training-engagement-conversion-service"
+
+import {
   notifyAdmins,
 } from "@/lib/services/notification-service"
 
@@ -51,6 +55,36 @@ const REVIEW_ACTIONS = [
   "request_review",
   "negotiate",
 ]
+
+/*
+ * =========================================================
+ * TRAINING SERVICES
+ * =========================================================
+ *
+ * Any request using one of these service types is converted
+ * into a training_engagement rather than an investigation case.
+ */
+const TRAINING_SERVICE_TYPES = [
+  "custom_training",
+  "cybersecurity_training",
+  "digital_safety",
+]
+
+/*
+ * =========================================================
+ * HELPER
+ * =========================================================
+ */
+
+function isTrainingService(
+  serviceType: string | null | undefined,
+): boolean {
+  return TRAINING_SERVICE_TYPES.includes(
+    String(serviceType ?? "")
+      .trim()
+      .toLowerCase(),
+  )
+}
 
 /*
  * =========================================================
@@ -139,6 +173,7 @@ async function handleDecision(
       return NextResponse.json(
         {
           error: "Decision action is required",
+
           allowed_actions: [
             "accept",
             "review",
@@ -157,10 +192,9 @@ async function handleDecision(
     //
     // IMPORTANT:
     //
-    // ACCEPTING A QUOTE DOES NOT MEAN THE INVESTIGATION
-    // HAS STARTED.
+    // Accepting a quote does NOT start the engagement.
     //
-    // Sequence:
+    // INVESTIGATION:
     //
     // quote
     //   ↓
@@ -174,50 +208,85 @@ async function handleDecision(
     //   ↓
     // case becomes active
     //
+    // TRAINING:
+    //
+    // quote
+    //   ↓
+    // client accepts
+    //   ↓
+    // training engagement created as awaiting_payment
+    //   ↓
+    // payment
+    //   ↓
+    // payment verified
+    //   ↓
+    // training becomes active
+    //
     // ========================================================
 
     if (action === "accept") {
-      /*
-       * Find the client's active quote.
-       *
-       * converted_case_id must still be NULL because the
-       * conversion happens exactly once here.
-       */
-      const eligible = await query<{
-        id: string
-        status: string
-        converted_case_id: string | null
-        approved_quote_amount:
-          | number
-          | string
-          | null
-        approved_quote_currency:
-          | string
-          | null
-      }>(
-        `
-          SELECT
+      // ------------------------------------------------------
+      // FIND ELIGIBLE REQUEST
+      // ------------------------------------------------------
+
+      const eligible =
+        await query<{
+          id: string
+          status: string
+          service_type: string | null
+
+          converted_case_id:
+            | string
+            | null
+
+          converted_training_engagement_id:
+            | string
+            | null
+
+          approved_quote_amount:
+            | number
+            | string
+            | null
+
+          approved_quote_currency:
+            | string
+            | null
+
+          currency:
+            | string
+            | null
+        }>(
+          `
+            SELECT
+              id,
+              status,
+              service_type,
+              converted_case_id,
+              converted_training_engagement_id,
+              approved_quote_amount,
+              approved_quote_currency,
+              currency
+            FROM requests
+            WHERE id = $1
+              AND user_id = $2
+              AND status = ANY($3::varchar[])
+              AND converted_case_id IS NULL
+              AND converted_training_engagement_id IS NULL
+            LIMIT 1
+          `,
+          [
             id,
-            status,
-            converted_case_id,
-            approved_quote_amount,
-            approved_quote_currency
-          FROM requests
-          WHERE id = $1
-            AND user_id = $2
-            AND status = ANY($3::varchar[])
-            AND converted_case_id IS NULL
-          LIMIT 1
-        `,
-        [
-          id,
-          user.id,
-          QUOTE_STATUSES,
-        ],
-      )
+            user.id,
+            QUOTE_STATUSES,
+          ],
+        )
 
       const eligibleRequest =
         eligible.rows[0]
+
+      // ------------------------------------------------------
+      // VERIFY REQUEST
+      // ------------------------------------------------------
 
       if (!eligibleRequest) {
         return NextResponse.json(
@@ -230,6 +299,15 @@ async function handleDecision(
           },
         )
       }
+
+      // ------------------------------------------------------
+      // DETERMINE ENGAGEMENT TYPE
+      // ------------------------------------------------------
+
+      const isTrainingRequest =
+        isTrainingService(
+          eligibleRequest.service_type,
+        )
 
       // ------------------------------------------------------
       // APPROVED QUOTE AMOUNT
@@ -260,10 +338,17 @@ async function handleDecision(
       // APPROVED QUOTE CURRENCY
       // ------------------------------------------------------
 
-      if (
-        !eligibleRequest
-          .approved_quote_currency
-      ) {
+      const quoteCurrency =
+        String(
+          eligibleRequest
+            .approved_quote_currency ??
+            eligibleRequest.currency ??
+            "",
+        )
+          .trim()
+          .toUpperCase()
+
+      if (!quoteCurrency) {
         return NextResponse.json(
           {
             error:
@@ -276,26 +361,36 @@ async function handleDecision(
       }
 
       // ------------------------------------------------------
-      // CONVERT REQUEST TO PAYMENT-PENDING CASE
+      // CONVERSION
       // ------------------------------------------------------
       //
-      // The conversion service:
+      // Training requests become training_engagements.
       //
-      // - creates the case
-      // - sets case status to awaiting_payment
-      // - sets payment_status to pending
-      // - stores converted_case_id on the request
-      // - changes request status to awaiting_payment
-      // - creates the payment_required notification
+      // Investigation requests become cases.
       //
-      // It must NOT activate the investigation.
+      // Neither conversion activates the engagement.
+      // Payment must still be completed and verified.
       // ------------------------------------------------------
 
-      const caseId =
-        await convertAcceptedRequestToCase(
-          id,
-          user.id,
-        )
+      let caseId: string | null = null
+
+      let trainingEngagementId:
+        | string
+        | null = null
+
+      if (isTrainingRequest) {
+        trainingEngagementId =
+          await convertAcceptedRequestToTrainingEngagement(
+            id,
+            user.id,
+          )
+      } else {
+        caseId =
+          await convertAcceptedRequestToCase(
+            id,
+            user.id,
+          )
+      }
 
       // ------------------------------------------------------
       // REQUEST AUDIT
@@ -304,14 +399,35 @@ async function handleDecision(
       await recordRequestAudit(
         id,
         user.id,
-        "client_accepted_quote",
+
+        isTrainingRequest
+          ? "client_accepted_training_quote"
+          : "client_accepted_quote",
+
         {
-          case_id: caseId,
+          ...(caseId
+            ? {
+                case_id: caseId,
+              }
+            : {}),
+
+          ...(trainingEngagementId
+            ? {
+                training_engagement_id:
+                  trainingEngagementId,
+              }
+            : {}),
+
+          engagement_type:
+            isTrainingRequest
+              ? "training"
+              : "investigation",
+
           payment_required: true,
+
           amount: quoteAmount,
-          currency:
-            eligibleRequest
-              .approved_quote_currency,
+
+          currency: quoteCurrency,
         },
       )
 
@@ -321,16 +437,39 @@ async function handleDecision(
 
       await auditLog(
         user.id,
-        "client_accepted_quote",
+
+        isTrainingRequest
+          ? "client_accepted_training_quote"
+          : "client_accepted_quote",
+
         request,
+
         {
           request_id: id,
-          case_id: caseId,
+
+          ...(caseId
+            ? {
+                case_id: caseId,
+              }
+            : {}),
+
+          ...(trainingEngagementId
+            ? {
+                training_engagement_id:
+                  trainingEngagementId,
+              }
+            : {}),
+
+          engagement_type:
+            isTrainingRequest
+              ? "training"
+              : "investigation",
+
           payment_required: true,
+
           amount: quoteAmount,
-          currency:
-            eligibleRequest
-              .approved_quote_currency,
+
+          currency: quoteCurrency,
         },
       )
 
@@ -340,9 +479,23 @@ async function handleDecision(
 
       return NextResponse.json({
         success: true,
+
         decision: "accept",
+
         request_id: id,
-        case_id: caseId,
+
+        ...(caseId
+          ? {
+              case_id: caseId,
+            }
+          : {}),
+
+        ...(trainingEngagementId
+          ? {
+              training_engagement_id:
+                trainingEngagementId,
+            }
+          : {}),
 
         payment_required: true,
 
@@ -351,12 +504,17 @@ async function handleDecision(
 
         amount: quoteAmount,
 
-        currency:
-          eligibleRequest
-            .approved_quote_currency,
+        currency: quoteCurrency,
+
+        engagement_type:
+          isTrainingRequest
+            ? "training"
+            : "investigation",
 
         message:
-          "Quote accepted successfully. Payment is required before the investigation can begin.",
+          isTrainingRequest
+            ? "Training quote accepted successfully. Payment is required before the training engagement can begin."
+            : "Quote accepted successfully. Payment is required before the investigation can begin.",
       })
     }
 
@@ -367,6 +525,10 @@ async function handleDecision(
     if (
       REVIEW_ACTIONS.includes(action)
     ) {
+      // ------------------------------------------------------
+      // REQUESTED BUDGET
+      // ------------------------------------------------------
+
       const requestedBudgetRaw =
         body.requested_budget
 
@@ -375,13 +537,25 @@ async function handleDecision(
           requestedBudgetRaw,
         )
 
+      // ------------------------------------------------------
+      // REASON
+      // ------------------------------------------------------
+
       const reason = String(
         body.reason ?? "",
       ).trim()
 
+      // ------------------------------------------------------
+      // NOTES
+      // ------------------------------------------------------
+
       const notes = String(
         body.notes ?? "",
       ).trim()
+
+      // ------------------------------------------------------
+      // VALIDATE BUDGET
+      // ------------------------------------------------------
 
       if (
         !Number.isFinite(
@@ -399,6 +573,10 @@ async function handleDecision(
           },
         )
       }
+
+      // ------------------------------------------------------
+      // VALIDATE REASON
+      // ------------------------------------------------------
 
       if (
         reason.length < 10
@@ -422,10 +600,19 @@ async function handleDecision(
         await query<{
           id: string
           status: string
-          preferred_currency:
+          currency:
             | string
             | null
+
+          service_type:
+            | string
+            | null
+
           converted_case_id:
+            | string
+            | null
+
+          converted_training_engagement_id:
             | string
             | null
         }>(
@@ -433,13 +620,16 @@ async function handleDecision(
             SELECT
               id,
               status,
-              preferred_currency,
-              converted_case_id
+              currency,
+              service_type,
+              converted_case_id,
+              converted_training_engagement_id
             FROM requests
             WHERE id = $1
               AND user_id = $2
               AND status = ANY($3::varchar[])
               AND converted_case_id IS NULL
+              AND converted_training_engagement_id IS NULL
             LIMIT 1
           `,
           [
@@ -465,15 +655,26 @@ async function handleDecision(
       }
 
       // ======================================================
+      // DETERMINE ENGAGEMENT TYPE
+      // ======================================================
+
+      const isTrainingRequest =
+        isTrainingService(
+          eligibleRequest.service_type,
+        )
+
+      // ======================================================
       // CLIENT CURRENCY
       // ======================================================
 
       const currency =
-        eligibleRequest
-          .preferred_currency
-          ?.trim()
+        String(
+          eligibleRequest.currency ??
+            "",
+        )
+          .trim()
           .toUpperCase() ||
-        "USD"
+        "NGN"
 
       // ======================================================
       // CREATE NEGOTIATION
@@ -505,18 +706,52 @@ async function handleDecision(
           UPDATE requests
           SET
             status = 'negotiation_requested',
-            client_decision_at = NOW(),
-            updated_at = NOW()
+
+            client_decision_at =
+              NOW(),
+
+            updated_at =
+              NOW()
+
           WHERE id = $1
             AND user_id = $2
             AND status = ANY($3::varchar[])
             AND converted_case_id IS NULL
+            AND converted_training_engagement_id IS NULL
         `,
         [
           id,
           user.id,
           QUOTE_STATUSES,
         ],
+      )
+
+      // ======================================================
+      // REQUEST AUDIT
+      // ======================================================
+
+      await recordRequestAudit(
+        id,
+        user.id,
+        isTrainingRequest
+          ? "client_requested_training_quote_review"
+          : "client_requested_quote_review",
+        {
+          engagement_type:
+            isTrainingRequest
+              ? "training"
+              : "investigation",
+
+          requested_budget:
+            requestedBudget,
+
+          currency,
+
+          reason,
+
+          notes:
+            notes || null,
+        },
       )
 
       // ======================================================
@@ -530,6 +765,11 @@ async function handleDecision(
           decision: action,
 
           request_id: id,
+
+          engagement_type:
+            isTrainingRequest
+              ? "training"
+              : "investigation",
 
           negotiation,
         },
@@ -546,10 +786,18 @@ async function handleDecision(
     if (
       action === "decline"
     ) {
+      // ------------------------------------------------------
+      // REASON
+      // ------------------------------------------------------
+
       const reason =
         String(
           body.reason ?? "",
         ).trim()
+
+      // ------------------------------------------------------
+      // VALIDATE REASON
+      // ------------------------------------------------------
 
       if (
         reason.length < 10
@@ -565,18 +813,50 @@ async function handleDecision(
         )
       }
 
+      // ------------------------------------------------------
+      // LIMIT REASON
+      // ------------------------------------------------------
+
       const safeReason =
         reason.slice(
           0,
           2000,
         )
 
+      // ------------------------------------------------------
+      // DECLINE
+      // ------------------------------------------------------
+
       const updated =
-        await query(
+        await query<{
+          id: string
+          case_number:
+            | string
+            | null
+          title:
+            | string
+            | null
+          service_type:
+            | string
+            | null
+          status:
+            | string
+            | null
+          declined_reason:
+            | string
+            | null
+          client_decision_at:
+            | string
+            | null
+          updated_at:
+            | string
+            | null
+        }>(
           `
             UPDATE requests
             SET
-              status = 'declined',
+              status =
+                'declined',
 
               declined_reason =
                 $3,
@@ -591,6 +871,7 @@ async function handleDecision(
               AND user_id = $2
               AND status = ANY($4::varchar[])
               AND converted_case_id IS NULL
+              AND converted_training_engagement_id IS NULL
 
             RETURNING
               id,
@@ -624,15 +905,40 @@ async function handleDecision(
         )
       }
 
+      const declinedRequest =
+        updated.rows[0]
+
+      const isTrainingRequest =
+        isTrainingService(
+          declinedRequest.service_type,
+        )
+
+      // ------------------------------------------------------
+      // REQUEST AUDIT
+      // ------------------------------------------------------
+
       await recordRequestAudit(
         id,
         user.id,
-        "client_declined_quote",
+
+        isTrainingRequest
+          ? "client_declined_training_quote"
+          : "client_declined_quote",
+
         {
+          engagement_type:
+            isTrainingRequest
+              ? "training"
+              : "investigation",
+
           reason:
             safeReason,
         },
       )
+
+      // ------------------------------------------------------
+      // NOTIFY ADMINS
+      // ------------------------------------------------------
 
       try {
         await notifyAdmins({
@@ -640,7 +946,9 @@ async function handleDecision(
             "quote_rejected",
 
           title:
-            "Client declined quote",
+            isTrainingRequest
+              ? "Client declined training quote"
+              : "Client declined quote",
 
           message:
             safeReason ||
@@ -648,6 +956,11 @@ async function handleDecision(
 
           metadata: {
             request_id: id,
+
+            engagement_type:
+              isTrainingRequest
+                ? "training"
+                : "investigation",
 
             target_page:
               "admin_request_review",
@@ -665,17 +978,35 @@ async function handleDecision(
         )
       }
 
+      // ------------------------------------------------------
+      // SYSTEM AUDIT LOG
+      // ------------------------------------------------------
+
       await auditLog(
         user.id,
-        "client_declined_quote",
+
+        isTrainingRequest
+          ? "client_declined_training_quote"
+          : "client_declined_quote",
+
         request,
+
         {
           request_id: id,
+
+          engagement_type:
+            isTrainingRequest
+              ? "training"
+              : "investigation",
 
           reason:
             safeReason,
         },
       )
+
+      // ------------------------------------------------------
+      // RESPONSE
+      // ------------------------------------------------------
 
       return NextResponse.json({
         success: true,
@@ -683,7 +1014,12 @@ async function handleDecision(
         decision: "decline",
 
         request:
-          updated.rows[0],
+          declinedRequest,
+
+        engagement_type:
+          isTrainingRequest
+            ? "training"
+            : "investigation",
       })
     }
 
@@ -707,6 +1043,10 @@ async function handleDecision(
       },
     )
   } catch (error) {
+    // ========================================================
+    // ERROR LOGGING
+    // ========================================================
+
     console.error(
       "CLIENT QUOTE DECISION ERROR",
       error,
@@ -725,6 +1065,10 @@ async function handleDecision(
         error.stack,
       )
     }
+
+    // ========================================================
+    // ERROR RESPONSE
+    // ========================================================
 
     return NextResponse.json(
       {

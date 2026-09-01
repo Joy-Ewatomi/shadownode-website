@@ -1,24 +1,42 @@
-import { NextRequest, NextResponse } from "next/server"
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server"
+
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest,
+) {
   try {
+    // =========================================================
+    // 1. AUTHENTICATION
+    // =========================================================
+
     const user = await getCurrentUser()
 
     if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
+        {
+          error: "Unauthorized",
+        },
         { status: 401 },
       )
     }
 
     if (user.role !== "client") {
       return NextResponse.json(
-        { error: "Forbidden" },
+        {
+          error: "Forbidden",
+        },
         { status: 403 },
       )
     }
+
+    // =========================================================
+    // 2. READ REQUEST BODY
+    // =========================================================
 
     const body = await request.json()
 
@@ -35,34 +53,58 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    /*
-     * Get the request and verify ownership.
-     *
-     * The request must already have been converted
-     * into a case before payment can be initialized.
-     */
+    // =========================================================
+    // 3. GET REQUEST
+    // =========================================================
+    //
+    // A request may belong to:
+    //
+    //   INVESTIGATION
+    //     converted_case_id
+    //
+    //   TRAINING
+    //     converted_training_engagement_id
+    //
+    // We intentionally support both.
+    // =========================================================
+
     const result = await query<{
       id: string
       user_id: string | null
       title: string | null
-      converted_case_id: string | null
-      approved_quote_amount: number | string | null
-      approved_quote_currency: string | null
       status: string | null
+
+      converted_case_id: string | null
+      converted_training_engagement_id:
+        | string
+        | null
+
+      approved_quote_amount:
+        | number
+        | string
+        | null
+
+      approved_quote_currency:
+        | string
+        | null
     }>(
       `
       SELECT
         id,
         user_id,
         title,
+        status,
         converted_case_id,
+        converted_training_engagement_id,
         approved_quote_amount,
-        approved_quote_currency,
-        status
+        approved_quote_currency
       FROM requests
       WHERE id = $1
         AND user_id = $2
-        AND converted_case_id IS NOT NULL
+        AND (
+          converted_case_id IS NOT NULL
+          OR converted_training_engagement_id IS NOT NULL
+        )
       LIMIT 1
       `,
       [
@@ -76,26 +118,79 @@ export async function POST(request: NextRequest) {
     if (!item) {
       return NextResponse.json(
         {
-          error: "Payment request not found",
+          error:
+            "Payment request not found",
         },
         { status: 404 },
       )
     }
 
-    if (!item.converted_case_id) {
+    // =========================================================
+    // 4. DETERMINE PAYMENT TYPE
+    // =========================================================
+
+    const hasCase =
+      Boolean(item.converted_case_id)
+
+    const hasTraining =
+      Boolean(
+        item.converted_training_engagement_id,
+      )
+
+    if (!hasCase && !hasTraining) {
       return NextResponse.json(
         {
           error:
-            "This request has not been converted into a case",
+            "This request is not associated with a payable case or training engagement",
         },
         { status: 400 },
       )
     }
 
     /*
-     * Only requests waiting for payment should
-     * enter the Paystack checkout workflow.
+     * A request should never simultaneously
+     * represent both payment targets.
+     *
+     * If that ever happens, stop rather than
+     * guessing which one should receive money.
      */
+
+    if (hasCase && hasTraining) {
+      console.error(
+        "PAYMENT INITIALIZE: Request has both case and training engagement",
+        {
+          requestId,
+          caseId:
+            item.converted_case_id,
+          trainingEngagementId:
+            item.converted_training_engagement_id,
+        },
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            "This request has conflicting payment targets",
+        },
+        { status: 409 },
+      )
+    }
+
+    const paymentType:
+      | "case"
+      | "training" =
+      hasTraining
+        ? "training"
+        : "case"
+
+    // =========================================================
+    // 5. REQUEST STATUS
+    // =========================================================
+    //
+    // Both investigation and training payments
+    // must be explicitly waiting for payment.
+    // =========================================================
+
     if (
       item.status !== "awaiting_payment"
     ) {
@@ -103,7 +198,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "This investigation has already been paid for",
+              paymentType === "training"
+                ? "This training engagement has already been paid for"
+                : "This investigation has already been paid for",
           },
           { status: 400 },
         )
@@ -120,9 +217,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // =========================================================
+    // 6. VALIDATE QUOTE AMOUNT
+    // =========================================================
+
     if (
-      item.approved_quote_amount === null ||
-      item.approved_quote_amount === undefined
+      item.approved_quote_amount ===
+        null ||
+      item.approved_quote_amount ===
+        undefined
     ) {
       return NextResponse.json(
         {
@@ -150,112 +253,209 @@ export async function POST(request: NextRequest) {
       )
     }
 
-const currency =
-  item.approved_quote_currency
-    ?.trim()
-    .toUpperCase()
+    // =========================================================
+    // 7. VALIDATE CURRENCY
+    // =========================================================
 
-if (!currency) {
-  return NextResponse.json(
-    {
-      error:
-        "Approved quote currency is missing",
-    },
-    { status: 400 },
-  )
-}
+    const currency =
+      item.approved_quote_currency
+        ?.trim()
+        .toUpperCase()
 
-    /*
-     * Verify that the case belongs to this client
-     * through the client profile relationship.
-     *
-     * cases.case_user_id references user_profiles.id,
-     * NOT auth.users.id.
-     */
-    const caseOwnership = await query<{
-      id: string
-      status: string | null
-      payment_status: string | null
-      organization_id: string | null
-    }>(
-      `
-      SELECT
-        c.id,
-        c.status,
-        c.payment_status,
-        c.organization_id
-      FROM cases c
-      JOIN user_profiles up
-        ON up.id = c.case_user_id
-      WHERE c.id = $1
-        AND up.user_id = $2
-      LIMIT 1
-      `,
-      [
-        item.converted_case_id,
-        user.id,
-      ],
-    )
-
-    const caseRecord =
-      caseOwnership.rows[0]
-
-    if (!caseRecord) {
+    if (!currency) {
       return NextResponse.json(
         {
           error:
-            "Case could not be verified for this client",
-        },
-        { status: 403 },
-      )
-    }
-
-    /*
-     * The case should still be waiting for payment.
-     */
-    if (
-      caseRecord.status === "active" ||
-      caseRecord.payment_status === "paid"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "This investigation has already been paid for",
+            "Approved quote currency is missing",
         },
         { status: 400 },
       )
     }
 
+    // =========================================================
+    // 8A. VERIFY INVESTIGATION CASE
+    // =========================================================
+
     if (
-      caseRecord.status !== "awaiting_payment"
+      paymentType === "case" &&
+      item.converted_case_id
     ) {
-      return NextResponse.json(
-        {
-          error:
-            `Case is not awaiting payment. Current status: ${
-              caseRecord.status || "unknown"
-            }`,
-        },
-        { status: 400 },
-      )
+      const caseOwnership =
+        await query<{
+          id: string
+          status: string | null
+          payment_status:
+            | string
+            | null
+          organization_id:
+            | string
+            | null
+        }>(
+          `
+          SELECT
+            c.id,
+            c.status,
+            c.payment_status,
+            c.organization_id
+          FROM cases c
+          JOIN user_profiles up
+            ON up.id = c.case_user_id
+          WHERE c.id = $1
+            AND up.user_id = $2
+          LIMIT 1
+          `,
+          [
+            item.converted_case_id,
+            user.id,
+          ],
+        )
+
+      const caseRecord =
+        caseOwnership.rows[0]
+
+      if (!caseRecord) {
+        return NextResponse.json(
+          {
+            error:
+              "Case could not be verified for this client",
+          },
+          { status: 403 },
+        )
+      }
+
+      if (
+        caseRecord.status ===
+          "active" ||
+        caseRecord.payment_status ===
+          "paid"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "This investigation has already been paid for",
+          },
+          { status: 400 },
+        )
+      }
+
+      if (
+        caseRecord.status !==
+        "awaiting_payment"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              `Case is not awaiting payment. Current status: ${
+                caseRecord.status ||
+                "unknown"
+              }`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
-    /*
-     * Check whether this request already has
-     * a successful payment.
-     *
-     * We intentionally DO NOT reuse pending payments.
-     *
-     * If the client abandoned an earlier Paystack
-     * checkout, a new checkout receives a new reference.
-     *
-     * The old payment remains in the database for
-     * audit/history purposes.
-     */
+    // =========================================================
+    // 8B. VERIFY TRAINING ENGAGEMENT
+    // =========================================================
+
+    if (
+      paymentType === "training" &&
+      item.converted_training_engagement_id
+    ) {
+      const trainingOwnership =
+        await query<{
+          id: string
+          organization_id: string
+          request_id: string
+          client_profile_id:
+            | string
+            | null
+          status: string | null
+          payment_status:
+            | string
+            | null
+          engagement_number:
+            | string
+            | null
+        }>(
+          `
+          SELECT
+            te.id,
+            te.organization_id,
+            te.request_id,
+            te.client_profile_id,
+            te.status,
+            te.payment_status,
+            te.engagement_number
+          FROM training_engagements te
+          JOIN user_profiles up
+            ON up.id = te.client_profile_id
+          WHERE te.id = $1
+            AND up.user_id = $2
+          LIMIT 1
+          `,
+          [
+            item.converted_training_engagement_id,
+            user.id,
+          ],
+        )
+
+      const trainingRecord =
+        trainingOwnership.rows[0]
+
+      if (!trainingRecord) {
+        return NextResponse.json(
+          {
+            error:
+              "Training engagement could not be verified for this client",
+          },
+          { status: 403 },
+        )
+      }
+
+      if (
+        trainingRecord.status ===
+          "active" ||
+        trainingRecord.payment_status ===
+          "paid"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "This training engagement has already been paid for",
+          },
+          { status: 400 },
+        )
+      }
+
+      if (
+        trainingRecord.status !==
+        "awaiting_payment"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              `Training engagement is not awaiting payment. Current status: ${
+                trainingRecord.status ||
+                "unknown"
+              }`,
+          },
+          { status: 400 },
+        )
+      }
+    }
+
+    // =========================================================
+    // 9. CHECK FOR EXISTING SUCCESSFUL PAYMENT
+    // =========================================================
+
     const existingPaidPayment =
       await query<{
         id: string
-        transaction_id: string | null
+        transaction_id:
+          | string
+          | null
         status: string | null
       }>(
         `
@@ -282,6 +482,10 @@ if (!currency) {
       )
     }
 
+    // =========================================================
+    // 10. PAYSTACK CONFIGURATION
+    // =========================================================
+
     const secretKey =
       process.env.PAYSTACK_SECRET_KEY
 
@@ -299,16 +503,24 @@ if (!currency) {
       )
     }
 
+    // =========================================================
+    // 11. CLIENT EMAIL
+    // =========================================================
+
     const email =
       user.email ||
       `client-${user.id}@shadownode.local`
 
-    /*
-     * Every new checkout receives a unique
-     * Paystack reference.
-     */
+    // =========================================================
+    // 12. UNIQUE PAYSTACK REFERENCE
+    // =========================================================
+
     const reference =
-      `SOB-${requestId}-${Date.now()}`
+      `SOB-${paymentType.toUpperCase()}-${requestId}-${Date.now()}`
+
+    // =========================================================
+    // 13. CALLBACK URL
+    // =========================================================
 
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL ||
@@ -317,16 +529,41 @@ if (!currency) {
     const callbackUrl =
       `${appUrl}/api/client/payments/callback`
 
-    /*
-     * Paystack expects the amount in the
-     * smallest currency unit.
-     *
-     * Example:
-     * USD 329.85 -> 32985
-     * NGN 329.85 -> 32985
-     */
+    // =========================================================
+    // 14. CONVERT TO PAYSTACK MINOR UNIT
+    // =========================================================
+
     const paystackAmount =
       Math.round(amount * 100)
+
+    // =========================================================
+    // 15. PAYSTACK INITIALIZATION
+    // =========================================================
+
+    const metadata: Record<
+      string,
+      string
+    > = {
+      request_id: requestId,
+      user_id: user.id,
+      payment_type: paymentType,
+    }
+
+    if (
+      paymentType === "case" &&
+      item.converted_case_id
+    ) {
+      metadata.case_id =
+        item.converted_case_id
+    }
+
+    if (
+      paymentType === "training" &&
+      item.converted_training_engagement_id
+    ) {
+      metadata.training_engagement_id =
+        item.converted_training_engagement_id
+    }
 
     const paystackResponse =
       await fetch(
@@ -341,19 +578,13 @@ if (!currency) {
           },
           body: JSON.stringify({
             email,
-            amount: paystackAmount,
+            amount:
+              paystackAmount,
             currency,
             reference,
             callback_url:
               callbackUrl,
-            metadata: {
-              request_id:
-                requestId,
-              case_id:
-                item.converted_case_id,
-              user_id:
-                user.id,
-            },
+            metadata,
           }),
         },
       )
@@ -381,12 +612,17 @@ if (!currency) {
       )
     }
 
+    // =========================================================
+    // 16. GET CHECKOUT INFORMATION
+    // =========================================================
+
     const authorizationUrl =
       paystackData.data
         .authorization_url
 
     const accessCode =
-      paystackData.data.access_code
+      paystackData.data
+        .access_code
 
     if (!authorizationUrl) {
       console.error(
@@ -403,10 +639,23 @@ if (!currency) {
       )
     }
 
-    /*
-     * Record the payment attempt before
-     * redirecting the client to Paystack.
-     */
+    // =========================================================
+    // 17. RECORD PAYMENT ATTEMPT
+    // =========================================================
+    //
+    // IMPORTANT:
+    //
+    // Investigation:
+    //   case_id = case
+    //   training_engagement_id = NULL
+    //
+    // Training:
+    //   case_id = NULL
+    //   training_engagement_id = engagement
+    //
+    // Both use the same payments table.
+    // =========================================================
+
     const paymentInsert =
       await query<{
         id: string
@@ -420,7 +669,8 @@ if (!currency) {
           transaction_id,
           status,
           organization_id,
-          request_id
+          request_id,
+          training_engagement_id
         )
         SELECT
           $1,
@@ -429,20 +679,43 @@ if (!currency) {
           'paystack',
           $4,
           'pending',
-          c.organization_id,
-          $5
-        FROM cases c
-        WHERE c.id = $1
-          AND c.status = 'awaiting_payment'
-          AND c.payment_status <> 'paid'
+          organization_id,
+          $5,
+          $6
+        FROM (
+          SELECT
+            c.organization_id
+          FROM cases c
+          WHERE $7 = 'case'
+            AND c.id = $1
+            AND c.status = 'awaiting_payment'
+            AND c.payment_status <> 'paid'
+
+          UNION ALL
+
+          SELECT
+            te.organization_id
+          FROM training_engagements te
+          WHERE $7 = 'training'
+            AND te.id = $6
+            AND te.status = 'awaiting_payment'
+            AND te.payment_status <> 'paid'
+        ) AS payable
         RETURNING id
         `,
         [
-          item.converted_case_id,
+          paymentType === "case"
+            ? item.converted_case_id
+            : null,
           amount,
           currency,
           reference,
           requestId,
+          paymentType ===
+          "training"
+            ? item.converted_training_engagement_id
+            : null,
+          paymentType,
         ],
       )
 
@@ -456,15 +729,37 @@ if (!currency) {
       )
     }
 
+    // =========================================================
+    // 18. RETURN CHECKOUT INFORMATION
+    // =========================================================
+
     return NextResponse.json({
       success: true,
+
+      payment_type:
+        paymentType,
+
       authorization_url:
         authorizationUrl,
+
       access_code:
         accessCode,
+
       reference,
+
       payment_id:
         paymentInsert.rows[0].id,
+
+      request_id:
+        requestId,
+
+      case_id:
+        item.converted_case_id ||
+        null,
+
+      training_engagement_id:
+        item.converted_training_engagement_id ||
+        null,
     })
   } catch (error) {
     console.error(

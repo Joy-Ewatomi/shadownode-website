@@ -1,700 +1,737 @@
--- WARNING: This schema is for context only and is not meant to be run.
--- Table order and constraints may not be valid for execution.
+import { query } from "@/lib/db"
+import {
+  notifySuperAdmins,
+  notifyUser,
+} from "@/lib/services/notification-service"
 
-CREATE TABLE public.organizations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name character varying NOT NULL,
-  description text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT organizations_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.user_profiles (
-  id uuid NOT NULL,
-  organization_id uuid,
-  full_name character varying,
-  is_anonymous boolean DEFAULT false,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  user_id uuid,
-  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
-  CONSTRAINT profiles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT user_profiles_user_fk FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.client_accounts (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  organization_id uuid,
-  display_name character varying,
-  email_hash character varying,
-  access_token character varying NOT NULL UNIQUE,
-  is_verified boolean DEFAULT false,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT client_accounts_pkey PRIMARY KEY (id),
-  CONSTRAINT client_accounts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
-);
-CREATE TABLE public.cases (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  organization_id uuid NOT NULL,
-  case_number character varying NOT NULL UNIQUE,
-  client_profile_id uuid,
-  case_user_id uuid,
-  title character varying NOT NULL,
-  description text,
-  service_type character varying NOT NULL,
-  status character varying DEFAULT 'submitted'::character varying,
-  priority character varying DEFAULT 'normal'::character varying,
-  assigned_to uuid,
-  budget numeric,
-  estimated_completion date,
-  completed_at timestamp with time zone,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  progress integer DEFAULT 0,
-  payment_status character varying DEFAULT 'pending'::character varying,
-  started_at timestamp with time zone,
-  final_report_url text,
-  CONSTRAINT cases_pkey PRIMARY KEY (id),
-  CONSTRAINT cases_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT cases_case_user_id_fkey FOREIGN KEY (case_user_id) REFERENCES public.user_profiles(id),
-  CONSTRAINT cases_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.user_profiles(id),
-  CONSTRAINT cases_client_profile_fk FOREIGN KEY (client_profile_id) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.case_updates (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  updated_by uuid,
-  update_type character varying NOT NULL,
-  title character varying,
-  content text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT case_updates_pkey PRIMARY KEY (id),
-  CONSTRAINT case_updates_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT case_updates_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.messages (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  sender_id uuid,
-  sender_type character varying NOT NULL,
-  encrypted_content text NOT NULL,
-  encryption_algorithm character varying DEFAULT 'AES-256'::character varying,
-  created_at timestamp with time zone DEFAULT now(),
-  read_at timestamp with time zone,
-  conversation_id uuid,
-  message text,
-  CONSTRAINT messages_pkey PRIMARY KEY (id),
-  CONSTRAINT messages_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT messages_sender_fk FOREIGN KEY (sender_id) REFERENCES public.user_profiles(id),
-  CONSTRAINT messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id)
-);
-CREATE TABLE public.forensic_files (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  file_name character varying NOT NULL,
-  file_size bigint,
-  file_type character varying,
-  file_hash character varying,
-  uploaded_by uuid,
-  storage_path text,
-  is_evidence boolean DEFAULT true,
-  evidence_type character varying,
-  description text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  chain_of_custody jsonb DEFAULT '[]'::jsonb,
-  CONSTRAINT forensic_files_pkey PRIMARY KEY (id),
-  CONSTRAINT forensic_files_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT forensic_files_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.analysis_results (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  forensic_file_id uuid,
-  analysis_type character varying NOT NULL,
-  findings text,
-  severity character varying,
-  created_by uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT analysis_results_pkey PRIMARY KEY (id),
-  CONSTRAINT analysis_results_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT analysis_results_forensic_file_id_fkey FOREIGN KEY (forensic_file_id) REFERENCES public.forensic_files(id),
-  CONSTRAINT analysis_results_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.activity_logs (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  organization_id uuid,
-  case_id uuid,
-  user_id uuid,
-  action character varying NOT NULL,
-  details jsonb,
-  ip_address character varying,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT activity_logs_pkey PRIMARY KEY (id),
-  CONSTRAINT activity_logs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT activity_logs_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT activity_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.requests (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid,
-  client_email text,
-  contact_method text,
-  token text UNIQUE,
-  is_anonymous boolean DEFAULT false,
-  case_number character varying UNIQUE,
-  title character varying NOT NULL,
-  description text,
-  service_type character varying,
-  status character varying DEFAULT 'submitted'::character varying,
-  final_price integer,
-  price_notes text,
-  ai_analysis text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  currency character varying DEFAULT 'NGN'::character varying,
-  ai_price_estimate numeric DEFAULT 0,
-  converted_case_id uuid,
-  priority character varying DEFAULT 'normal'::character varying,
-  ai_status character varying DEFAULT 'pending'::character varying,
-  ai_complexity character varying,
-  ai_estimated_hours numeric,
-  ai_suggested_service character varying,
-  ai_suggested_priority character varying,
-  ai_confidence numeric,
-  ai_reasoning text,
-  approved_quote_amount numeric,
-  approved_quote_currency character varying DEFAULT 'NGN'::character varying,
-  approved_quote_notes text,
-  approved_estimated_completion date,
-  quote_sent_at timestamp with time zone,
-  client_decision_at timestamp with time zone,
-  declined_reason text,
-  investigation_objective text,
-  subject_type character varying,
-  subject_full_name character varying,
-  subject_known_usernames text,
-  subject_emails text,
-  subject_phone_numbers text,
-  subject_location character varying,
-  subject_organization character varying,
-  subject_websites text,
-  subject_company_name character varying,
-  subject_company_website character varying,
-  subject_company_country character varying,
-  subject_company_industry character varying,
-  subject_domain character varying,
-  subject_url character varying,
-  subject_ip_address character varying,
-  subject_platform character varying,
-  existing_information text,
-  investigation_depth character varying DEFAULT 'standard'::character varying,
-  confidentiality_level character varying DEFAULT 'standard'::character varying,
-  authorization_confirmed boolean DEFAULT false,
-  communication_method character varying DEFAULT 'portal_notification'::character varying,
-  subject_approximate_age character varying,
-  subject_height character varying,
-  subject_weight character varying,
-  subject_hair_color character varying,
-  subject_eye_color character varying,
-  subject_skin_tone character varying,
-  subject_distinguishing_marks text,
-  subject_nationality character varying,
-  subject_languages_spoken character varying,
-  subject_last_known_address text,
-  subject_last_known_occupation character varying,
-  subject_additional_usernames text,
-  subject_gaming_ids text,
-  subject_cryptocurrency_wallets text,
-  subject_domain_names text,
-  subject_ip_addresses text,
-  subject_vehicle_registration text,
-  supporting_links jsonb DEFAULT '[]'::jsonb,
-  evidence_uploads jsonb DEFAULT '[]'::jsonb,
-  additional_notes text,
-  communication_email character varying,
-  communication_country_code character varying,
-  communication_phone character varying,
-  communication_whatsapp character varying,
-  communication_signal character varying,
-  client_country character varying,
-  preferred_currency character varying,
-  training_organization_name character varying,
-  training_client_type character varying,
-  training_participant_count integer,
-  training_skill_level character varying,
-  training_goal text,
-  training_topics text,
-  training_preferred_dates text,
-  training_additional_requirements text,
-  timeline character varying,
-  admin_reviewed_by uuid,
-  admin_reviewed_at timestamp with time zone,
-  admin_quote_action character varying,
-  admin_quote_notes text,
-  super_admin_reviewed_by uuid,
-  super_admin_reviewed_at timestamp with time zone,
-  super_admin_quote_action character varying,
-  super_admin_quote_notes text,
-  training_preferred_start_date date,
-  training_preferred_completion_date date,
-  training_timeline_flexible boolean DEFAULT true,
-  custom_description text,
-  preferred_deadline date,
-  quote_exchange_rate numeric,
-  quote_base_currency character varying,
-  quote_currency_converted_at timestamp with time zone,
-  approved_quote_base_amount numeric,
-  training_details jsonb,
-  approved_estimated_start date,
-  osint_completion_date date,
-  CONSTRAINT requests_pkey PRIMARY KEY (id),
-  CONSTRAINT requests_case_fk FOREIGN KEY (converted_case_id) REFERENCES public.cases(id),
-  CONSTRAINT requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
-  CONSTRAINT requests_admin_reviewed_by_fkey FOREIGN KEY (admin_reviewed_by) REFERENCES public.app_users(id),
-  CONSTRAINT requests_super_admin_reviewed_by_fkey FOREIGN KEY (super_admin_reviewed_by) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.payments (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  amount numeric NOT NULL,
-  currency character varying DEFAULT 'NGN'::character varying,
-  provider character varying,
-  transaction_id character varying UNIQUE,
-  status character varying DEFAULT 'pending'::character varying,
-  paid_at timestamp with time zone,
-  created_at timestamp with time zone DEFAULT now(),
-  organization_id uuid,
-  request_id uuid,
-  CONSTRAINT payments_pkey PRIMARY KEY (id),
-  CONSTRAINT payments_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT payments_org_fk FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT payments_request_fk FOREIGN KEY (request_id) REFERENCES public.requests(id)
-);
-CREATE TABLE public.case_notes (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  created_by uuid,
-  content text NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT case_notes_pkey PRIMARY KEY (id),
-  CONSTRAINT case_notes_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT case_notes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.ai_case_analysis (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL,
-  model character varying,
-  summary text,
-  risk_level character varying,
-  recommended_price numeric,
-  confidence numeric,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT ai_case_analysis_pkey PRIMARY KEY (id),
-  CONSTRAINT ai_case_analysis_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id)
-);
-CREATE TABLE public.case_assignments (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  assigned_to uuid NOT NULL,
-  assigned_by uuid,
-  assigned_at timestamp with time zone DEFAULT now(),
-  removed_at timestamp with time zone,
-  CONSTRAINT case_assignments_pkey PRIMARY KEY (id),
-  CONSTRAINT case_assignments_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT case_assignments_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.case_reports (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  title character varying NOT NULL,
-  file_url text,
-  summary text,
-  created_by uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  report_type character varying,
-  status character varying DEFAULT 'draft'::character varying,
-  classification character varying DEFAULT 'confidential'::character varying,
-  approved_by uuid,
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT case_reports_pkey PRIMARY KEY (id),
-  CONSTRAINT case_reports_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT case_reports_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.app_users (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  username character varying NOT NULL UNIQUE CHECK (char_length(username::text) >= 4 AND char_length(username::text) <= 30),
-  email character varying NOT NULL UNIQUE,
-  password_hash text NOT NULL,
-  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'active'::character varying, 'suspended'::character varying, 'deleted'::character varying]::text[])),
-  email_verified_at timestamp with time zone,
-  role character varying NOT NULL DEFAULT 'client'::character varying,
-  totp_secret_encrypted text,
-  recovery_codes_encrypted text,
-  totp_enabled boolean NOT NULL DEFAULT false,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT app_users_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.sessions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  token character NOT NULL UNIQUE,
-  ip inet,
-  user_agent text,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  expires_at timestamp with time zone NOT NULL,
-  last_activity timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT sessions_pkey PRIMARY KEY (id),
-  CONSTRAINT sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.email_verifications (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  token_hash character NOT NULL UNIQUE,
-  expires_at timestamp with time zone NOT NULL,
-  used_at timestamp with time zone,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT email_verifications_pkey PRIMARY KEY (id),
-  CONSTRAINT email_verifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.password_resets (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  token_hash character NOT NULL UNIQUE,
-  expires_at timestamp with time zone NOT NULL,
-  used_at timestamp with time zone,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT password_resets_pkey PRIMARY KEY (id),
-  CONSTRAINT password_resets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.roles (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name character varying NOT NULL UNIQUE,
-  display_name character varying NOT NULL,
-  CONSTRAINT roles_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.permissions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name character varying NOT NULL UNIQUE,
-  description text,
-  CONSTRAINT permissions_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.role_permissions (
-  role_id uuid NOT NULL,
-  permission_id uuid NOT NULL,
-  CONSTRAINT role_permissions_pkey PRIMARY KEY (role_id, permission_id),
-  CONSTRAINT role_permissions_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id),
-  CONSTRAINT role_permissions_permission_id_fkey FOREIGN KEY (permission_id) REFERENCES public.permissions(id)
-);
-CREATE TABLE public.user_roles (
-  user_id uuid NOT NULL,
-  role_id uuid NOT NULL,
-  CONSTRAINT user_roles_pkey PRIMARY KEY (user_id, role_id),
-  CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
-  CONSTRAINT user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id)
-);
-CREATE TABLE public.login_history (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid,
-  identifier text,
-  ip inet,
-  user_agent text,
-  browser text,
-  operating_system text,
-  country text,
-  city text,
-  device text,
-  success boolean NOT NULL,
-  failure_reason text,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT login_history_pkey PRIMARY KEY (id),
-  CONSTRAINT login_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.audit_logs (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid,
-  action character varying NOT NULL,
-  ip inet,
-  user_agent text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT audit_logs_pkey PRIMARY KEY (id),
-  CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.oauth_accounts (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  provider character varying NOT NULL CHECK (provider::text = ANY (ARRAY['google'::character varying, 'microsoft'::character varying, 'github'::character varying]::text[])),
-  provider_account_id text NOT NULL,
-  email character varying,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT oauth_accounts_pkey PRIMARY KEY (id),
-  CONSTRAINT oauth_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.investigation_entities (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  entity_type character varying NOT NULL,
-  name character varying NOT NULL,
-  description text,
-  aliases jsonb DEFAULT '[]'::jsonb,
-  verification_status character varying DEFAULT 'unverified'::character varying,
-  confidence_score numeric DEFAULT 0,
-  created_by uuid,
-  created_at timestamp without time zone DEFAULT now(),
-  updated_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT investigation_entities_pkey PRIMARY KEY (id),
-  CONSTRAINT entity_case_fk FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT entity_creator_fk FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.entity_relationships (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  source_entity_id uuid NOT NULL,
-  target_entity_id uuid NOT NULL,
-  relationship_type character varying NOT NULL,
-  description text,
-  confidence_score numeric DEFAULT 0,
-  verification_status character varying DEFAULT 'unverified'::character varying,
-  created_by uuid,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT entity_relationships_pkey PRIMARY KEY (id),
-  CONSTRAINT entity_relationships_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT entity_relationships_source_entity_id_fkey FOREIGN KEY (source_entity_id) REFERENCES public.investigation_entities(id),
-  CONSTRAINT entity_relationships_target_entity_id_fkey FOREIGN KEY (target_entity_id) REFERENCES public.investigation_entities(id),
-  CONSTRAINT entity_relationships_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.intelligence_sources (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  source_type character varying NOT NULL,
-  title character varying NOT NULL,
-  url text,
-  description text,
-  reliability_score numeric DEFAULT 0,
-  collected_by uuid,
-  collected_at timestamp without time zone DEFAULT now(),
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT intelligence_sources_pkey PRIMARY KEY (id),
-  CONSTRAINT intelligence_sources_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT intelligence_sources_collected_by_fkey FOREIGN KEY (collected_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.entity_sources (
-  entity_id uuid NOT NULL,
-  source_id uuid NOT NULL,
-  analyst_notes text,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT entity_sources_pkey PRIMARY KEY (entity_id, source_id),
-  CONSTRAINT entity_sources_entity_id_fkey FOREIGN KEY (entity_id) REFERENCES public.investigation_entities(id),
-  CONSTRAINT entity_sources_source_id_fkey FOREIGN KEY (source_id) REFERENCES public.intelligence_sources(id)
-);
-CREATE TABLE public.investigation_timeline (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  event_date date,
-  title character varying NOT NULL,
-  description text,
-  source_id uuid,
-  created_by uuid,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT investigation_timeline_pkey PRIMARY KEY (id),
-  CONSTRAINT investigation_timeline_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT investigation_timeline_source_id_fkey FOREIGN KEY (source_id) REFERENCES public.intelligence_sources(id),
-  CONSTRAINT investigation_timeline_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.intelligence_observations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  observation_type character varying NOT NULL,
-  title character varying NOT NULL,
-  description text NOT NULL,
-  related_entities jsonb DEFAULT '[]'::jsonb,
-  related_sources jsonb DEFAULT '[]'::jsonb,
-  confidence_score numeric DEFAULT 0,
-  status character varying DEFAULT 'pending'::character varying,
-  reviewed_by uuid,
-  reviewed_at timestamp without time zone,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT intelligence_observations_pkey PRIMARY KEY (id),
-  CONSTRAINT intelligence_observations_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT intelligence_observations_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.ai_analysis_runs (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid NOT NULL,
-  model_name character varying,
-  analysis_summary text,
-  entities_checked integer DEFAULT 0,
-  relationships_checked integer DEFAULT 0,
-  observations_created integer DEFAULT 0,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT ai_analysis_runs_pkey PRIMARY KEY (id),
-  CONSTRAINT ai_analysis_runs_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id)
-);
-CREATE TABLE public.entity_history (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  entity_id uuid NOT NULL,
-  changed_by uuid,
-  action character varying NOT NULL,
-  old_data jsonb,
-  new_data jsonb,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT entity_history_pkey PRIMARY KEY (id),
-  CONSTRAINT entity_history_entity_id_fkey FOREIGN KEY (entity_id) REFERENCES public.investigation_entities(id),
-  CONSTRAINT entity_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.entity_positions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  entity_id uuid NOT NULL,
-  position_x numeric DEFAULT 0,
-  position_y numeric DEFAULT 0,
-  canvas_zoom numeric DEFAULT 1,
-  created_at timestamp without time zone DEFAULT now(),
-  updated_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT entity_positions_pkey PRIMARY KEY (id),
-  CONSTRAINT entity_positions_entity_id_fkey FOREIGN KEY (entity_id) REFERENCES public.investigation_entities(id)
-);
-CREATE TABLE public.investigation_tasks (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid,
-  assigned_to uuid,
-  title text NOT NULL,
-  status text DEFAULT 'pending'::text,
-  priority text DEFAULT 'normal'::text,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT investigation_tasks_pkey PRIMARY KEY (id),
-  CONSTRAINT investigation_tasks_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT investigation_tasks_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.user_profiles(id)
-);
-CREATE TABLE public.entity_tags (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  entity_id uuid,
-  tag text NOT NULL,
-  CONSTRAINT entity_tags_pkey PRIMARY KEY (id),
-  CONSTRAINT entity_tags_entity_id_fkey FOREIGN KEY (entity_id) REFERENCES public.investigation_entities(id)
-);
-CREATE TABLE public.notifications (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  case_id uuid,
-  type character varying NOT NULL,
-  title character varying NOT NULL,
-  message text,
-  is_read boolean DEFAULT false,
-  created_at timestamp with time zone DEFAULT now(),
-  metadata jsonb DEFAULT '{}'::jsonb,
-  CONSTRAINT notifications_pkey PRIMARY KEY (id),
-  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
-  CONSTRAINT notifications_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id)
-);
-CREATE TABLE public.conversations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  case_id uuid,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT conversations_pkey PRIMARY KEY (id),
-  CONSTRAINT conversations_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id)
-);
-CREATE TABLE public.conversation_members (
-  conversation_id uuid NOT NULL,
-  user_id uuid NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT conversation_members_pkey PRIMARY KEY (conversation_id, user_id),
-  CONSTRAINT conversation_members_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id),
-  CONSTRAINT conversation_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.quote_negotiations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL,
-  client_id uuid,
-  assigned_reviewer_id uuid,
-  owner_approver_id uuid,
-  round_number integer NOT NULL DEFAULT 1,
-  status character varying NOT NULL DEFAULT 'requested'::character varying CHECK (status::text = ANY (ARRAY['requested'::character varying, 'reviewing'::character varying, 'approved'::character varying, 'rejected'::character varying, 'revised_quote_sent'::character varying, 'closed'::character varying]::text[])),
-  original_ai_estimate numeric,
-  original_quote_amount numeric,
-  quote_currency character varying NOT NULL DEFAULT 'NGN'::character varying,
-  requested_budget numeric,
-  client_reason text NOT NULL,
-  client_notes text,
-  administrator_recommendation text,
-  revised_quote_amount numeric,
-  owner_decision character varying CHECK (owner_decision IS NULL OR (owner_decision::text = ANY (ARRAY['approved'::character varying, 'rejected'::character varying, 'modified'::character varying]::text[]))),
-  owner_decision_notes text,
-  decided_at timestamp with time zone,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT quote_negotiations_pkey PRIMARY KEY (id),
-  CONSTRAINT quote_negotiations_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id),
-  CONSTRAINT quote_negotiations_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.app_users(id),
-  CONSTRAINT quote_negotiations_assigned_reviewer_id_fkey FOREIGN KEY (assigned_reviewer_id) REFERENCES public.app_users(id),
-  CONSTRAINT quote_negotiations_owner_approver_id_fkey FOREIGN KEY (owner_approver_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.request_audit_events (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL,
-  actor_user_id uuid,
-  action character varying NOT NULL,
-  details jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT request_audit_events_pkey PRIMARY KEY (id),
-  CONSTRAINT request_audit_events_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id),
-  CONSTRAINT request_audit_events_actor_user_id_fkey FOREIGN KEY (actor_user_id) REFERENCES public.app_users(id)
-);
-CREATE TABLE public.employees (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  employee_number text NOT NULL UNIQUE,
-  first_name text NOT NULL,
-  last_name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  phone text,
-  department text NOT NULL,
-  role text NOT NULL,
-  clearance_level text NOT NULL,
-  employment_type text NOT NULL,
-  status text NOT NULL DEFAULT 'active'::text,
-  country text,
-  hire_date date,
-  assigned_case_count integer DEFAULT 0,
-  auth_user_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT employees_pkey PRIMARY KEY (id),
-  CONSTRAINT employees_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
-);
-CREATE TABLE public.quote_versions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL,
-  version_number integer NOT NULL,
-  created_by uuid,
-  creator_role character varying,
-  source character varying NOT NULL,
-  price numeric,
-  currency character varying,
-  estimated_completion text,
-  notes text,
-  reasoning text,
-  status character varying DEFAULT 'draft'::character varying,
-  created_at timestamp with time zone DEFAULT now(),
-  previous_price numeric,
-  price_difference numeric,
-  estimated_start date,
-  CONSTRAINT quote_versions_pkey PRIMARY KEY (id),
-  CONSTRAINT quote_versions_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id)
-);
-CREATE TABLE public.workflow_history (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  request_id uuid,
-  case_id uuid,
-  quote_version_id uuid,
-  performed_by uuid,
-  performer_role character varying,
-  action character varying,
-  description text,
-  metadata jsonb,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT workflow_history_pkey PRIMARY KEY (id),
-  CONSTRAINT workflow_history_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id),
-  CONSTRAINT workflow_history_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT workflow_history_quote_version_id_fkey FOREIGN KEY (quote_version_id) REFERENCES public.quote_versions(id)
-);
+type PaystackTransaction = {
+  id?: number
+  status?: string
+  reference?: string
+  amount?: number
+  currency?: string
+  paid_at?: string | null
+  metadata?: {
+    request_id?: string
+    case_id?: string
+    training_engagement_id?: string
+    user_id?: string
+  }
+}
+
+type PaymentType = "case" | "training"
+
+export type VerifyResult = {
+  success: boolean
+  already_processed?: boolean
+  payment_id?: string
+  request_id?: string
+  case_id?: string
+  training_engagement_id?: string
+  status?: string
+  payment_type?: PaymentType
+  message?: string
+}
+
+type LocalPayment = {
+  id: string
+  case_id: string | null
+  request_id: string | null
+  training_engagement_id: string | null
+  amount: number | string
+  currency: string | null
+  status: string | null
+}
+
+function getPaymentType(
+  payment: Pick<
+    LocalPayment,
+    "case_id" | "training_engagement_id"
+  >,
+): PaymentType | null {
+  if (
+    payment.case_id &&
+    payment.training_engagement_id
+  ) {
+    throw new Error(
+      "Payment cannot be associated with both a case and a training engagement",
+    )
+  }
+
+  if (payment.case_id) {
+    return "case"
+  }
+
+  if (payment.training_engagement_id) {
+    return "training"
+  }
+
+  return null
+}
+
+export async function verifyAndCompletePaystackPayment(
+  reference: string,
+): Promise<VerifyResult> {
+  const cleanReference = reference.trim()
+
+  if (!cleanReference) {
+    throw new Error("Payment reference is required")
+  }
+
+  const secretKey =
+    process.env.PAYSTACK_SECRET_KEY
+
+  if (!secretKey) {
+    throw new Error(
+      "PAYSTACK_SECRET_KEY is not configured",
+    )
+  }
+
+  // =========================================================
+  // 1. FIND LOCAL PAYMENT
+  // =========================================================
+
+  const localPaymentResult =
+    await query<LocalPayment>(
+      `
+      SELECT
+        id,
+        case_id,
+        request_id,
+        training_engagement_id,
+        amount,
+        currency,
+        status
+      FROM payments
+      WHERE provider = 'paystack'
+        AND transaction_id = $1
+      LIMIT 1
+      `,
+      [cleanReference],
+    )
+
+  const payment =
+    localPaymentResult.rows[0]
+
+  if (!payment) {
+    throw new Error(
+      "Payment reference was not found",
+    )
+  }
+
+  const paymentType =
+    getPaymentType(payment)
+
+  if (!paymentType) {
+    throw new Error(
+      "Payment is not associated with a case or training engagement",
+    )
+  }
+
+  // =========================================================
+  // 2. IDEMPOTENCY
+  // =========================================================
+
+  if (payment.status === "paid") {
+    return {
+      success: true,
+      already_processed: true,
+      payment_id: payment.id,
+      request_id:
+        payment.request_id || undefined,
+      case_id:
+        payment.case_id || undefined,
+      training_engagement_id:
+        payment.training_engagement_id ||
+        undefined,
+      payment_type: paymentType,
+      status: "paid",
+      message:
+        "Payment was already processed",
+    }
+  }
+
+  // =========================================================
+  // 3. VERIFY DIRECTLY WITH PAYSTACK
+  // =========================================================
+
+  const response = await fetch(
+    `https://api.paystack.co/transaction/verify/${encodeURIComponent(
+      cleanReference,
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    },
+  )
+
+  let payload: {
+    status?: boolean
+    message?: string
+    data?: PaystackTransaction
+  }
+
+  try {
+    payload = await response.json()
+  } catch {
+    throw new Error(
+      "Invalid response received from Paystack",
+    )
+  }
+
+  if (!response.ok || !payload.status) {
+    console.error(
+      "PAYSTACK VERIFY ERROR",
+      {
+        status: response.status,
+        payload,
+        reference: cleanReference,
+      },
+    )
+
+    throw new Error(
+      payload.message ||
+        "Paystack verification failed",
+    )
+  }
+
+  const transaction = payload.data
+
+  if (!transaction) {
+    throw new Error(
+      "Paystack verification returned no transaction data",
+    )
+  }
+
+  // =========================================================
+  // 4. PAYMENT MUST BE SUCCESSFUL
+  // =========================================================
+
+  if (transaction.status !== "success") {
+    return {
+      success: false,
+      payment_id: payment.id,
+      request_id:
+        payment.request_id || undefined,
+      case_id:
+        payment.case_id || undefined,
+      training_engagement_id:
+        payment.training_engagement_id ||
+        undefined,
+      payment_type: paymentType,
+      status:
+        transaction.status || "unknown",
+      message:
+        `Payment is not successful. Paystack status: ${
+          transaction.status || "unknown"
+        }`,
+    }
+  }
+
+  // =========================================================
+  // 5. VERIFY AMOUNT
+  // =========================================================
+
+  const localAmount = Number(
+    payment.amount,
+  )
+
+  if (!Number.isFinite(localAmount)) {
+    throw new Error(
+      "Invalid local payment amount",
+    )
+  }
+
+  const localAmountMinor =
+    Math.round(localAmount * 100)
+
+  const paystackAmount = Number(
+    transaction.amount,
+  )
+
+  if (
+    !Number.isFinite(paystackAmount) ||
+    paystackAmount !== localAmountMinor
+  ) {
+    console.error(
+      "PAYMENT AMOUNT MISMATCH",
+      {
+        reference: cleanReference,
+        localAmount,
+        localAmountMinor,
+        paystackAmount,
+        paymentType,
+      },
+    )
+
+    throw new Error(
+      "Payment amount does not match the approved quote",
+    )
+  }
+
+  // =========================================================
+  // 6. VERIFY CURRENCY
+  // =========================================================
+
+  const localCurrency =
+    String(
+      payment.currency || "NGN",
+    ).toUpperCase()
+
+  const paystackCurrency =
+    String(
+      transaction.currency || "",
+    ).toUpperCase()
+
+  if (
+    paystackCurrency &&
+    paystackCurrency !== localCurrency
+  ) {
+    console.error(
+      "PAYMENT CURRENCY MISMATCH",
+      {
+        reference: cleanReference,
+        localCurrency,
+        paystackCurrency,
+      },
+    )
+
+    throw new Error(
+      "Payment currency does not match the approved quote",
+    )
+  }
+
+  // =========================================================
+  // 7. BEGIN DATABASE TRANSACTION
+  // =========================================================
+  //
+  // IMPORTANT:
+  // This assumes your query() helper keeps transaction
+  // statements on the same database connection.
+  //
+  // If query() uses pool.query() independently for every
+  // call, BEGIN/COMMIT must instead be handled through a
+  // dedicated database client.
+  // =========================================================
+
+  await query("BEGIN")
+
+  try {
+    // =======================================================
+    // 8. LOCK PAYMENT
+    // =======================================================
+
+    const lockedPaymentResult =
+      await query<{
+        id: string
+        case_id: string | null
+        request_id: string | null
+        training_engagement_id: string | null
+        status: string | null
+      }>(
+        `
+        SELECT
+          id,
+          case_id,
+          request_id,
+          training_engagement_id,
+          status
+        FROM payments
+        WHERE id = $1
+        FOR UPDATE
+        `,
+        [payment.id],
+      )
+
+    const current =
+      lockedPaymentResult.rows[0]
+
+    if (!current) {
+      throw new Error(
+        "Payment disappeared during verification",
+      )
+    }
+
+    const currentPaymentType =
+      getPaymentType(current)
+
+    if (!currentPaymentType) {
+      throw new Error(
+        "Payment is no longer associated with a valid target",
+      )
+    }
+
+    // =======================================================
+    // 9. HANDLE RACE CONDITION
+    // =======================================================
+
+    if (current.status === "paid") {
+      await query("COMMIT")
+
+      return {
+        success: true,
+        already_processed: true,
+        payment_id: current.id,
+        request_id:
+          current.request_id || undefined,
+        case_id:
+          current.case_id || undefined,
+        training_engagement_id:
+          current.training_engagement_id ||
+          undefined,
+        payment_type:
+          currentPaymentType,
+        status: "paid",
+        message:
+          "Payment was already processed",
+      }
+    }
+
+    // =======================================================
+    // 10. MARK PAYMENT AS PAID
+    // =======================================================
+
+    await query(
+      `
+      UPDATE payments
+      SET
+        status = 'paid',
+        paid_at = COALESCE(
+          $2::timestamptz,
+          NOW()
+        )
+      WHERE id = $1
+      `,
+      [
+        current.id,
+        transaction.paid_at || null,
+      ],
+    )
+
+    // =======================================================
+    // 11. INVESTIGATION PAYMENT
+    // =======================================================
+
+    if (current.case_id) {
+      await query(
+        `
+        UPDATE cases
+        SET
+          payment_status = 'paid',
+          status = 'active',
+          started_at = COALESCE(
+            started_at,
+            NOW()
+          ),
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [current.case_id],
+      )
+
+      if (current.request_id) {
+        await query(
+          `
+          UPDATE requests
+          SET
+            status = 'active',
+            updated_at = NOW()
+          WHERE id = $1
+          `,
+          [current.request_id],
+        )
+      }
+
+      await query(
+        `
+        INSERT INTO case_updates (
+          case_id,
+          updated_by,
+          update_type,
+          title,
+          content
+        )
+        VALUES (
+          $1,
+          NULL,
+          'payment',
+          'Payment Confirmed',
+          $2
+        )
+        `,
+        [
+          current.case_id,
+          `Payment confirmed through Paystack. Reference: ${cleanReference}. Investigation activated.`,
+        ],
+      )
+    }
+
+    // =======================================================
+    // 12. TRAINING PAYMENT
+    // =======================================================
+
+    if (current.training_engagement_id) {
+      await query(
+        `
+        UPDATE training_engagements
+        SET
+          payment_status = 'paid',
+          status = 'active',
+          started_at = COALESCE(
+            started_at,
+            NOW()
+          ),
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [
+          current.training_engagement_id,
+        ],
+      )
+
+      if (current.request_id) {
+        await query(
+          `
+          UPDATE requests
+          SET
+            status = 'active',
+            updated_at = NOW()
+          WHERE id = $1
+          `,
+          [current.request_id],
+        )
+      }
+
+      await query(
+        `
+        INSERT INTO training_updates (
+          training_engagement_id,
+          updated_by,
+          update_type,
+          title,
+          content
+        )
+        VALUES (
+          $1,
+          NULL,
+          'payment',
+          'Payment Confirmed',
+          $2
+        )
+        `,
+        [
+          current.training_engagement_id,
+          `Payment confirmed through Paystack. Reference: ${cleanReference}. Training engagement activated.`,
+        ],
+      )
+    }
+
+    // =======================================================
+    // 13. COMMIT
+    // =======================================================
+
+    await query("COMMIT")
+
+    // =======================================================
+    // 14. INVESTIGATION NOTIFICATIONS
+    // =======================================================
+
+    if (current.case_id) {
+      const caseInfo =
+        await query<{
+          case_number: string | null
+          title: string | null
+          client_user_id: string | null
+        }>(
+          `
+          SELECT
+            c.case_number,
+            c.title,
+            up.user_id AS client_user_id
+          FROM cases c
+          LEFT JOIN user_profiles up
+            ON up.id = c.client_profile_id
+          WHERE c.id = $1
+          LIMIT 1
+          `,
+          [current.case_id],
+        )
+
+      const caseRow =
+        caseInfo.rows[0]
+
+      if (caseRow?.client_user_id) {
+        await notifyUser(
+          caseRow.client_user_id,
+          {
+            caseId: current.case_id,
+            type: "payment_confirmed",
+            title: "Payment confirmed",
+            message:
+              "Your payment has been confirmed and your investigation is now active.",
+            metadata: {
+              request_id:
+                current.request_id,
+              case_id:
+                current.case_id,
+              payment_id:
+                current.id,
+              target_page: "case",
+              action: "open_case",
+            },
+          },
+        )
+      }
+
+      await notifySuperAdmins({
+        type: "case_ready_for_assignment",
+        title:
+          "Case ready for assignment",
+        message:
+          `${
+            caseRow?.case_number ||
+            "A case"
+          } is paid and ready for investigator assignment.`,
+        metadata: {
+          request_id:
+            current.request_id,
+          case_id:
+            current.case_id,
+          payment_id:
+            current.id,
+          target_page:
+            "case_assignment",
+          action:
+            "assign_investigator",
+        },
+      })
+    }
+
+    // =======================================================
+    // 15. TRAINING NOTIFICATIONS
+    // =======================================================
+
+    if (
+      current.training_engagement_id
+    ) {
+      const trainingInfo =
+        await query<{
+          engagement_number: string | null
+          training_organization_name:
+            | string
+            | null
+          client_user_id:
+            | string
+            | null
+        }>(
+          `
+          SELECT
+            te.engagement_number,
+            te.training_organization_name,
+            up.user_id AS client_user_id
+          FROM training_engagements te
+          LEFT JOIN user_profiles up
+            ON up.id = te.client_profile_id
+          WHERE te.id = $1
+          LIMIT 1
+          `,
+          [
+            current.training_engagement_id,
+          ],
+        )
+
+      const trainingRow =
+        trainingInfo.rows[0]
+
+      if (trainingRow?.client_user_id) {
+        await notifyUser(
+          trainingRow.client_user_id,
+          {
+            type: "payment_confirmed",
+            title:
+              "Training payment confirmed",
+            message:
+              "Your payment has been confirmed and your training engagement is now active.",
+            metadata: {
+              request_id:
+                current.request_id,
+              training_engagement_id:
+                current.training_engagement_id,
+              payment_id:
+                current.id,
+              engagement_number:
+                trainingRow.engagement_number ||
+                undefined,
+              target_page:
+                "client_training_engagement",
+              action:
+                "open_training_engagement",
+            },
+          },
+        )
+      }
+
+      await notifySuperAdmins({
+        type:
+          "training_ready_for_assignment",
+        title:
+          "Training ready for assignment",
+        message:
+          `${
+            trainingRow?.engagement_number ||
+            "A training engagement"
+          } is paid and ready for trainer assignment.`,
+        metadata: {
+          request_id:
+            current.request_id,
+          training_engagement_id:
+            current.training_engagement_id,
+          payment_id:
+            current.id,
+          target_page:
+            "training_assignment",
+          action:
+            "assign_trainer",
+        },
+      })
+    }
+
+    // =======================================================
+    // 16. RETURN
+    // =======================================================
+
+    return {
+      success: true,
+      payment_id: current.id,
+      request_id:
+        current.request_id || undefined,
+      case_id:
+        current.case_id || undefined,
+      training_engagement_id:
+        current.training_engagement_id ||
+        undefined,
+      payment_type:
+        currentPaymentType,
+      status: "paid",
+      message:
+        currentPaymentType === "training"
+          ? "Payment confirmed and training engagement activated"
+          : "Payment confirmed and investigation activated",
+    }
+  } catch (error) {
+    try {
+      await query("ROLLBACK")
+    } catch (rollbackError) {
+      console.error(
+        "PAYSTACK PAYMENT ROLLBACK ERROR",
+        rollbackError,
+      )
+    }
+
+    throw error
+  }
+}
