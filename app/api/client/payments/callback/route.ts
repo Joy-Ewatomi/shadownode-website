@@ -148,21 +148,28 @@ export async function GET(
     // 6. BUILD CLIENT TARGET
     // =======================================================
 
-    let target: URL
+let target: URL
 
-    if (payment.request_id) {
-      target =
-        new URL(
-          `/dashboard/client/payments/${payment.request_id}`,
-          request.nextUrl.origin,
-        )
-    } else {
-      target =
-        new URL(
-          "/dashboard/client/payments",
-          request.nextUrl.origin,
-        )
-    }
+const trainingEngagementId =
+  result.training_engagement_id ||
+  payment.training_engagement_id
+
+if (trainingEngagementId) {
+  target = new URL(
+    `/dashboard/training/${trainingEngagementId}`,
+    request.nextUrl.origin,
+  )
+} else if (payment.request_id) {
+  target = new URL(
+    `/dashboard/client/payments/${payment.request_id}`,
+    request.nextUrl.origin,
+  )
+} else {
+  target = new URL(
+    "/dashboard/client/payments",
+    request.nextUrl.origin,
+  )
+}
 
     // =======================================================
     // 7. SUCCESS

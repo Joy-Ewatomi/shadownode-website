@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permission"
 import { query } from "@/lib/db"
 
 import TrainingShell from "@/components/training/TrainingShell"
+import { getUserProfileId } from "@/lib/services/training-operations-service"
 
 type TrainingEngagementLayoutProps = {
   children: React.ReactNode
@@ -123,6 +124,16 @@ export default async function TrainingEngagementLayout({
       "training:view",
     )
 
+  // Allow assigned trainers (investigator/analyst) to access their assigned engagements
+  let isAssignedTrainer = false
+
+  if (user.role === "investigator" || user.role === "analyst") {
+    const profileId = await getUserProfileId(user.id)
+    if (profileId && engagement.assigned_trainer === profileId) {
+      isAssignedTrainer = true
+    }
+  }
+
   let isOwner = false
 
   if (
@@ -156,7 +167,8 @@ export default async function TrainingEngagementLayout({
 
   if (
     !canViewTraining &&
-    !isOwner
+    !isOwner &&
+    !isAssignedTrainer
   ) {
     return (
       <div className="min-h-screen bg-[#020806] px-6 py-20 text-white">
@@ -239,6 +251,7 @@ export default async function TrainingEngagementLayout({
       }
       title={title}
       status={status}
+      isAssignedTrainer={isAssignedTrainer}
     >
       {children}
     </TrainingShell>

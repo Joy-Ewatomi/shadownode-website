@@ -539,60 +539,59 @@ export default function ClientPaymentDetailPage({
             ACTIONS
             =================================================== */}
 
-        <div className="flex flex-wrap gap-3">
-          {!isPaid && (
-            <button
-              type="button"
-              disabled={paying}
-              onClick={
-                handlePayment
-              }
-              className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {paying
-                ? "Opening Paystack..."
-                : "Pay Now"}
-            </button>
-          )}
+       <div className="flex flex-wrap gap-3">
+  {!isPaid && (
+    <button
+      type="button"
+      disabled={paying}
+      onClick={handlePayment}
+      className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965] disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {paying
+        ? "Opening Paystack..."
+        : "Pay Now"}
+    </button>
+  )}
 
-          {isPaid &&
-            request.converted_case_id && (
-              <Link
-                href={`/dashboard/client/cases/${request.converted_case_id}`}
-                className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965]"
-              >
-                View Investigation
-              </Link>
-            )}
+  {isPaid &&
+    request.training_engagement_id && (
+      <Link
+        href={`/dashboard/training/${request.training_engagement_id}`}
+        className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965]"
+      >
+        Open Training
+      </Link>
+    )}
 
-          {isPaid &&
-            request.training_engagement_id && (
-              <Link
-                href={`/dashboard/client/training/${request.training_engagement_id}`}
-                className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965]"
-              >
-                View Training
-              </Link>
-            )}
+  {isPaid &&
+    !request.training_engagement_id &&
+    request.converted_case_id && (
+      <Link
+        href={`/dashboard/client/cases/${request.converted_case_id}`}
+        className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965]"
+      >
+        View Investigation
+      </Link>
+    )}
 
-          {isPaid &&
-            !request.converted_case_id &&
-            !request.training_engagement_id && (
-              <Link
-                href="/dashboard/client/cases"
-                className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965]"
-              >
-                View Investigations
-              </Link>
-            )}
+  {isPaid &&
+    !request.training_engagement_id &&
+    !request.converted_case_id && (
+      <Link
+        href="/dashboard/client/cases"
+        className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965]"
+      >
+        View Investigations
+      </Link>
+    )}
 
-          <Link
-            href="/dashboard/client/requests"
-            className="rounded border border-[#143b28] px-5 py-3 text-sm text-white/70 hover:bg-white/5"
-          >
-            Return to requests
-          </Link>
-        </div>
+  <Link
+    href="/dashboard/client/requests"
+    className="rounded border border-[#143b28] px-5 py-3 text-sm text-white/70 hover:bg-white/5"
+  >
+    Return to requests
+  </Link>
+</div>
       </div>
     </div>
   )

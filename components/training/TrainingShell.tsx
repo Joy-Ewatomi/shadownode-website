@@ -13,6 +13,7 @@ type TrainingShellProps = {
   engagementNumber: string
   title: string
   status: string
+  isAssignedTrainer?: boolean
   children: React.ReactNode
 }
 
@@ -22,6 +23,7 @@ export default function TrainingShell({
   engagementNumber,
   title,
   status,
+  isAssignedTrainer = false,
   children,
 }: TrainingShellProps) {
   const [sidebarOpen, setSidebarOpen] =
@@ -33,6 +35,7 @@ export default function TrainingShell({
         user={user}
         engagementId={engagementId}
         open={sidebarOpen}
+        isAssignedTrainer={isAssignedTrainer}
         onClose={() =>
           setSidebarOpen(false)
         }

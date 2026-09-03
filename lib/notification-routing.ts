@@ -151,17 +151,16 @@ if (
 
 
 
-  if (
-    type === "quote_ready" ||
-    type === "quote_adjusted" ||
-    type === "quote_review"
-  ) {
-
-    return requestId
-      ? `/dashboard/client/requests/${requestId}`
-      : "/dashboard/client/requests"
-
-  }
+if (
+  type === "quote_sent" ||
+  type === "quote_ready" ||
+  type === "quote_adjusted" ||
+  type === "quote_review"
+) {
+  return requestId
+    ? `/dashboard/client/requests/${requestId}`
+    : "/dashboard/client/requests"
+}
 
 
 

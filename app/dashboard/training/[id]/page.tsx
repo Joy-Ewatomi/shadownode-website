@@ -1,5 +1,11 @@
-import { query } from "@/lib/db"
+import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
+
+import { query } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
+import { hasPermission } from "@/lib/permission"
+import { getUserProfileId } from "@/lib/services/training-operations-service"
+import AssignTrainerForm from "@/components/training/AssignTrainerForm"
 
 type TrainingEngagementPageProps = {
   params: Promise<{
@@ -20,11 +26,11 @@ type TrainingEngagementRow = {
   skill_level: string | null
   training_goal: string | null
   training_topics: string | null
-  preferred_dates: string | null
+  preferred_dates: string | Date | null
   additional_requirements: string | null
 
-  preferred_start_date: string | null
-  preferred_completion_date: string | null
+  preferred_start_date: string | Date | null
+  preferred_completion_date: string | Date | null
   timeline_flexible: boolean | null
 
   status: string | null
@@ -32,11 +38,11 @@ type TrainingEngagementRow = {
   assigned_trainer: string | null
   progress: number | null
 
-  started_at: string | null
-  completed_at: string | null
+  started_at: string | Date | null
+  completed_at: string | Date | null
 
-  created_at: string | null
-  updated_at: string | null
+  created_at: string | Date | null
+  updated_at: string | Date | null
 }
 
 type RequestRow = {
@@ -50,10 +56,98 @@ type ProfileRow = {
   full_name: string | null
 }
 
+/*
+ * ============================================================
+ * DISPLAY HELPERS
+ * ============================================================
+ */
+
+function formatDate(value: string | Date | null): string {
+  if (!value) {
+    return "Not specified"
+  }
+
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value)
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    },
+  ).format(date)
+}
+
+function formatDateTime(
+  value: string | Date | null,
+): string {
+  if (!value) {
+    return "Not available"
+  }
+
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value)
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  ).format(date)
+}
+
+function formatStatus(value: string | null): string {
+  if (!value) {
+    return "Unknown"
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) =>
+      char.toUpperCase(),
+    )
+}
+
+/*
+ * ============================================================
+ * PAGE
+ * ============================================================
+ */
+
 export default async function TrainingEngagementPage({
   params,
 }: TrainingEngagementPageProps) {
   const { id } = await params
+
+  /*
+   * ============================================================
+   * CURRENT USER
+   * ============================================================
+   */
+
+  const user = await getCurrentUser()
+
+  if (!user) {
+    redirect("/login")
+  }
 
   /*
    * ============================================================
@@ -108,7 +202,57 @@ export default async function TrainingEngagementPage({
     engagementResult.rows[0]
 
   if (!engagement) {
-    return null
+    notFound()
+  }
+
+  /*
+   * ============================================================
+   * AUTHORIZATION
+   *
+   * Client:
+   *   Can only view their own training engagements.
+   *
+   * Investigator / Analyst:
+   *   Can only view engagements assigned to them.
+   *
+   * Administrator / Super Administrator:
+   *   Requires training:view.
+   * ============================================================
+   */
+
+  if (user.role === "client") {
+    const profileId =
+      await getUserProfileId(user.id)
+
+    if (!profileId) {
+      redirect("/dashboard/training")
+    }
+
+    if (
+      !engagement.client_profile_id ||
+      engagement.client_profile_id !== profileId
+    ) {
+      notFound()
+    }
+  } else if (
+    user.role === "investigator" ||
+    user.role === "analyst"
+  ) {
+    if (
+      !engagement.assigned_trainer ||
+      engagement.assigned_trainer !== user.id
+    ) {
+      notFound()
+    }
+  } else if (
+    user.role === "administrator" ||
+    user.role === "super_administrator"
+  ) {
+    if (!hasPermission(user, "training:view")) {
+      redirect("/dashboard")
+    }
+  } else {
+    redirect("/dashboard")
   }
 
   /*
@@ -117,9 +261,7 @@ export default async function TrainingEngagementPage({
    * ============================================================
    */
 
-  let request:
-    | RequestRow
-    | null = null
+  let request: RequestRow | null = null
 
   if (engagement.request_id) {
     const requestResult =
@@ -166,9 +308,7 @@ export default async function TrainingEngagementPage({
 
           LIMIT 1
         `,
-        [
-          engagement.client_profile_id,
-        ],
+        [engagement.client_profile_id],
       )
 
     clientName =
@@ -200,9 +340,7 @@ export default async function TrainingEngagementPage({
 
           LIMIT 1
         `,
-        [
-          engagement.assigned_trainer,
-        ],
+        [engagement.assigned_trainer],
       )
 
     trainerName =
@@ -236,18 +374,40 @@ export default async function TrainingEngagementPage({
     "pending"
 
   const statusLabel =
-    status
-      .replaceAll("_", " ")
-      .replace(/\b\w/g, (char) =>
-        char.toUpperCase(),
-      )
+    formatStatus(status)
 
   const paymentLabel =
-    paymentStatus
-      .replaceAll("_", " ")
-      .replace(/\b\w/g, (char) =>
-        char.toUpperCase(),
-      )
+    formatStatus(paymentStatus)
+
+  const canAssignTrainer =
+    user.role === "administrator" ||
+    user.role === "super_administrator"
+
+  /*
+   * ============================================================
+   * FORMATTED DATES
+   * ============================================================
+   */
+
+  const preferredDates =
+    engagement.preferred_dates
+      ? typeof engagement.preferred_dates ===
+        "string"
+        ? engagement.preferred_dates
+        : formatDate(
+            engagement.preferred_dates,
+          )
+      : "Not specified"
+
+  const preferredStartDate =
+    formatDate(
+      engagement.preferred_start_date,
+    )
+
+  const preferredCompletionDate =
+    formatDate(
+      engagement.preferred_completion_date,
+    )
 
   /*
    * ============================================================
@@ -261,7 +421,7 @@ export default async function TrainingEngagementPage({
           ENGAGEMENT SUMMARY
       ====================================================== */}
 
-      <section className="rounded-xl border border-[#143b28] bg-[#04100b]/80 p-6">
+      <section className="group rounded-xl border border-[#143b28] bg-[#020806]/90 p-5 transition hover:border-[#20dc73]/30 hover:bg-[#06150d]/95 p-6">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#20dc73]/60">
@@ -276,7 +436,7 @@ export default async function TrainingEngagementPage({
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
               {request?.description ||
-                "Training engagement workspace for planning, scheduling, materials, progress, feedback and certification."}
+                "Training engagement workspace for planning, scheduling, materials, progress, feedback and certificate completion."}
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -290,7 +450,9 @@ export default async function TrainingEngagementPage({
             </div>
           </div>
 
-          {/* PROGRESS */}
+          {/* ==================================================
+              PROGRESS
+          ================================================== */}
 
           <div className="w-full shrink-0 rounded-xl border border-[#143b28] bg-black/20 p-5 sm:w-64">
             <div className="flex items-end justify-between">
@@ -333,16 +495,24 @@ export default async function TrainingEngagementPage({
           value={clientName}
         />
 
-        <InfoCard
-          label="Trainer"
-          value={trainerName}
-        />
+        <div>
+          <InfoCard
+            label="Trainer"
+            value={trainerName}
+          />
+
+          {canAssignTrainer && (
+            <AssignTrainerForm
+              engagementId={id}
+              currentTrainer={trainerName}
+            />
+          )}
+        </div>
 
         <InfoCard
           label="Participants"
           value={
-            engagement.participant_count !==
-            null
+            engagement.participant_count !== null
               ? String(
                   engagement.participant_count,
                 )
@@ -382,25 +552,18 @@ export default async function TrainingEngagementPage({
           <div className="space-y-3">
             <DetailRow
               label="Preferred Dates"
-              value={
-                engagement.preferred_dates ||
-                "Not specified"
-              }
+              value={preferredDates}
             />
 
             <DetailRow
               label="Start"
-              value={
-                engagement.preferred_start_date ||
-                "Not specified"
-              }
+              value={preferredStartDate}
             />
 
             <DetailRow
               label="Completion"
               value={
-                engagement.preferred_completion_date ||
-                "Not specified"
+                preferredCompletionDate
               }
             />
 
@@ -560,7 +723,7 @@ function WorkspaceLink({
   description: string
 }) {
   return (
-   <Link
+    <Link
       href={href}
       className="group rounded-xl border border-[#143b28] bg-[#04100b]/60 p-5 transition hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5"
     >

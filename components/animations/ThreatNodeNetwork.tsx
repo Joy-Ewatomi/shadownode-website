@@ -174,7 +174,7 @@ export function ThreatNodeNetwork() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-      <canvas ref={canvasRef} className="block h-full w-full opacity-90" />
+      <canvas ref={canvasRef} className="block h-full w-full opacity-9" />
     </div>
   )
 }

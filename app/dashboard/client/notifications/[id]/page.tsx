@@ -88,7 +88,10 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
             <p className="mt-2 text-sm leading-7 text-white/65">{request.approved_quote_notes || "No additional notes were provided."}</p>
           </div>
 
-          {notification.type === "quote_ready" && (
+{(
+  notification.type === "quote_sent" ||
+  notification.type === "quote_ready"
+) && (
   <QuoteApprovalCard request={request} />
 )}
 

@@ -25,6 +25,7 @@ type TrainingSidebarProps = {
   engagementId: string
   open?: boolean
   onClose?: () => void
+  isAssignedTrainer?: boolean
 }
 
 type TrainingNavItem = {
@@ -39,6 +40,7 @@ export default function TrainingSidebar({
   engagementId,
   open = true,
   onClose,
+  isAssignedTrainer = false,
 }: TrainingSidebarProps) {
   const pathname = usePathname()
 
@@ -95,9 +97,21 @@ export default function TrainingSidebar({
     },
   ]
 
-  const visibleItems = items.filter((item) =>
-    hasPermission(user, item.permission),
-  )
+  const trainerAllowed = new Set([
+    "training:view",
+    "training:manage",
+    "training:materials",
+    "training:progress",
+    "training:updates",
+  ])
+
+  const visibleItems = items.filter((item) => {
+    if (hasPermission(user, item.permission)) return true
+
+    if (isAssignedTrainer && trainerAllowed.has(item.permission)) return true
+
+    return false
+  })
 
   function isActive(href: string) {
     if (href === base) {
