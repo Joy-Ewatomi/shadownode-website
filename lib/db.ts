@@ -50,6 +50,22 @@ const connectionString =
   )
 
 // ============================================================
+// POOL CONFIGURATION
+// ============================================================
+
+const poolMax = Number(
+  process.env.DB_POOL_MAX || "10",
+)
+
+const poolIdleTimeout = Number(
+  process.env.DB_IDLE_TIMEOUT_MS || "30000",
+)
+
+const poolConnectionTimeout = Number(
+  process.env.DB_CONNECTION_TIMEOUT_MS || "5000",
+)
+
+// ============================================================
 // CREATE POOL
 // ============================================================
 
@@ -58,7 +74,7 @@ function createPool(): Pool | null {
     return null
   }
 
-  const pool = new Pool({
+  return new Pool({
     connectionString,
 
     ssl:
@@ -68,16 +84,53 @@ function createPool(): Pool | null {
           }
         : undefined,
 
-    max: 10,
+    /*
+     * Keep the pool deliberately controlled.
+     *
+     * Increasing this blindly can make Supabase/Postgres
+     * connection exhaustion worse rather than better.
+     */
+    max:
+      Number.isFinite(poolMax) &&
+      poolMax > 0
+        ? Math.min(poolMax, 20)
+        : 10,
 
-    idleTimeoutMillis: 30000,
+    /*
+     * Connections that have been sitting unused for this
+     * long can be released.
+     */
+    idleTimeoutMillis:
+      Number.isFinite(poolIdleTimeout) &&
+      poolIdleTimeout >= 1000
+        ? poolIdleTimeout
+        : 30000,
 
-    connectionTimeoutMillis: 10000,
+    /*
+     * Do not wait 10+ seconds for a connection when the
+     * pool/database is unavailable.
+     */
+    connectionTimeoutMillis:
+      Number.isFinite(
+        poolConnectionTimeout,
+      ) &&
+      poolConnectionTimeout >= 1000
+        ? Math.min(
+            poolConnectionTimeout,
+            10000,
+          )
+        : 5000,
 
     allowExitOnIdle: false,
-  })
 
-  return pool
+    /*
+     * Recycle connections periodically.
+     *
+     * This helps prevent long-lived stale connections from
+     * accumulating in development environments.
+     */
+    maxLifetimeSeconds: 300,
+  })
 }
 
 // ============================================================
@@ -127,7 +180,11 @@ export function isDatabaseNetworkError(
       "ENOTFOUND",
     ].includes(
       String(
-        (error as { code?: unknown }).code,
+        (
+          error as {
+            code?: unknown
+          }
+        ).code,
       ),
     )
   )
@@ -151,14 +208,23 @@ const CONNECTION_TERMINATED_CODES =
   ])
 
 function isConnectionTerminatedError(
-  err: unknown,
+  error: unknown,
 ): boolean {
   if (
-    err instanceof Error &&
-    "code" in err
+    !(error instanceof Error)
+  ) {
+    return false
+  }
+
+  if (
+    "code" in error
   ) {
     const code = String(
-      (err as { code?: unknown }).code,
+      (
+        error as {
+          code?: unknown
+        }
+      ).code,
     )
 
     if (
@@ -168,33 +234,28 @@ function isConnectionTerminatedError(
     ) {
       return true
     }
-
-    if (
-      err.message.includes(
-        "Connection terminated",
-      )
-    ) {
-      return true
-    }
-
-    if (
-      err.message.includes(
-        "terminating connection",
-      )
-    ) {
-      return true
-    }
-
-    if (
-      err.message.includes(
-        "closed the connection",
-      )
-    ) {
-      return true
-    }
   }
 
-  return false
+  const message =
+    error.message.toLowerCase()
+
+  return (
+    message.includes(
+      "connection terminated",
+    ) ||
+    message.includes(
+      "terminating connection",
+    ) ||
+    message.includes(
+      "closed the connection",
+    ) ||
+    message.includes(
+      "connection reset",
+    ) ||
+    message.includes(
+      "connection ended",
+    )
+  )
 }
 
 // ============================================================
@@ -202,18 +263,85 @@ function isConnectionTerminatedError(
 // ============================================================
 
 function isTimeoutError(
-  err: unknown,
+  error: unknown,
 ): boolean {
-  return (
-    err instanceof Error &&
-    (
-      err.message.includes(
-        "timeout",
-      ) ||
-      err.message.includes(
-        "ETIMEDOUT",
-      )
+  if (
+    !(error instanceof Error)
+  ) {
+    return false
+  }
+
+  if (
+    "code" in error
+  ) {
+    const code = String(
+      (
+        error as {
+          code?: unknown
+        }
+      ).code,
     )
+
+    if (
+      [
+        "ETIMEDOUT",
+        "ECONNRESET",
+        "ECONNREFUSED",
+      ].includes(code)
+    ) {
+      return true
+    }
+  }
+
+  const message =
+    error.message.toLowerCase()
+
+  return (
+    message.includes(
+      "timeout",
+    ) ||
+    message.includes(
+      "etimedout",
+    ) ||
+    message.includes(
+      "connection terminated",
+    )
+  )
+}
+
+// ============================================================
+// QUERY RETRY POLICY
+// ============================================================
+
+function shouldRetryQuery(
+  error: unknown,
+  attempt: number,
+  retries: number,
+) {
+  if (
+    attempt >= retries
+  ) {
+    return false
+  }
+
+  /*
+   * A connection timeout usually means the pool cannot
+   * obtain a connection. Immediately retrying the same
+   * operation can make pool pressure worse.
+   *
+   * Therefore timeout errors are NOT retried here.
+   */
+  if (
+    isTimeoutError(error)
+  ) {
+    return false
+  }
+
+  /*
+   * Retry only genuine terminated/stale connections.
+   */
+  return isConnectionTerminatedError(
+    error,
   )
 }
 
@@ -226,7 +354,7 @@ export async function query<
 >(
   text: string,
   params: unknown[] = [],
-  retries = 2,
+  retries = 1,
 ): Promise<QueryResult<T>> {
   if (!db) {
     throw new Error(
@@ -244,45 +372,38 @@ export async function query<
         text,
         params,
       )
-    } catch (err: unknown) {
-      const isTerminated =
-        isConnectionTerminatedError(
-          err,
+    } catch (error: unknown) {
+      const retryable =
+        shouldRetryQuery(
+          error,
+          attempt,
+          retries,
         )
 
-      const isTimeout =
-        isTimeoutError(err)
-
-      if (
-        (
-          isTerminated ||
-          isTimeout
-        ) &&
-        attempt < retries
-      ) {
-        console.warn(
-          `[db] Query attempt ${
-            attempt + 1
-          } failed (${
-            err instanceof Error
-              ? err.message
-              : "unknown"
-          }), retrying...`,
-        )
-
-        await new Promise(
-          (resolve) =>
-            setTimeout(
-              resolve,
-              200 *
-                (attempt + 1),
-            ),
-        )
-
-        continue
+      if (!retryable) {
+        throw error
       }
 
-      throw err
+      console.warn(
+        `[db] Query attempt ${
+          attempt + 1
+        } failed: ${
+          error instanceof Error
+            ? error.message
+            : "unknown database error"
+        }. Retrying once...`,
+      )
+
+      /*
+       * Small backoff for a terminated connection.
+       */
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            250,
+          ),
+      )
     }
   }
 
@@ -312,19 +433,27 @@ export async function withTransaction<T>(
     ))
 
   try {
-    await client.query("BEGIN")
+    await client.query(
+      "BEGIN",
+    )
 
     try {
       const result =
         await callback(client)
 
-      await client.query("COMMIT")
+      await client.query(
+        "COMMIT",
+      )
 
       return result
     } catch (error) {
       try {
-        await client.query("ROLLBACK")
-      } catch (rollbackError) {
+        await client.query(
+          "ROLLBACK",
+        )
+      } catch (
+        rollbackError
+      ) {
         console.error(
           "[db] Transaction rollback failed",
           rollbackError,

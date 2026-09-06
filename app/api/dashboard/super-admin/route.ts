@@ -38,24 +38,37 @@ export async function GET() {
       databaseHealth = "unhealthy"
     }
 
-    /*
-     * ------------------------------------------------------
-     * USERS
-     * ------------------------------------------------------
-     */
-    const usersResult = await query<{
-      total_users: number
-    }>(`
-      SELECT
-        COUNT(*)::int AS total_users
-      FROM app_users
-    `)
+/*
+ * ------------------------------------------------------
+ * USERS
+ * ------------------------------------------------------
+ */
+const usersResult = await query<{
+  total_users: number
+}>(`
+  SELECT
+    COUNT(*)::int AS total_users
+  FROM app_users
+`)
 
-    /*
-     * ------------------------------------------------------
-     * AUDIT EVENTS
-     * ------------------------------------------------------
-     */
+/*
+ * ------------------------------------------------------
+ * TRAINING ENGAGEMENTS
+ * ------------------------------------------------------
+ */
+const trainingResult = await query<{
+  total_training: number
+}>(`
+  SELECT
+    COUNT(*)::int AS total_training
+  FROM training_engagements
+`)
+
+/*
+ * ------------------------------------------------------
+ * AUDIT EVENTS
+ * ------------------------------------------------------
+ */
     const auditResult = await query<{
       audit_events: number
     }>(`
@@ -150,10 +163,13 @@ export async function GET() {
     return NextResponse.json({
       system_health: databaseHealth,
 
-      total_users:
-        usersResult.rows[0]?.total_users ?? 0,
+  total_users:
+  usersResult.rows[0]?.total_users ?? 0,
 
-      audit_events:
+total_training:
+  trainingResult.rows[0]?.total_training ?? 0,
+
+audit_events:
         auditResult.rows[0]?.audit_events ?? 0,
 
       security_events:

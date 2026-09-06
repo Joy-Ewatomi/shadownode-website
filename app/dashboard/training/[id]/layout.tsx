@@ -124,12 +124,16 @@ export default async function TrainingEngagementLayout({
       "training:view",
     )
 
-  // Allow assigned trainers (investigator/analyst) to access their assigned engagements
+  // Only approved trainers can access training operations for this engagement.
   let isAssignedTrainer = false
 
   if (user.role === "investigator" || user.role === "analyst") {
     const profileId = await getUserProfileId(user.id)
-    if (profileId && engagement.assigned_trainer === profileId) {
+    if (
+      profileId &&
+      engagement.assigned_trainer === profileId &&
+      engagement.status !== "pending_super_admin_approval"
+    ) {
       isAssignedTrainer = true
     }
   }

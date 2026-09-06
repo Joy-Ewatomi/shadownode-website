@@ -115,19 +115,14 @@ export async function POST(
       )
     }
 
-    const result =
-      await verifyAndCompletePaystackPayment(
-        reference,
-      )
+    const result = await verifyAndCompletePaystackPayment(reference)
 
-    return NextResponse.json(
-      result,
-      {
-        status: result.success
-          ? 200
-          : 202,
-      },
-    )
+    // Provide a client-friendly redirect URL for training payments
+    if (result.success && result.training_engagement_id) {
+      ;(result as any).redirect_url = `/dashboard/training/${result.training_engagement_id}`
+    }
+
+    return NextResponse.json(result, { status: result.success ? 200 : 202 })
   } catch (error) {
     console.error(
       "CLIENT PAYMENT VERIFY ERROR",

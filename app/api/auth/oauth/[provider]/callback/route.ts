@@ -16,7 +16,6 @@ import {
 
 type Provider =
   | "google"
-  | "microsoft"
   | "github"
 
 type OAuthUser = {
@@ -45,13 +44,6 @@ const config: Record<
       "https://oauth2.googleapis.com/token",
     user:
       "https://openidconnect.googleapis.com/v1/userinfo",
-  },
-
-  microsoft: {
-    token:
-      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    user:
-      "https://graph.microsoft.com/oidc/userinfo",
   },
 
   github: {

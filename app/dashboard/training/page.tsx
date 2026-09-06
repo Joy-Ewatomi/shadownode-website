@@ -222,7 +222,7 @@ export default async function TrainingPage() {
 
       <div className="space-y-3">
         {rows.length === 0 && (
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+          <div className="rounded-xl border border-white/10 bg-[#020806]/150 p-5">
             <p className="text-sm text-white/60">
               No training engagements found.
             </p>
@@ -233,7 +233,7 @@ export default async function TrainingPage() {
           <Link
             key={training.id}
             href={`/dashboard/training/${training.id}`}
-            className="block rounded-xl border border-[#143b28] bg-[#04100b]/60 p-5 transition hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5"
+            className="block rounded-xl border border-[#143b28] bg-[#020806]/150 p-5 transition hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5"
           >
             <div className="flex items-center justify-between gap-4">
               <div>

@@ -1,8 +1,5 @@
 "use client"
 
-import { useState } from "react"
-
-import TrainingSidebar from "@/components/training/TrainingSidebar"
 import TrainingHeader from "@/components/training/TrainingHeader"
 
 import type { AppUser } from "@/lib/auth"
@@ -26,37 +23,19 @@ export default function TrainingShell({
   isAssignedTrainer = false,
   children,
 }: TrainingShellProps) {
-  const [sidebarOpen, setSidebarOpen] =
-    useState(false)
-
   return (
-    <div className="min-h-screen bg-[#020806] text-white">
-      <TrainingSidebar
-        user={user}
-        engagementId={engagementId}
-        open={sidebarOpen}
-        isAssignedTrainer={isAssignedTrainer}
-        onClose={() =>
-          setSidebarOpen(false)
-        }
-      />
+   <div className="min-h-screen bg-[#020806] text-white">
+          <TrainingHeader
+            engagementNumber={engagementNumber}
+            title={title}
+            status={status}
+          />
 
-      <div className="lg:pl-64">
-        <TrainingHeader
-          engagementNumber={engagementNumber}
-          title={title}
-          status={status}
-          onMenuClick={() =>
-            setSidebarOpen(true)
-          }
-        />
-
-        <main className="p-4 sm:p-6 lg:p-8">
-          <div className="mx-auto max-w-7xl">
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
+          <main className="p-4 sm:p-6 lg:p-8">
+            <div className="mx-auto max-w-7xl">
+              {children}
+            </div>
+          </main>
+        </div>
   )
 }

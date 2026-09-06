@@ -3,21 +3,35 @@ import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 
 export async function GET() {
-  try {
-    const startedAt = performance.now()
+  const startedAt = performance.now()
 
+  try {
     const authStartedAt = performance.now()
     const user = await getCurrentUser()
     const authMs = Math.round(performance.now() - authStartedAt)
 
     if (!user) {
-      console.log(`[notifications] auth=${authMs}ms unauthorized`)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      if (authMs > 1000) {
+        console.warn(
+          `[notifications] slow auth=${authMs}ms unauthorized`,
+        )
+      }
+
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        },
+      )
     }
 
     const isSuperAdministrator =
       user.role === "super_administrator" ||
       user.role === "super-administrator"
+
     const queryStartedAt = performance.now()
 
     const notifications = isSuperAdministrator
@@ -37,7 +51,8 @@ export async function GET() {
             u.email AS recipient_email,
             u.role AS recipient_role
           FROM notifications n
-          LEFT JOIN app_users u ON u.id = n.user_id
+          LEFT JOIN app_users u
+            ON u.id = n.user_id
           ORDER BY n.created_at DESC
           `,
         )
@@ -52,49 +67,93 @@ export async function GET() {
             n.created_at,
             n.case_id,
             n.metadata,
-            n.user_id AS recipient_id,
-            u.username AS recipient_name,
-            u.email AS recipient_email,
-            u.role AS recipient_role
+            n.user_id AS recipient_id
           FROM notifications n
-          LEFT JOIN app_users u ON u.id = n.user_id
           WHERE n.user_id = $1
           ORDER BY n.created_at DESC
           `,
           [user.id],
         )
 
-    const rows = notifications.rows.map((row: Record<string, unknown>) => {
-      const metadata = row.metadata
-      let parsedMetadata: Record<string, unknown> | null = null
-
-      if (typeof metadata === "string") {
-        try {
-          parsedMetadata = JSON.parse(metadata)
-        } catch {
-          parsedMetadata = null
-        }
-      } else if (metadata && typeof metadata === "object") {
-        parsedMetadata = metadata as Record<string, unknown>
-      }
-
-      return {
-        ...row,
-        metadata: parsedMetadata,
-      }
-    })
-
-    const queryMs = Math.round(performance.now() - queryStartedAt)
-    const totalMs = Math.round(performance.now() - startedAt)
-
-    console.log(
-      `[notifications] user=${user.id} auth=${authMs}ms query=${queryMs}ms total=${totalMs}ms rows=${notifications.rows.length}`
+    const queryMs = Math.round(
+      performance.now() - queryStartedAt,
     )
 
-    return NextResponse.json(rows)
+    const rows = notifications.rows.map(
+      (row: Record<string, unknown>) => {
+        const metadata = row.metadata
+
+        let parsedMetadata:
+          | Record<string, unknown>
+          | null = null
+
+        if (typeof metadata === "string") {
+          try {
+            const parsed = JSON.parse(metadata)
+
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              !Array.isArray(parsed)
+            ) {
+              parsedMetadata =
+                parsed as Record<string, unknown>
+            }
+          } catch {
+            parsedMetadata = null
+          }
+        } else if (
+          metadata &&
+          typeof metadata === "object" &&
+          !Array.isArray(metadata)
+        ) {
+          parsedMetadata =
+            metadata as Record<string, unknown>
+        }
+
+        return {
+          ...row,
+          metadata: parsedMetadata,
+        }
+      },
+    )
+
+    const totalMs = Math.round(
+      performance.now() - startedAt,
+    )
+
+    if (totalMs > 1000) {
+      console.warn(
+        `[notifications] slow user=${user.id} role=${user.role} auth=${authMs}ms query=${queryMs}ms total=${totalMs}ms rows=${rows.length}`,
+      )
+    }
+
+    return NextResponse.json(rows, {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    })
   } catch (error) {
-    console.error("NOTIFICATIONS GET ERROR", error)
-    return NextResponse.json({ error: "Failed to load notifications" }, { status: 500 })
+    const totalMs = Math.round(
+      performance.now() - startedAt,
+    )
+
+    console.error(
+      `[notifications] GET failed after ${totalMs}ms`,
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        error: "Failed to load notifications",
+      },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    )
   }
 }
 
@@ -105,16 +164,48 @@ export async function PATCH(req: NextRequest) {
     if (!user) {
       return NextResponse.json(
         { error: "Unauthorized" },
-        { status: 401 },
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        },
       )
     }
 
-    const { id } = await req.json()
+    let body: unknown
+
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        {
+          status: 400,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        },
+      )
+    }
+
+    const id =
+      body &&
+      typeof body === "object" &&
+      "id" in body &&
+      typeof body.id === "string"
+        ? body.id.trim()
+        : ""
 
     if (!id) {
       return NextResponse.json(
         { error: "Missing notification id" },
-        { status: 400 },
+        {
+          status: 400,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        },
       )
     }
 
@@ -140,11 +231,57 @@ export async function PATCH(req: NextRequest) {
     if (!updated.rows.length) {
       return NextResponse.json(
         { error: "Notification not found" },
-        { status: 404 },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        },
       )
     }
 
-    return NextResponse.json(updated.rows[0])
+    const row = updated.rows[0] as Record<
+      string,
+      unknown
+    >
+
+    let metadata: Record<string, unknown> | null = null
+
+    if (typeof row.metadata === "string") {
+      try {
+        const parsed = JSON.parse(row.metadata)
+
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed)
+        ) {
+          metadata =
+            parsed as Record<string, unknown>
+        }
+      } catch {
+        metadata = null
+      }
+    } else if (
+      row.metadata &&
+      typeof row.metadata === "object" &&
+      !Array.isArray(row.metadata)
+    ) {
+      metadata =
+        row.metadata as Record<string, unknown>
+    }
+
+    return NextResponse.json(
+      {
+        ...row,
+        metadata,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    )
   } catch (error) {
     console.error(
       "NOTIFICATIONS PATCH ERROR",
@@ -155,7 +292,12 @@ export async function PATCH(req: NextRequest) {
       {
         error: "Failed to update notification",
       },
-      { status: 500 },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
     )
   }
 }

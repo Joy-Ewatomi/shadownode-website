@@ -50,10 +50,6 @@ export async function GET() {
      * Team Workload
      *
      * Cases currently waiting for assignment.
-     *
-     * We use case_assignments rather than the old
-     * employees.assigned_case_count field because the
-     * assignment table is the authoritative source.
      */
     const pendingAssignments = await query(`
       SELECT COUNT(*)::int AS count
@@ -65,6 +61,16 @@ export async function GET() {
         'awaiting_assignment'
       )
       AND c.assigned_to IS NULL
+    `)
+
+    /*
+     * Training Engagements
+     *
+     * Total training engagements managed by the bureau.
+     */
+    const totalTraining = await query(`
+      SELECT COUNT(*)::int AS count
+      FROM training_engagements
     `)
 
     /*
@@ -92,6 +98,9 @@ export async function GET() {
 
       pending_assignments:
         pendingAssignments.rows[0]?.count ?? 0,
+
+      total_training:
+        totalTraining.rows[0]?.count ?? 0,
 
       unresolved_alerts:
         unresolvedAlerts.rows[0]?.count ?? 0,

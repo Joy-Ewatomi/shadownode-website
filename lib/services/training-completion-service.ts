@@ -17,6 +17,13 @@ type TrainingEngagementRow = {
   organization_id: string
   client_profile_id: string
   assigned_trainer: string | null
+
+  // Trainer assignment approval workflow
+  pending_trainer_id: string | null
+  trainer_approval_status: string | null
+  trainer_approval_requested_by: string | null
+  trainer_approval_approved_by: string | null
+
   progress: number | null
   status: string | null
 
@@ -64,6 +71,7 @@ type CertificateRow = {
 export async function completeTrainingEngagement(
   engagementId: string,
   actorProfileId: string,
+  actorRole: string,
 ): Promise<CompleteTrainingResult> {
   if (!engagementId?.trim()) {
     throw new Error(
@@ -87,23 +95,29 @@ export async function completeTrainingEngagement(
     const engagementResult =
       await query<TrainingEngagementRow>(
         `
-        SELECT
-          id,
-          request_id,
-          organization_id,
-          client_profile_id,
-          assigned_trainer,
-          progress,
-          status,
-          training_organization_name,
-          training_client_type,
-          skill_level,
-          training_goal,
-          training_topics
-        FROM training_engagements
-        WHERE id = $1
-        FOR UPDATE
-        LIMIT 1
+   SELECT
+  id,
+  request_id,
+  organization_id,
+  client_profile_id,
+  assigned_trainer,
+
+  pending_trainer_id,
+  trainer_approval_status,
+  trainer_approval_requested_by,
+  trainer_approval_approved_by,
+
+  progress,
+  status,
+  training_organization_name,
+  training_client_type,
+  skill_level,
+  training_goal,
+  training_topics
+FROM training_engagements
+WHERE id = $1
+FOR UPDATE
+LIMIT 1
         `,
         [engagementId],
       )
@@ -117,36 +131,37 @@ export async function completeTrainingEngagement(
       )
     }
 
-    // ========================================================
-    // 2. VERIFY ACTOR
-    // ========================================================
-    //
-    // Only the assigned trainer should be able to mark the
-    // training completed.
-    //
-    // We also allow the client profile to be the actor only
-    // if the surrounding application explicitly decides to
-    // support client completion confirmation later.
-    //
-    // For now, completion belongs to the assigned trainer.
-    // ========================================================
+  // ========================================================
+// 2. VERIFY ACTOR
+// ========================================================
+//
+// Super Administrator has system-level authority and can
+// complete the engagement regardless of trainer assignment.
+//
+// Everyone else must be the approved assigned trainer.
+// ========================================================
 
-    if (
-      !engagement.assigned_trainer
-    ) {
-      throw new Error(
-        "Training engagement has no assigned trainer",
-      )
-    }
+const isSuperAdmin =
+  actorRole === "super_administrator" ||
+  actorRole === "super-administrator"
 
-    if (
-      engagement.assigned_trainer !==
-      actorProfileId
-    ) {
-      throw new Error(
-        "Only the assigned trainer can complete this training",
-      )
-    }
+if (
+  !engagement.assigned_trainer ||
+  engagement.trainer_approval_status !== "approved"
+) {
+  throw new Error(
+    "Training engagement has no approved trainer assigned",
+  )
+}
+
+if (
+  !isSuperAdmin &&
+  engagement.assigned_trainer !== actorProfileId
+) {
+  throw new Error(
+    "Only the approved assigned trainer or Super Administrator can complete this training",
+  )
+}
 
     // ========================================================
     // 3. VERIFY PROGRESS

@@ -45,3 +45,37 @@ export async function createSignedEvidenceUrl(
 
   return data.signedUrl
 }
+
+// Generic upload helper that can be used by server-side code for other buckets
+export async function uploadFileToBucket(
+  bucket: string,
+  path: string,
+  buffer: Buffer,
+  contentType: string,
+  options?: { upsert?: boolean }
+) {
+  const { error } = await storage.storage
+    .from(bucket)
+    .upload(path, buffer, {
+      contentType,
+      upsert: options?.upsert || false,
+    })
+
+  if (error) {
+    throw error
+  }
+
+  return path
+}
+
+export async function createSignedUrlForBucket(bucket: string, path: string, expiresSec = 60 * 15) {
+  const { data, error } = await storage.storage
+    .from(bucket)
+    .createSignedUrl(path, expiresSec)
+
+  if (error) {
+    throw error
+  }
+
+  return data.signedUrl
+}

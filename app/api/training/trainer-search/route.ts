@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       FROM user_profiles up
       JOIN app_users au ON au.id = up.user_id
       WHERE up.full_name ILIKE $1
-        AND au.role IN ('investigator', 'analyst')
+        AND au.role IN ('investigator', 'analyst', 'administrator', 'super_administrator', 'super-administrator')
         AND au.status = 'active'
       ORDER BY up.full_name ASC
       LIMIT 20

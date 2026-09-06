@@ -1,8 +1,19 @@
 "use client"
 
-import { Bell, Volume2, VolumeX, X } from "lucide-react"
+import {
+  Bell,
+  Volume2,
+  VolumeX,
+} from "lucide-react"
 import Link from "next/link"
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+
 import { getNotificationDestination } from "@/lib/notification-routing"
 
 type Notification = {
@@ -26,29 +37,16 @@ type User = {
   role: string
 }
 
-type StatusFilter = "all" | "unread" | "read"
-
-type CategoryFilter =
-  | "all"
-  | "requests"
-  | "quotes"
-  | "payments"
-  | "cases"
-  | "system"
-
-type RoleFilter =
-  | "all"
-  | "clients"
-  | "administrators"
-  | "super_administrators"
-
 function formatNotificationType(
   type: string | null | undefined,
 ) {
-  const normalized = (type || "system").replace(/_/g, " ")
+  const normalized = (
+    type || "system"
+  ).replace(/_/g, " ")
 
-  return normalized.replace(/\b\w/g, (char) =>
-    char.toUpperCase(),
+  return normalized.replace(
+    /\b\w/g,
+    (char) => char.toUpperCase(),
   )
 }
 
@@ -71,10 +69,7 @@ function getCaseNumber(
   notification: Notification,
 ) {
   const metadata =
-    (notification.metadata || {}) as Record<
-      string,
-      unknown
-    >
+    notification.metadata || {}
 
   const candidates = [
     metadata.case_number,
@@ -90,12 +85,14 @@ function getCaseNumber(
       value.trim(),
   )
 
-  return found ? String(found) : "—"
+  return found
+    ? String(found)
+    : "—"
 }
 
 function getCategoryFilter(
   type: string | null | undefined,
-): CategoryFilter {
+) {
   const normalized = (
     type || ""
   ).toLowerCase()
@@ -127,6 +124,7 @@ function getCategoryFilter(
     [
       "payment_required",
       "payment_received",
+      "payment_confirmed",
       "payment_failed",
     ].includes(normalized)
   ) {
@@ -147,24 +145,41 @@ function getCategoryFilter(
   return "system"
 }
 
-/**
- * Determines whether a notification belongs to the
- * currently authenticated user.
- *
- * For normal users, the API already returns only their
- * notifications.
- *
- * For Super Administrator, the API returns the bureau-wide
- * notification stream, so we must distinguish their own
- * notifications from everyone else's.
- */
+function isSuperAdminRole(
+  role: string | null | undefined,
+) {
+  return (
+    role === "super_administrator" ||
+    role === "super-administrator"
+  )
+}
+
 function isOwnNotification(
   notification: Notification,
   user: User | null,
 ) {
-  if (!user?.id) return false
+  if (!user) return false
 
-  return notification.recipient_id === user.id
+  /*
+   * Normal users receive only their own
+   * notifications from /api/notifications.
+   */
+  if (!isSuperAdminRole(user.role)) {
+    return true
+  }
+
+  /*
+   * Super Administrator receives the
+   * bureau-wide notification stream.
+   */
+  if (!user.id) {
+    return false
+  }
+
+  return (
+    notification.recipient_id ===
+    user.id
+  )
 }
 
 export default function NotificationBell() {
@@ -180,238 +195,464 @@ export default function NotificationBell() {
   const [soundEnabled, setSoundEnabled] =
     useState(false)
 
+  /*
+   * ---------------------------------------------------------
+   * REFS
+   * ---------------------------------------------------------
+   */
+
+  const userRef =
+    useRef<User | null>(null)
+
   const notificationsRef =
     useRef<Notification[]>([])
 
   const soundEnabledRef =
     useRef(false)
 
-  /**
+  const inFlightRef =
+    useRef<AbortController | null>(null)
+
+  const hasLoadedNotificationsRef =
+    useRef(false)
+
+  const mountedRef =
+    useRef(true)
+
+  /*
    * ---------------------------------------------------------
-   * LOAD CURRENT USER
+   * CURRENT USER
    * ---------------------------------------------------------
    */
 
   useEffect(() => {
+    let cancelled = false
+
     async function loadUser() {
       try {
+        const controller =
+          new AbortController()
+
+        const timeout =
+          window.setTimeout(
+            () => controller.abort(),
+            10000,
+          )
+
         const res = await fetch(
           "/api/auth/me",
           {
             credentials: "include",
             cache: "no-store",
+            signal: controller.signal,
           },
         )
 
-        if (!res.ok) return
+        window.clearTimeout(timeout)
 
-        const data = await res.json()
+        if (!res.ok) {
+          return
+        }
 
-        setUser(data.user)
+        const data =
+          await res.json()
+
+        if (
+          !cancelled &&
+          data?.user
+        ) {
+          userRef.current =
+            data.user
+
+          setUser(data.user)
+        }
       } catch (error) {
+        if (
+          error instanceof DOMException &&
+          error.name === "AbortError"
+        ) {
+          return
+        }
+
         console.error(
-          "USER LOAD ERROR",
+          "NOTIFICATION USER LOAD ERROR:",
           error,
         )
       }
     }
 
     void loadUser()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  /**
+  /*
    * ---------------------------------------------------------
    * LOAD NOTIFICATIONS
    * ---------------------------------------------------------
+   *
+   * Important performance behavior:
+   *
+   * 1. Only one request may run at a time.
+   * 2. Requests have a timeout.
+   * 3. The caller's latest user is read from userRef.
+   * 4. Initial load never plays a sound.
    */
 
-  async function loadNotifications() {
-    try {
-      const res = await fetch(
-        "/api/notifications",
-        {
-          credentials: "include",
-          cache: "no-store",
-        },
-      )
-
-      if (!res.ok) return
-
-      const next: Notification[] =
-        await res.json()
-
-      const previous =
-        notificationsRef.current
-
-      const previousUnread =
-        previous.filter(
-          (item) =>
-            !item.read &&
-            isOwnNotification(item, user),
-        ).length
-
-      const nextUnread =
-        next.filter(
-          (item) =>
-            !item.read &&
-            isOwnNotification(item, user),
-        ).length
-
-      /**
-       * Only play the sound when a new unread
-       * notification belonging to the current
-       * user appears.
+  const loadNotifications =
+    useCallback(async () => {
+      /*
+       * Do not allow overlapping requests.
        */
-      if (
-        soundEnabledRef.current &&
-        nextUnread > previousUnread
-      ) {
-        new Audio(
-          "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=",
-        )
-          .play()
-          .catch(() => undefined)
+      if (inFlightRef.current) {
+        return
       }
 
-      notificationsRef.current = next
+      /*
+       * Do not poll hidden browser tabs.
+       */
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !==
+          "visible"
+      ) {
+        return
+      }
 
-      setNotifications(next)
-    } catch (error) {
-      console.error(
-        "NOTIFICATION LOAD ERROR",
-        error,
-      )
-    }
-  }
+      const controller =
+        new AbortController()
 
-  /**
+      inFlightRef.current =
+        controller
+
+      const timeout =
+        window.setTimeout(
+          () => controller.abort(),
+          10000,
+        )
+
+      try {
+        const res = await fetch(
+          "/api/notifications",
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        )
+
+        if (!res.ok) {
+          if (
+            res.status !== 401
+          ) {
+            console.warn(
+              "NOTIFICATION FETCH FAILED:",
+              res.status,
+            )
+          }
+
+          return
+        }
+
+        const payload =
+          await res.json()
+
+        const next: Notification[] =
+          Array.isArray(payload)
+            ? payload
+            : Array.isArray(
+                  payload?.notifications,
+                )
+              ? payload.notifications
+              : []
+
+        const previous =
+          notificationsRef.current
+
+        const currentUser =
+          userRef.current
+
+        const previousUnread =
+          previous.filter(
+            (item) =>
+              !item.read &&
+              isOwnNotification(
+                item,
+                currentUser,
+              ),
+          ).length
+
+        const nextUnread =
+          next.filter(
+            (item) =>
+              !item.read &&
+              isOwnNotification(
+                item,
+                currentUser,
+              ),
+          ).length
+
+        /*
+         * Do not play sound on initial
+         * notification load.
+         */
+        const isInitialLoad =
+          !hasLoadedNotificationsRef.current
+
+        if (
+          !isInitialLoad &&
+          soundEnabledRef.current &&
+          nextUnread > previousUnread
+        ) {
+          try {
+            const audio =
+              new Audio(
+                "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=",
+              )
+
+            void audio
+              .play()
+              .catch(
+                () => undefined,
+              )
+          } catch {
+            // Notification sound is optional.
+          }
+        }
+
+        notificationsRef.current =
+          next
+
+        hasLoadedNotificationsRef.current =
+          true
+
+        if (mountedRef.current) {
+          setNotifications(next)
+        }
+      } catch (error) {
+        if (
+          error instanceof DOMException &&
+          error.name === "AbortError"
+        ) {
+          return
+        }
+
+        console.error(
+          "NOTIFICATION LOAD ERROR:",
+          error,
+        )
+      } finally {
+        window.clearTimeout(timeout)
+
+        if (
+          inFlightRef.current ===
+          controller
+        ) {
+          inFlightRef.current =
+            null
+        }
+      }
+    }, [])
+
+  /*
    * ---------------------------------------------------------
    * POLLING
    * ---------------------------------------------------------
+   *
+   * Old:
+   *   every 5 seconds
+   *
+   * New:
+   *   every 30 seconds
+   *
+   * Plus immediate refresh when:
+   *   - tab becomes visible
+   *   - browser window receives focus
    */
 
-useEffect(() => {
-  if (!user?.id) return
+  useEffect(() => {
+    mountedRef.current = true
 
-  void loadNotifications()
-
-  const timer = window.setInterval(() => {
     void loadNotifications()
-  }, 5000)
 
-  return () => {
-    window.clearInterval(timer)
-  }
-}, [user?.id])
+    const refreshIfVisible =
+      () => {
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          void loadNotifications()
+        }
+      }
+
+    const timer =
+      window.setInterval(
+        () => {
+          refreshIfVisible()
+        },
+        30000,
+      )
+
+    document.addEventListener(
+      "visibilitychange",
+      refreshIfVisible,
+    )
+
+    window.addEventListener(
+      "focus",
+      refreshIfVisible,
+    )
+
+    return () => {
+      mountedRef.current = false
+
+      window.clearInterval(timer)
+
+      document.removeEventListener(
+        "visibilitychange",
+        refreshIfVisible,
+      )
+
+      window.removeEventListener(
+        "focus",
+        refreshIfVisible,
+      )
+
+      if (
+        inFlightRef.current
+      ) {
+        inFlightRef.current.abort()
+        inFlightRef.current =
+          null
+      }
+    }
+  }, [loadNotifications])
+
+  /*
+   * ---------------------------------------------------------
+   * SUPER ADMIN
+   * ---------------------------------------------------------
+   */
 
   const isSuperAdministrator =
-    user?.role === "super_administrator" ||
-    user?.role === "super-administrator"
+    isSuperAdminRole(
+      user?.role,
+    )
 
-  /**
+  /*
    * ---------------------------------------------------------
    * UNREAD COUNT
    * ---------------------------------------------------------
-   *
-   * This is what appears on the bell badge.
-   *
-   * Only unread notifications belonging to the
-   * current user count.
    */
 
   const unread = useMemo(() => {
     return notifications.filter(
       (item) =>
         !item.read &&
-        isOwnNotification(item, user),
+        isOwnNotification(
+          item,
+          user,
+        ),
     ).length
   }, [notifications, user])
 
-  /**
+  /*
    * ---------------------------------------------------------
    * BELL NOTIFICATIONS
    * ---------------------------------------------------------
-   *
-   * IMPORTANT:
-   *
-   * The bell ONLY displays unread notifications.
-   *
-   * Read notifications remain available through
-   * the full Notifications page/sidebar.
    */
 
-  const bellNotifications = useMemo(() => {
-    return notifications
-      .filter(
-        (item) =>
-          !item.read &&
-          isOwnNotification(item, user),
-      )
-      .sort(
-        (left, right) =>
-          new Date(
-            right.created_at,
-          ).getTime() -
-          new Date(
-            left.created_at,
-          ).getTime(),
-      )
-  }, [notifications, user])
+  const bellNotifications =
+    useMemo(() => {
+      return notifications
+        .filter(
+          (item) =>
+            !item.read &&
+            isOwnNotification(
+              item,
+              user,
+            ),
+        )
+        .sort(
+          (left, right) =>
+            new Date(
+              right.created_at,
+            ).getTime() -
+            new Date(
+              left.created_at,
+            ).getTime(),
+        )
+    }, [notifications, user])
 
-  /**
+  /*
    * ---------------------------------------------------------
    * MARK READ
    * ---------------------------------------------------------
    */
 
-async function markRead(id: string) {
-  try {
-    const res = await fetch(
-      `/api/notifications/${id}`,
-      {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
+  async function markRead(
+    id: string,
+  ) {
+    try {
+      const res = await fetch(
+        `/api/notifications/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          cache: "no-store",
+          body: JSON.stringify({
+            id,
+          }),
         },
-      },
-    )
-
-    if (!res.ok) {
-      console.error(
-        "NOTIFICATION MARK READ FAILED",
-        await res.text(),
       )
+
+      if (!res.ok) {
+        console.error(
+          "NOTIFICATION MARK READ FAILED:",
+          await res.text(),
+        )
+
+        return false
+      }
+
+      setNotifications(
+        (items) => {
+          const next =
+            items.map(
+              (item) =>
+                item.id === id
+                  ? {
+                      ...item,
+                      read: true,
+                    }
+                  : item,
+            )
+
+          notificationsRef.current =
+            next
+
+          return next
+        },
+      )
+
+      return true
+    } catch (error) {
+      console.error(
+        "NOTIFICATION MARK READ ERROR:",
+        error,
+      )
+
       return false
     }
-
-    setNotifications((items) => {
-      const next = items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              read: true,
-            }
-          : item,
-      )
-
-      notificationsRef.current = next
-
-      return next
-    })
-
-    return true
-  } catch (error) {
-    console.error(
-      "NOTIFICATION MARK READ ERROR",
-      error,
-    )
-
-    return false
   }
-}
 
-  /**
+  /*
    * ---------------------------------------------------------
    * DELETE
    * ---------------------------------------------------------
@@ -426,34 +667,40 @@ async function markRead(id: string) {
 
     try {
       const res = await fetch(
-        `/api/notifications/${id}`,
+        `/api/notifications/${encodeURIComponent(id)}`,
         {
           method: "DELETE",
           credentials: "include",
         },
       )
 
-      if (!res.ok) return
+      if (!res.ok) {
+        return
+      }
 
-      setNotifications((items) => {
-        const next = items.filter(
-          (item) => item.id !== id,
-        )
+      setNotifications(
+        (items) => {
+          const next =
+            items.filter(
+              (item) =>
+                item.id !== id,
+            )
 
-        notificationsRef.current =
-          next
+          notificationsRef.current =
+            next
 
-        return next
-      })
+          return next
+        },
+      )
     } catch (error) {
       console.error(
-        "NOTIFICATION DELETE ERROR",
+        "NOTIFICATION DELETE ERROR:",
         error,
       )
     }
   }
 
-  /**
+  /*
    * ---------------------------------------------------------
    * TYPE STYLING
    * ---------------------------------------------------------
@@ -470,6 +717,9 @@ async function markRead(id: string) {
       "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
 
     message:
+      "border-sky-400/40 bg-sky-400/10 text-sky-200",
+
+    new_message:
       "border-sky-400/40 bg-sky-400/10 text-sky-200",
 
     case_update:
@@ -493,9 +743,42 @@ async function markRead(id: string) {
     quote_rejected:
       "border-red-400/40 bg-red-400/10 text-red-200",
 
+    payment_required:
+      "border-yellow-400/40 bg-yellow-400/10 text-yellow-200",
+
+    payment_confirmed:
+      "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
+
+    payment_received:
+      "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
+
+    training_session_scheduled:
+      "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
+
+    training_session_updated:
+      "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
+
+    training_material_uploaded:
+      "border-sky-400/40 bg-sky-400/10 text-sky-200",
+
+    training_progress_updated:
+      "border-amber-300/40 bg-amber-300/10 text-amber-200",
+
+    training_update:
+      "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
+
+    certificate_issued:
+      "border-[#20dc73]/40 bg-[#20dc73]/10 text-[#20dc73]",
+
     system:
       "border-white/25 bg-white/10 text-white/75",
   }
+
+  /*
+   * ---------------------------------------------------------
+   * RENDER
+   * ---------------------------------------------------------
+   */
 
   return (
     <div className="relative">
@@ -504,28 +787,33 @@ async function markRead(id: string) {
       ===================================================== */}
 
       <button
+        type="button"
         onClick={() =>
-          setOpen((value) => !value)
+          setOpen(
+            (value) => !value,
+          )
         }
-        className="relative flex h-10 w-10 items-center justify-center rounded-md border border-[#143b28] bg-[#06110f] text-white/75 hover:border-[#20dc73]/50 hover:text-[#20dc73]"
+        className="relative flex h-10 w-10 items-center justify-center rounded-md border border-[#143b28] bg-[#06110f] text-white/75 transition hover:border-[#20dc73]/50 hover:text-[#20dc73]"
         aria-label="Notifications"
+        aria-expanded={open}
       >
         <Bell className="h-5 w-5" />
 
-        {unread > 0 ? (
-          <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[#20dc73] px-1.5 py-0.5 text-[10px] font-bold text-black">
-            {unread}
+        {unread > 0 && (
+          <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[#20dc73] px-1.5 py-0.5 text-[10px] font-bold leading-4 text-black">
+            {unread > 99
+              ? "99+"
+              : unread}
           </span>
-        ) : null}
+        )}
       </button>
 
       {/* =====================================================
-          BELL DROPDOWN
+          DROPDOWN
       ===================================================== */}
 
-      {open ? (
+      {open && (
         <div className="absolute right-0 z-50 mt-2 w-[26rem] overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] shadow-2xl">
-
           {/* HEADER */}
 
           <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
@@ -540,8 +828,9 @@ async function markRead(id: string) {
             </div>
 
             <div className="flex items-center gap-2">
-              {!isSuperAdministrator ? (
+              {!isSuperAdministrator && (
                 <button
+                  type="button"
                   onClick={() => {
                     setSoundEnabled(
                       (value) => {
@@ -555,7 +844,7 @@ async function markRead(id: string) {
                       },
                     )
                   }}
-                  className="rounded p-1 text-white/45 hover:bg-white/5 hover:text-white"
+                  className="rounded p-1 text-white/45 transition hover:bg-white/5 hover:text-white"
                   aria-label={
                     soundEnabled
                       ? "Disable notification sound"
@@ -568,7 +857,7 @@ async function markRead(id: string) {
                     <VolumeX className="h-4 w-4" />
                   )}
                 </button>
-              ) : null}
+              )}
 
               <span className="text-xs text-white/45">
                 {unread} unread
@@ -577,21 +866,29 @@ async function markRead(id: string) {
           </div>
 
           {/* =================================================
-              UNREAD NOTIFICATIONS ONLY
+              NOTIFICATION LIST
           ================================================= */}
 
           <div className="max-h-[28rem] overflow-y-auto">
-            {bellNotifications.length ? (
+            {bellNotifications.length >
+            0 ? (
               bellNotifications.map(
                 (item) => {
-                  const notificationHref =
-                    `${getNotificationDestination(
+                  const baseDestination =
+                    getNotificationDestination(
                       item,
-                    )}${
-                      item.id
-                        ? `?notificationId=${item.id}`
-                        : ""
-                    }`
+                    ) ||
+                    "/dashboard/notifications"
+
+                  const separator =
+                    baseDestination.includes(
+                      "?",
+                    )
+                      ? "&"
+                      : "?"
+
+                  const notificationHref =
+                    `${baseDestination}${separator}notificationId=${encodeURIComponent(item.id)}`
 
                   const recipientLabel =
                     item.recipient_name ||
@@ -600,116 +897,179 @@ async function markRead(id: string) {
                       item.recipient_role,
                     )
 
+                  const category =
+                    getCategoryFilter(
+                      item.type,
+                    )
+
                   return (
                     <div
                       key={item.id}
                       className="border-b border-[#143b28] px-4 py-4 transition hover:bg-white/5"
                     >
-                  {isSuperAdministrator && !isOwnNotification(item, user) ? (
-  <div className="block cursor-default">
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-white">
-          {item.title}
-        </p>
+                      {isSuperAdministrator &&
+                      !isOwnNotification(
+                        item,
+                        user,
+                      ) ? (
+                        <div className="block cursor-default">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white">
+                                {item.title}
+                              </p>
 
-        <p className="mt-1 text-[11px] text-white/55">
-          {item.message || "No message provided."}
-        </p>
+                              <p className="mt-1 text-[11px] text-white/55">
+                                {item.message ||
+                                  "No message provided."}
+                              </p>
 
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
-          <span>
-            Type: {formatNotificationType(item.type)}
-          </span>
+                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
+                                <span>
+                                  Type:{" "}
+                                  {formatNotificationType(
+                                    item.type,
+                                  )}
+                                </span>
 
-          <span>
-            Case: {getCaseNumber(item)}
-          </span>
-        </div>
+                                <span>
+                                  Category:{" "}
+                                  {category}
+                                </span>
 
-        <p className="mt-1 text-[10px] text-white/30">
-          Recipient: {recipientLabel}
-        </p>
+                                <span>
+                                  Case:{" "}
+                                  {getCaseNumber(
+                                    item,
+                                  )}
+                                </span>
+                              </div>
 
-        <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
-          {new Date(item.created_at).toLocaleString()}
-        </p>
+                              <p className="mt-1 text-[10px] text-white/30">
+                                Recipient:{" "}
+                                {
+                                  recipientLabel
+                                }
+                              </p>
 
-        <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/25">
-          Bureau record • Not assigned to you
-        </p>
-      </div>
+                              <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
+                                {new Date(
+                                  item.created_at,
+                                ).toLocaleString()}
+                              </p>
 
-      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/20" />
-    </div>
+                              <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/25">
+                                Bureau record •
+                                Not assigned
+                                to you
+                              </p>
+                            </div>
 
-    <span
-      className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
-        typeClass[item.type] || typeClass.system
-      }`}
-    >
-      {formatNotificationType(item.type)}
-    </span>
-  </div>
-) : (
-  <Link
-    href={notificationHref}
-  onClick={async (event) => {
-  event.preventDefault()
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/20" />
+                          </div>
 
-  setOpen(false)
+                          <span
+                            className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
+                              typeClass[
+                                item.type
+                              ] ||
+                              typeClass.system
+                            }`}
+                          >
+                            {formatNotificationType(
+                              item.type,
+                            )}
+                          </span>
+                        </div>
+                      ) : (
+                        <Link
+                          href={
+                            notificationHref
+                          }
+                          onClick={async (
+                            event,
+                          ) => {
+                            event.preventDefault()
 
-  const success = await markRead(item.id)
+                            setOpen(false)
 
-  if (success) {
-    window.location.href = notificationHref
-  }
-}}
-    className="block"
-  >
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-white">
-          {item.title}
-        </p>
+                            const success =
+                              await markRead(
+                                item.id,
+                              )
 
-        <p className="mt-1 text-[11px] text-white/55">
-          {item.message || "No message provided."}
-        </p>
+                            if (success) {
+                              window.location.href =
+                                notificationHref
+                            }
+                          }}
+                          className="block"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white">
+                                {item.title}
+                              </p>
 
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
-          <span>
-            Type: {formatNotificationType(item.type)}
-          </span>
+                              <p className="mt-1 text-[11px] leading-5 text-white/55">
+                                {item.message ||
+                                  "No message provided."}
+                              </p>
 
-          <span>
-            Case: {getCaseNumber(item)}
-          </span>
-        </div>
+                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
+                                <span>
+                                  Type:{" "}
+                                  {formatNotificationType(
+                                    item.type,
+                                  )}
+                                </span>
 
-        {isSuperAdministrator ? (
-          <p className="mt-1 text-[10px] text-white/30">
-            Recipient: {recipientLabel}
-          </p>
-        ) : null}
+                                <span>
+                                  Category:{" "}
+                                  {category}
+                                </span>
 
-        <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
-          {new Date(item.created_at).toLocaleString()}
-        </p>
-      </div>
+                                <span>
+                                  Case:{" "}
+                                  {getCaseNumber(
+                                    item,
+                                  )}
+                                </span>
+                              </div>
 
-      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#20dc73]" />
-    </div>
+                              {isSuperAdministrator && (
+                                <p className="mt-1 text-[10px] text-white/30">
+                                  Recipient:{" "}
+                                  {
+                                    recipientLabel
+                                  }
+                                </p>
+                              )}
 
-    <span
-      className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
-        typeClass[item.type] || typeClass.system
-      }`}
-    >
-      {formatNotificationType(item.type)}
-    </span>
-  </Link>
-)}
+                              <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
+                                {new Date(
+                                  item.created_at,
+                                ).toLocaleString()}
+                              </p>
+                            </div>
+
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#20dc73]" />
+                          </div>
+
+                          <span
+                            className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
+                              typeClass[
+                                item.type
+                              ] ||
+                              typeClass.system
+                            }`}
+                          >
+                            {formatNotificationType(
+                              item.type,
+                            )}
+                          </span>
+                        </Link>
+                      )}
                     </div>
                   )
                 },
@@ -739,7 +1099,7 @@ async function markRead(id: string) {
               onClick={() =>
                 setOpen(false)
               }
-              className="flex items-center justify-between text-xs uppercase tracking-[0.12em] text-[#20dc73] hover:text-white"
+              className="flex items-center justify-between text-xs uppercase tracking-[0.12em] text-[#20dc73] transition hover:text-white"
             >
               <span>
                 View all notifications
@@ -749,7 +1109,7 @@ async function markRead(id: string) {
             </Link>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   )
 }

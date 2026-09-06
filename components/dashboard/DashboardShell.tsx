@@ -7,7 +7,6 @@ import type { AppUser } from "@/lib/auth"
 
 import Header from "./Header"
 import Sidebar from "./Sidebar"
-import TrainingSidebar from "./TrainingSidebar"
 
 export default function DashboardShell({
   children,
@@ -21,43 +20,19 @@ export default function DashboardShell({
   const pathname = usePathname()
   const router = useRouter()
 
-  const isTrainingWorkspace =
-    pathname === "/dashboard/training" ||
-    pathname.startsWith("/dashboard/training/")
-
   function handleSidebarClose() {
     setSidebarOpen(false)
-  }
-
-  function handleTrainingExit() {
-    setSidebarOpen(false)
-
-    if (user.role === "client") {
-      router.push("/dashboard")
-      return
-    }
-
-    router.push("/dashboard")
   }
 
   return (
     <div className="min-h-screen bg-transparent text-white">
       <div className="relative flex min-h-screen">
 
-        {isTrainingWorkspace ? (
-          <TrainingSidebar
-            user={user}
-            open={sidebarOpen}
-            onClose={handleSidebarClose}
-            onExit={handleTrainingExit}
-          />
-        ) : (
-          <Sidebar
-            user={user}
-            open={sidebarOpen}
-            onClose={handleSidebarClose}
-          />
-        )}
+        <Sidebar
+          user={user}
+          open={sidebarOpen}
+          onClose={handleSidebarClose}
+        />
 
         <div className="min-w-0 flex-1 lg:pl-72">
           <Header

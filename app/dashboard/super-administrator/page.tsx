@@ -8,6 +8,7 @@ type DashboardStats = {
   total_users: number
   audit_events: number
   security_events: number
+  total_training: number
 
   security: {
     active_sessions: number
@@ -153,6 +154,15 @@ export default function SuperAdministratorDashboard() {
           helper:
             "Role-governed personnel and client accounts",
         },
+{
+  key: "total_training",
+  label: "Training Engagements",
+  value:
+    stats?.total_training?.toString() || "0",
+  helper:
+    "Total training engagements across the bureau",
+},
+
         {
           key: "audit_events",
           label: "Audit Logs",

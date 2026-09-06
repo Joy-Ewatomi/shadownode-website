@@ -19,7 +19,7 @@ export default function TrainingHeader({
   onMenuClick,
 }: TrainingHeaderProps) {
   return (
-    <header className="flex min-h-20 items-center justify-between border-b border-[#143b28] bg-[#04100b] px-4 sm:px-6 lg:px-8">
+     <header className="flex min-h-20 items-center justify-between border-b border-[#143b28] bg-[#04100b] px-4 sm:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onMenuClick}

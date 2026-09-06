@@ -43,11 +43,11 @@ export default async function ClientTrainingIndexPage() {
 
       <div className="space-y-3">
         {rows.length === 0 && (
-          <div className="rounded-md border border-white/10 bg-white/[0.02] p-4 text-sm text-white/60">No trainings found.</div>
+          <div className="rounded-md border border-white/10 bg-[#020806]/90 p-4 text-sm text-white/60">No trainings found.</div>
         )}
 
         {rows.map((r: any) => (
-          <Link key={r.id} href={`/dashboard/training/${r.id}`} className="block rounded-md border border-white/10 bg-white/[0.02] p-4 hover:border-[#20dc73]/30">
+          <Link key={r.id} href={`/dashboard/training/${r.id}`} className="block rounded-md border border-white/10 bg-[#020806]/150 p-4 hover:border-[#20dc73]/30">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-semibold text-white">{r.engagement_number || r.training_organization_name || r.id}</p>
