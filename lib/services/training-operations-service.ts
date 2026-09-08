@@ -17,8 +17,30 @@ type AppUser = {
 }
 
 const TRAINER_APPROVAL_APPROVED = "approved"
+
 const TRAINER_APPROVAL_PENDING =
   "pending_super_admin_approval"
+
+/*
+ * Material progress notification milestones.
+ *
+ * We deliberately do not create a training update for every
+ * video `timeupdate` event. Instead, meaningful milestones
+ * are recorded:
+ *
+ * 1%   = started
+ * 25%  = progress milestone
+ * 50%  = progress milestone
+ * 75%  = progress milestone
+ * 100% = completed
+ */
+const MATERIAL_PROGRESS_MILESTONES = [
+  1,
+  25,
+  50,
+  75,
+  100,
+]
 
 function isSuperAdminRole(
   role: string | null | undefined,
@@ -41,30 +63,320 @@ function isTrainerCapableRole(
   ].includes(role || "")
 }
 
+function getProgressMilestone(
+  percentage: number,
+): number {
+  const normalized =
+    normalizePercentage(percentage)
+
+  let milestone = 0
+
+  for (
+    const threshold of MATERIAL_PROGRESS_MILESTONES
+  ) {
+    if (normalized >= threshold) {
+      milestone = threshold
+    }
+  }
+
+  return milestone
+}
+
+function shouldCreateMaterialProgressUpdate(
+  previousPercentage: number,
+  previousStatus: string | null | undefined,
+  nextPercentage: number,
+  nextStatus: string,
+): {
+  shouldCreate: boolean
+  updateType:
+    | "material_started"
+    | "material_progress_updated"
+    | "material_completed"
+} {
+  const previous =
+    normalizePercentage(
+      previousPercentage,
+    )
+
+  const next =
+    normalizePercentage(
+      nextPercentage,
+    )
+
+  const previousMilestone =
+    getProgressMilestone(previous)
+
+  const nextMilestone =
+    getProgressMilestone(next)
+
+  if (
+    nextStatus === "completed" &&
+    previousStatus !== "completed"
+  ) {
+    return {
+      shouldCreate: true,
+      updateType:
+        "material_completed",
+    }
+  }
+
+  if (
+    previousStatus === "not_started" &&
+    next > 0
+  ) {
+    return {
+      shouldCreate: true,
+      updateType:
+        "material_started",
+    }
+  }
+
+  if (
+    nextMilestone > previousMilestone
+  ) {
+    return {
+      shouldCreate: true,
+      updateType:
+        "material_progress_updated",
+    }
+  }
+
+  return {
+    shouldCreate: false,
+    updateType:
+      "material_progress_updated",
+  }
+}
+
+/* =======================================================
+   Trainer State
+   ======================================================= */
+
 async function getEngagementTrainerState(
   engagementId: string,
 ) {
-  const result = await query<{
-    assigned_trainer: string | null
-    trainer_approval_status: string | null
-    trainer_approval_requested_by: string | null
-    trainer_approval_approved_by: string | null
-  }>(
+  const engagementResult =
+    await query<{
+      assigned_trainer: string | null
+      trainer_approval_status: string | null
+      trainer_approval_requested_by:
+        | string
+        | null
+      trainer_approval_approved_by:
+        | string
+        | null
+    }>(
+      `
+        SELECT
+          assigned_trainer,
+          trainer_approval_status,
+          trainer_approval_requested_by,
+          trainer_approval_approved_by
+        FROM training_engagements
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [engagementId],
+    )
+
+  if (!engagementResult.rows[0]) {
+    return null
+  }
+
+  const trainersResult =
+    await query<{
+      id: string
+      trainer_profile_id: string
+      assignment_status: string
+      assigned_by: string | null
+      approval_requested_by:
+        | string
+        | null
+      approved_by: string | null
+      approval_reason: string | null
+      assigned_at: string | null
+      approved_at: string | null
+      removed_at: string | null
+    }>(
+      `
+        SELECT
+          id,
+          trainer_profile_id,
+          assignment_status,
+          assigned_by,
+          approval_requested_by,
+          approved_by,
+          approval_reason,
+          assigned_at,
+          approved_at,
+          removed_at
+        FROM training_engagement_trainers
+        WHERE training_engagement_id = $1
+          AND removed_at IS NULL
+        ORDER BY created_at ASC
+      `,
+      [engagementId],
+    )
+
+  return {
+    ...engagementResult.rows[0],
+
+    trainers:
+      trainersResult.rows,
+
+    approved_trainers:
+      trainersResult.rows.filter(
+        (trainer) =>
+          trainer.assignment_status ===
+          TRAINER_APPROVAL_APPROVED,
+      ),
+
+    pending_trainers:
+      trainersResult.rows.filter(
+        (trainer) =>
+          trainer.assignment_status ===
+          TRAINER_APPROVAL_PENDING,
+      ),
+  }
+}
+
+export async function listEngagementTrainers(
+  engagementId: string,
+) {
+  const result = await query(
     `
       SELECT
-        assigned_trainer,
-        trainer_approval_status,
-        trainer_approval_requested_by,
-        trainer_approval_approved_by
-      FROM training_engagements
-      WHERE id = $1
-      LIMIT 1
+        tet.*,
+
+        up.id AS trainer_profile_id,
+
+        au.id AS user_id,
+        au.email,
+        au.role,
+
+        COALESCE(
+          NULLIF(
+            TRIM(
+              CONCAT(
+                COALESCE(up.first_name, ''),
+                ' ',
+                COALESCE(up.last_name, '')
+              )
+            ),
+            ''
+          ),
+          au.email
+        ) AS trainer_name
+
+      FROM training_engagement_trainers tet
+
+      JOIN user_profiles up
+        ON up.id = tet.trainer_profile_id
+
+      JOIN app_users au
+        ON au.id = up.user_id
+
+      WHERE tet.training_engagement_id = $1
+        AND tet.removed_at IS NULL
+
+      ORDER BY
+        CASE
+          WHEN tet.assignment_status =
+            'approved'
+          THEN 0
+
+          WHEN tet.assignment_status =
+            'pending_super_admin_approval'
+          THEN 1
+
+          ELSE 2
+        END,
+
+        tet.created_at ASC
     `,
     [engagementId],
   )
 
-  return result.rows[0] || null
+  return result.rows
 }
+
+type ApprovedTrainerRow = {
+  id: string
+  training_engagement_id: string
+  trainer_profile_id: string
+  assigned_by: string | null
+  approved_by: string | null
+  approval_reason: string | null
+  assigned_at: Date | string | null
+  approved_at: Date | string | null
+  user_id: string
+  email: string | null
+  role: string
+  trainer_name: string | null
+}
+
+export async function listApprovedTrainers(
+  engagementId: string,
+): Promise<ApprovedTrainerRow[]> {
+  const result =
+    await query<ApprovedTrainerRow>(
+      `
+        SELECT
+          tet.id,
+          tet.training_engagement_id,
+          tet.trainer_profile_id,
+          tet.assigned_by,
+          tet.approved_by,
+          tet.approval_reason,
+          tet.assigned_at,
+          tet.approved_at,
+
+          up.user_id,
+
+          au.email,
+          au.role,
+
+          COALESCE(
+            NULLIF(
+              TRIM(
+                CONCAT(
+                  COALESCE(up.first_name, ''),
+                  ' ',
+                  COALESCE(up.last_name, '')
+                )
+              ),
+              ''
+            ),
+            au.email
+          ) AS trainer_name
+
+        FROM training_engagement_trainers tet
+
+        JOIN user_profiles up
+          ON up.id = tet.trainer_profile_id
+
+        JOIN app_users au
+          ON au.id = up.user_id
+
+        WHERE tet.training_engagement_id = $1
+          AND tet.assignment_status = $2
+          AND tet.removed_at IS NULL
+
+        ORDER BY tet.approved_at ASC
+      `,
+      [
+        engagementId,
+        TRAINER_APPROVAL_APPROVED,
+      ],
+    )
+
+  return result.rows
+}
+
+/* =======================================================
+   User / Profile Helpers
+   ======================================================= */
 
 async function getUserRoleByProfileId(
   profileId: string | null,
@@ -73,52 +385,97 @@ async function getUserRoleByProfileId(
     return null
   }
 
-  const result = await query<{ role: string | null }>(
-    `
-      SELECT au.role
-      FROM user_profiles up
-      JOIN app_users au
-        ON au.id = up.user_id
-      WHERE up.id = $1
-      LIMIT 1
-    `,
-    [profileId],
-  )
+  const result =
+    await query<{
+      role: string | null
+    }>(
+      `
+        SELECT au.role
+        FROM user_profiles up
+
+        JOIN app_users au
+          ON au.id = up.user_id
+
+        WHERE up.id = $1
+        LIMIT 1
+      `,
+      [profileId],
+    )
 
   return result.rows[0]?.role || null
 }
 
+async function getUserProfileId(
+  userId: string,
+): Promise<string | null> {
+  const result =
+    await query<{ id: string }>(
+      `
+        SELECT id
+        FROM user_profiles
+        WHERE user_id = $1
+        LIMIT 1
+      `,
+      [userId],
+    )
+
+  return result.rows[0]?.id || null
+}
+
+export { getUserProfileId }
+
+/* =======================================================
+   Trainer Authorization
+   ======================================================= */
+
 export async function isApprovedTrainerForEngagement(
   engagementId: string,
-  user: { id: string; role: string } | null,
+  user: {
+    id: string
+    role: string
+  } | null,
   profileId?: string | null,
 ): Promise<boolean> {
   if (!user) {
     return false
   }
 
-  if (isSuperAdminRole(user.role)) {
+  if (
+    isSuperAdminRole(user.role)
+  ) {
     return true
   }
 
   const currentProfileId =
-    profileId || (await getUserProfileId(user.id))
+    profileId ||
+    (await getUserProfileId(user.id))
 
   if (!currentProfileId) {
     return false
   }
 
-  const engagement =
-    await getEngagementTrainerState(engagementId)
+  const result =
+    await query<{ id: string }>(
+      `
+        SELECT id
+        FROM training_engagement_trainers
 
-  if (!engagement) {
-    return false
-  }
+        WHERE training_engagement_id = $1
+          AND trainer_profile_id = $2
+          AND assignment_status = $3
+          AND removed_at IS NULL
 
-  return (
-    engagement.assigned_trainer === currentProfileId &&
-    engagement.trainer_approval_status ===
-      TRAINER_APPROVAL_APPROVED
+        LIMIT 1
+      `,
+      [
+        engagementId,
+        currentProfileId,
+        TRAINER_APPROVAL_APPROVED,
+      ],
+    )
+
+  return Boolean(
+    result.rows[0],
   )
 }
 
@@ -127,23 +484,34 @@ export async function requireApprovedTrainerForEngagement(
   actorProfileId: string | null,
 ): Promise<void> {
   if (!actorProfileId) {
-    throw new Error("Trainer profile is required")
-  }
-
-  const engagement =
-    await getEngagementTrainerState(engagementId)
-
-  if (!engagement) {
-    throw new Error("Training engagement not found")
-  }
-
-  if (
-    engagement.assigned_trainer !== actorProfileId ||
-    engagement.trainer_approval_status !==
-      TRAINER_APPROVAL_APPROVED
-  ) {
     throw new Error(
-      "This user is not the approved trainer for this engagement",
+      "Trainer profile is required",
+    )
+  }
+
+  const result =
+    await query<{ id: string }>(
+      `
+        SELECT id
+        FROM training_engagement_trainers
+
+        WHERE training_engagement_id = $1
+          AND trainer_profile_id = $2
+          AND assignment_status = $3
+          AND removed_at IS NULL
+
+        LIMIT 1
+      `,
+      [
+        engagementId,
+        actorProfileId,
+        TRAINER_APPROVAL_APPROVED,
+      ],
+    )
+
+  if (!result.rows[0]) {
+    throw new Error(
+      "This user is not an approved trainer for this engagement",
     )
   }
 }
@@ -154,10 +522,16 @@ export async function requireTrainingOperatorForEngagement(
   actorProfileId: string | null,
 ): Promise<void> {
   if (!actor) {
-    throw new Error("Unauthorized")
+    throw new Error(
+      "Unauthorized",
+    )
   }
 
-  if (isSuperAdminRole(actor.role)) {
+  if (
+    isSuperAdminRole(
+      actor.role,
+    )
+  ) {
     return
   }
 
@@ -172,17 +546,25 @@ async function requireTrainingOperatorByProfile(
   actorProfileId: string | null,
 ): Promise<void> {
   if (!actorProfileId) {
-    throw new Error("User profile is required")
+    throw new Error(
+      "User profile is required",
+    )
   }
 
   const role =
-    await getUserRoleByProfileId(actorProfileId)
+    await getUserRoleByProfileId(
+      actorProfileId,
+    )
 
   if (!role) {
-    throw new Error("User role could not be determined")
+    throw new Error(
+      "User role could not be determined",
+    )
   }
 
-  if (isSuperAdminRole(role)) {
+  if (
+    isSuperAdminRole(role)
+  ) {
     return
   }
 
@@ -191,24 +573,6 @@ async function requireTrainingOperatorByProfile(
     actorProfileId,
   )
 }
-
-async function getUserProfileId(
-  userId: string,
-) {
-  const result = await query<{ id: string }>(
-    `
-      SELECT id
-      FROM user_profiles
-      WHERE user_id = $1
-      LIMIT 1
-    `,
-    [userId],
-  )
-
-  return result.rows[0]?.id || null
-}
-
-export { getUserProfileId }
 
 /* =======================================================
    Trainer Assignment
@@ -221,35 +585,46 @@ export async function assignTrainer(
   actorRole?: string | null,
 ) {
   const engagement =
-    await getEngagementTrainerState(engagementId)
+    await getEngagementTrainerState(
+      engagementId,
+    )
 
   if (!engagement) {
-    throw new Error("Training engagement not found")
+    throw new Error(
+      "Training engagement not found",
+    )
   }
 
-  const targetResult = await query<{
-    role: string | null
-    status: string | null
-  }>(
-    `
-      SELECT
-        au.role,
-        au.status
-      FROM user_profiles up
-      JOIN app_users au
-        ON au.id = up.user_id
-      WHERE up.id = $1
-      LIMIT 1
-    `,
-    [trainerProfileId],
-  )
+  const targetResult =
+    await query<{
+      role: string | null
+      status: string | null
+    }>(
+      `
+        SELECT
+          au.role,
+          au.status
 
-  const target = targetResult.rows[0]
+        FROM user_profiles up
+
+        JOIN app_users au
+          ON au.id = up.user_id
+
+        WHERE up.id = $1
+        LIMIT 1
+      `,
+      [trainerProfileId],
+    )
+
+  const target =
+    targetResult.rows[0]
 
   if (
     !target ||
     !target.role ||
-    !isTrainerCapableRole(target.role) ||
+    !isTrainerCapableRole(
+      target.role,
+    ) ||
     target.status !== "active"
   ) {
     throw new Error(
@@ -257,80 +632,293 @@ export async function assignTrainer(
     )
   }
 
+  if (!actorProfileId) {
+    throw new Error(
+      "Actor profile is required",
+    )
+  }
+
   const normalizedActorRole =
     actorRole || "administrator"
 
-  if (isSuperAdminRole(normalizedActorRole)) {
+  const existingAssignment =
+    await query<{
+      id: string
+      assignment_status: string
+    }>(
+      `
+        SELECT
+          id,
+          assignment_status
+
+        FROM training_engagement_trainers
+
+        WHERE training_engagement_id = $1
+          AND trainer_profile_id = $2
+
+        LIMIT 1
+      `,
+      [
+        engagementId,
+        trainerProfileId,
+      ],
+    )
+
+  /*
+   * Super Administrator can directly approve
+   * a trainer without an approval step.
+   */
+  if (
+    isSuperAdminRole(
+      normalizedActorRole,
+    )
+  ) {
+    if (
+      existingAssignment.rows[0]
+    ) {
+      await query(
+        `
+          UPDATE training_engagement_trainers
+          SET
+            assignment_status = $1,
+            assigned_by = $2,
+            approved_by = $2,
+
+            approval_requested_by =
+              COALESCE(
+                approval_requested_by,
+                $2
+              ),
+
+            approval_reason = NULL,
+
+            assigned_at =
+              COALESCE(
+                assigned_at,
+                NOW()
+              ),
+
+            approved_at = NOW(),
+            removed_at = NULL,
+            updated_at = NOW()
+
+          WHERE id = $3
+        `,
+        [
+          TRAINER_APPROVAL_APPROVED,
+          actorProfileId,
+          existingAssignment.rows[0].id,
+        ],
+      )
+    } else {
+      await query(
+        `
+          INSERT INTO training_engagement_trainers (
+            training_engagement_id,
+            trainer_profile_id,
+            assignment_status,
+            assigned_by,
+            approval_requested_by,
+            approved_by,
+            assigned_at,
+            approved_at,
+            created_at,
+            updated_at
+          )
+
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $4,
+            $4,
+            NOW(),
+            NOW(),
+            NOW(),
+            NOW()
+          )
+        `,
+        [
+          engagementId,
+          trainerProfileId,
+          TRAINER_APPROVAL_APPROVED,
+          actorProfileId,
+        ],
+      )
+    }
+
+    /*
+     * Legacy columns are kept synchronized for
+     * compatibility only.
+     *
+     * They are NOT the authorization source of truth.
+     */
     await query(
       `
         UPDATE training_engagements
+
         SET
-          assigned_trainer = $1,
-          pending_trainer_id = NULL,
-          trainer_approval_status = $2,
-          trainer_approval_requested_by =
+          assigned_trainer =
             COALESCE(
-              trainer_approval_requested_by,
-              $3
+              assigned_trainer,
+              $1
             ),
-          trainer_approval_approved_by = $4,
+
+          trainer_approval_status = $2,
+          trainer_approval_approved_by = $3,
           updated_at = NOW()
-        WHERE id = $5
+
+        WHERE id = $4
       `,
       [
         trainerProfileId,
         TRAINER_APPROVAL_APPROVED,
         actorProfileId,
-        actorProfileId,
         engagementId,
       ],
     )
-  } else if (
-    normalizedActorRole === "administrator"
+
+    await createTrainingUpdate(
+      engagementId,
+      actorProfileId,
+      "trainer_assigned",
+      "Trainer Assigned",
+      `Trainer profile ${trainerProfileId} has been approved and assigned to the engagement.`,
+    )
+
+    return {
+      success: true,
+      assignment_status:
+        TRAINER_APPROVAL_APPROVED,
+      trainer_profile_id:
+        trainerProfileId,
+    }
+  }
+
+  /*
+   * Only administrators reach this branch.
+   *
+   * Administrator assignments are proposals.
+   * They do NOT activate trainer access.
+   */
+  if (
+    normalizedActorRole !==
+    "administrator"
   ) {
+    throw new Error(
+      "Forbidden",
+    )
+  }
+
+  if (
+    existingAssignment.rows[0]
+  ) {
+    const existing =
+      existingAssignment.rows[0]
+
+    if (
+      existing.assignment_status ===
+      TRAINER_APPROVAL_APPROVED
+    ) {
+      throw new Error(
+        "This trainer is already approved for this engagement",
+      )
+    }
+
     await query(
       `
-        UPDATE training_engagements
+        UPDATE training_engagement_trainers
+
         SET
-          assigned_trainer = NULL,
-          pending_trainer_id = $1,
-          trainer_approval_status = $2,
-          trainer_approval_requested_by =
-            COALESCE(
-              trainer_approval_requested_by,
-              $3
-            ),
-          trainer_approval_approved_by = NULL,
+          assignment_status = $1,
+          assigned_by = $2,
+          approval_requested_by = $2,
+          approved_by = NULL,
+          approval_reason = NULL,
+          assigned_at = NULL,
+          approved_at = NULL,
+          removed_at = NULL,
           updated_at = NOW()
-        WHERE id = $4
+
+        WHERE id = $3
       `,
       [
-        trainerProfileId,
         TRAINER_APPROVAL_PENDING,
         actorProfileId,
-        engagementId,
+        existing.id,
       ],
     )
   } else {
-    throw new Error("Forbidden")
+    await query(
+      `
+        INSERT INTO training_engagement_trainers (
+          training_engagement_id,
+          trainer_profile_id,
+          assignment_status,
+          assigned_by,
+          approval_requested_by,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $4,
+          NOW(),
+          NOW()
+        )
+      `,
+      [
+        engagementId,
+        trainerProfileId,
+        TRAINER_APPROVAL_PENDING,
+        actorProfileId,
+      ],
+    )
   }
+
+  /*
+   * Legacy pending columns are compatibility fields only.
+   */
+  await query(
+    `
+      UPDATE training_engagements
+
+      SET
+        pending_trainer_id = $1,
+        trainer_approval_status = $2,
+        trainer_approval_requested_by = $3,
+        trainer_approval_approved_by = NULL,
+        updated_at = NOW()
+
+      WHERE id = $4
+    `,
+    [
+      trainerProfileId,
+      TRAINER_APPROVAL_PENDING,
+      actorProfileId,
+      engagementId,
+    ],
+  )
 
   await createTrainingUpdate(
     engagementId,
     actorProfileId,
-    isSuperAdminRole(normalizedActorRole)
-      ? "trainer_assigned"
-      : "trainer_assignment_requested",
-    isSuperAdminRole(normalizedActorRole)
-      ? "Trainer Assigned"
-      : "Trainer Assignment Requested",
-    isSuperAdminRole(normalizedActorRole)
-      ? `Trainer profile ${trainerProfileId} has been approved and assigned to the engagement.`
-      : `Trainer profile ${trainerProfileId} was proposed and sent to Super Administrator approval.`,
+    "trainer_assignment_requested",
+    "Trainer Assignment Requested",
+    `Trainer profile ${trainerProfileId} was proposed and sent to Super Administrator approval.`,
   )
 
   return {
     success: true,
+    assignment_status:
+      TRAINER_APPROVAL_PENDING,
+    trainer_profile_id:
+      trainerProfileId,
   }
 }
 
@@ -345,11 +933,6 @@ async function createTrainingUpdate(
   title: string,
   content: string,
 ) {
-  /*
-   * Training updates are the authoritative activity
-   * stream for the training engagement.
-   */
-
   await query(
     `
       INSERT INTO training_updates (
@@ -359,7 +942,14 @@ async function createTrainingUpdate(
         title,
         content
       )
-      VALUES ($1, $2, $3, $4, $5)
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5
+      )
     `,
     [
       trainingEngagementId,
@@ -370,25 +960,24 @@ async function createTrainingUpdate(
     ],
   )
 
-  /*
-   * Every meaningful training update also becomes a
-   * client notification.
-   *
-   * This keeps the notification system centralized instead
-   * of requiring every individual operation to remember
-   * to call notifyUser().
-   */
   await notifyTrainingClient(
     trainingEngagementId,
     {
-      type: `training_${updateType}`,
+      type:
+        `training_${updateType}`,
+
       title,
-      message: content,
+
+      message:
+        content,
+
       metadata: {
         training_engagement_id:
           trainingEngagementId,
+
         training_update_type:
           updateType,
+
         updated_by:
           updatedBy,
       },
@@ -400,7 +989,7 @@ async function createTrainingUpdate(
    Access Control
    ======================================================= */
 
-async function ensureAccess(
+export async function ensureAccess(
   engagementId: string,
   user: AppUser | null,
   allowTrainer = false,
@@ -409,78 +998,68 @@ async function ensureAccess(
   role: string | null
 }> {
   if (!user) {
-    throw new Error("Unauthorized")
+    throw new Error(
+      "Unauthorized",
+    )
   }
 
-  const res = await query<{
-    client_profile_id: string | null
-    assigned_trainer: string | null
-    trainer_approval_status: string | null
-  }>(
-    `
-      SELECT
-        client_profile_id,
-        assigned_trainer,
-        trainer_approval_status
-      FROM training_engagements
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [engagementId],
-  )
+  const res =
+    await query<{
+      client_profile_id:
+        | string
+        | null
+    }>(
+      `
+        SELECT
+          client_profile_id
 
-  const engagement = res.rows[0]
+        FROM training_engagements
+
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [engagementId],
+    )
+
+  const engagement =
+    res.rows[0]
 
   if (!engagement) {
-    throw new Error("Training engagement not found")
+    throw new Error(
+      "Training engagement not found",
+    )
   }
 
   const profileId =
-    await getUserProfileId(user.id)
-
-  if (isSuperAdminRole(user.role)) {
-    return {
-      profileId,
-      role: user.role,
-    }
-  }
-
-  if (user.role === "administrator") {
-    if (allowTrainer) {
-      const isAssignedApprovedTrainer =
-        Boolean(profileId) &&
-        engagement.assigned_trainer ===
-          profileId &&
-        engagement.trainer_approval_status ===
-          TRAINER_APPROVAL_APPROVED
-
-      if (!isAssignedApprovedTrainer) {
-        throw new Error(
-          "This administrator is not the approved trainer for this engagement",
-        )
-      }
-    }
-
-    return {
-      profileId,
-      role: user.role,
-    }
-  }
+    await getUserProfileId(
+      user.id,
+    )
 
   if (
-    user.role === "investigator" ||
-    user.role === "analyst"
+    isSuperAdminRole(
+      user.role,
+    )
   ) {
-    const isTrainerApproved =
-      Boolean(profileId) &&
-      engagement.assigned_trainer ===
-        profileId &&
-      engagement.trainer_approval_status ===
-        TRAINER_APPROVAL_APPROVED
+    return {
+      profileId,
+      role: user.role,
+    }
+  }
 
-    if (!isTrainerApproved) {
-      throw new Error(
-        "This user is not the approved trainer for this engagement",
+  /*
+   * Administrators may view training operations.
+   *
+   * They may only perform trainer operations
+   * when explicitly approved in the junction table.
+   */
+  if (
+    user.role ===
+    "administrator"
+  ) {
+    if (allowTrainer) {
+      await requireApprovedTrainerForEngagement(
+        engagementId,
+        profileId,
       )
     }
 
@@ -490,7 +1069,32 @@ async function ensureAccess(
     }
   }
 
-  if (user.role === "client") {
+  /*
+   * Investigator / Analyst access is strictly
+   * assignment based.
+   */
+  if (
+    user.role === "investigator" ||
+    user.role === "analyst"
+  ) {
+    await requireApprovedTrainerForEngagement(
+      engagementId,
+      profileId,
+    )
+
+    return {
+      profileId,
+      role: user.role,
+    }
+  }
+
+  /*
+   * Client access remains restricted to
+   * their own engagement.
+   */
+  if (
+    user.role === "client"
+  ) {
     if (
       profileId &&
       engagement.client_profile_id ===
@@ -502,13 +1106,15 @@ async function ensureAccess(
       }
     }
 
-    throw new Error("Forbidden")
+    throw new Error(
+      "Forbidden",
+    )
   }
 
-  throw new Error("Forbidden")
+  throw new Error(
+    "Forbidden",
+  )
 }
-
-export { ensureAccess, syncTrainingSessionToGoogle }
 
 /* =======================================================
    Modules
@@ -517,17 +1123,122 @@ export { ensureAccess, syncTrainingSessionToGoogle }
 export async function listModules(
   engagementId: string,
 ) {
-  const result = await query(
-    `
-      SELECT *
-      FROM training_modules
-      WHERE training_engagement_id = $1
-      ORDER BY
-        module_order ASC,
-        created_at ASC
-    `,
-    [engagementId],
-  )
+  const result =
+    await query(
+      `
+        SELECT
+          tm.*,
+
+          /* =================================================
+             MATERIAL COUNTS
+             ================================================= */
+
+          COALESCE(
+            (
+              SELECT COUNT(*)
+              FROM training_materials mat
+              WHERE
+                mat.training_engagement_id =
+                  tm.training_engagement_id
+                AND mat.module_id =
+                  tm.id
+            ),
+            0
+          ) AS material_count,
+
+          COALESCE(
+            (
+              SELECT COUNT(*)
+              FROM training_materials mat
+              WHERE
+                mat.training_engagement_id =
+                  tm.training_engagement_id
+                AND mat.module_id =
+                  tm.id
+
+                AND EXISTS (
+                  SELECT 1
+                  FROM training_material_progress mp
+                  WHERE
+                    mp.training_engagement_id =
+                      mat.training_engagement_id
+                    AND mp.material_id =
+                      mat.id
+                    AND mp.status =
+                      'completed'
+                )
+            ),
+            0
+          ) AS completed_material_count,
+
+          /* =================================================
+             SESSION COUNTS
+             ================================================= */
+
+          COALESCE(
+            (
+              SELECT COUNT(*)
+              FROM training_sessions ts
+              WHERE
+                ts.training_engagement_id =
+                  tm.training_engagement_id
+                AND ts.module_id =
+                  tm.id
+                AND ts.status != 'cancelled'
+            ),
+            0
+          ) AS session_count,
+
+          /* =================================================
+             ATTENDED SESSIONS
+             ================================================= */
+
+          COALESCE(
+            (
+              SELECT COUNT(*)
+              FROM training_sessions ts
+              WHERE
+                ts.training_engagement_id =
+                  tm.training_engagement_id
+                AND ts.module_id =
+                  tm.id
+                AND ts.status != 'cancelled'
+                AND ts.attendance_status =
+                  'attended'
+            ),
+            0
+          ) AS attended_session_count,
+
+          /* =================================================
+             COMPLETED SESSIONS
+             ================================================= */
+
+          COALESCE(
+            (
+              SELECT COUNT(*)
+              FROM training_sessions ts
+              WHERE
+                ts.training_engagement_id =
+                  tm.training_engagement_id
+                AND ts.module_id =
+                  tm.id
+                AND ts.status =
+                  'completed'
+            ),
+            0
+          ) AS completed_session_count
+
+        FROM training_modules tm
+
+        WHERE
+          tm.training_engagement_id = $1
+
+        ORDER BY
+          tm.module_order ASC,
+          tm.created_at ASC
+      `,
+      [engagementId],
+    )
 
   return result.rows
 }
@@ -547,47 +1258,57 @@ export async function createModule(
     actorProfileId,
   )
 
-  if (!payload.title?.trim()) {
-    throw new Error("Module title is required")
+  if (
+    !payload.title?.trim()
+  ) {
+    throw new Error(
+      "Module title is required",
+    )
   }
 
-  const result = await query(
-    `
-      INSERT INTO training_modules (
-        training_engagement_id,
-        title,
-        description,
-        objectives,
-        module_order,
-        status,
-        completion_percentage,
-        created_by,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        'not_started',
-        0,
-        $6,
-        NOW(),
-        NOW()
-      )
-      RETURNING *
-    `,
-    [
-      engagementId,
-      payload.title.trim(),
-      payload.description || null,
-      payload.objectives || null,
-      payload.module_order || 0,
-      actorProfileId,
-    ],
-  )
+  const result =
+    await query(
+      `
+        INSERT INTO training_modules (
+          training_engagement_id,
+          title,
+          description,
+          objectives,
+          module_order,
+          status,
+          completion_percentage,
+          created_by,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          'not_started',
+          0,
+          $6,
+          NOW(),
+          NOW()
+        )
+
+        RETURNING *
+      `,
+      [
+        engagementId,
+        payload.title.trim(),
+        payload.description ||
+          null,
+        payload.objectives ||
+          null,
+        payload.module_order ||
+          0,
+        actorProfileId,
+      ],
+    )
 
   await createTrainingUpdate(
     engagementId,
@@ -607,11 +1328,15 @@ export async function updateModule(
 ) {
   const moduleRow =
     await query<{
-      training_engagement_id: string
+      training_engagement_id:
+        string
     }>(
       `
-        SELECT training_engagement_id
+        SELECT
+          training_engagement_id
+
         FROM training_modules
+
         WHERE id = $1
         LIMIT 1
       `,
@@ -619,11 +1344,14 @@ export async function updateModule(
     )
 
   if (!moduleRow.rows[0]) {
-    throw new Error("Module not found")
+    throw new Error(
+      "Module not found",
+    )
   }
 
   await requireTrainingOperatorByProfile(
-    moduleRow.rows[0].training_engagement_id,
+    moduleRow.rows[0]
+      .training_engagement_id,
     actorProfileId,
   )
 
@@ -631,57 +1359,81 @@ export async function updateModule(
   const values: any[] = []
   let ix = 1
 
-  for (const key of [
-    "title",
-    "description",
-    "objectives",
-    "module_order",
-    "status",
-    "completion_percentage",
-  ]) {
+  for (
+    const key of [
+      "title",
+      "description",
+      "objectives",
+      "module_order",
+      "status",
+      "completion_percentage",
+    ]
+  ) {
     if (
       Object.prototype.hasOwnProperty.call(
         updates,
         key,
       )
     ) {
-      fields.push(`${key} = $${ix}`)
-      values.push(updates[key])
+      fields.push(
+        `${key} = $${ix}`,
+      )
+
+      values.push(
+        updates[key],
+      )
+
       ix++
     }
   }
 
-  if (fields.length === 0) {
-    throw new Error("No updates provided")
+  if (
+    fields.length === 0
+  ) {
+    throw new Error(
+      "No updates provided",
+    )
   }
 
   values.push(moduleId)
 
   const sql = `
     UPDATE training_modules
+
     SET
       ${fields.join(", ")},
       updated_at = NOW()
+
     WHERE id = $${ix}
+
     RETURNING *
   `
 
   const res =
     await query<{
-      training_engagement_id: string
+      training_engagement_id:
+        string
       title: string
-    }>(sql, values)
+    }>(
+      sql,
+      values,
+    )
 
   if (!res.rows[0]) {
-    throw new Error("Module not found")
+    throw new Error(
+      "Module not found",
+    )
   }
 
   if (
-    updates.status !== undefined ||
-    updates.completion_percentage !== undefined
+    updates.status !==
+      undefined ||
+    updates.completion_percentage !==
+      undefined
   ) {
     await createTrainingUpdate(
-      res.rows[0].training_engagement_id,
+      res.rows[0]
+        .training_engagement_id,
       actorProfileId,
       "module_updated",
       `Module Updated: ${res.rows[0].title}`,
@@ -698,14 +1450,17 @@ export async function deleteModule(
 ) {
   const mod =
     await query<{
-      training_engagement_id: string
+      training_engagement_id:
+        string
       title: string
     }>(
       `
         SELECT
           training_engagement_id,
           title
+
         FROM training_modules
+
         WHERE id = $1
         LIMIT 1
       `,
@@ -713,11 +1468,14 @@ export async function deleteModule(
     )
 
   if (!mod.rows[0]) {
-    throw new Error("Module not found")
+    throw new Error(
+      "Module not found",
+    )
   }
 
   await requireTrainingOperatorByProfile(
-    mod.rows[0].training_engagement_id,
+    mod.rows[0]
+      .training_engagement_id,
     actorProfileId,
   )
 
@@ -730,7 +1488,8 @@ export async function deleteModule(
   )
 
   await createTrainingUpdate(
-    mod.rows[0].training_engagement_id,
+    mod.rows[0]
+      .training_engagement_id,
     actorProfileId,
     "module_deleted",
     `Module Deleted: ${mod.rows[0].title}`,
@@ -750,33 +1509,43 @@ async function getTrainingSessionCalendarSynced(
   sessionId: string,
 ): Promise<boolean> {
   try {
-    const result = await query<{ id: string }>(
-      `
-        SELECT id
-        FROM training_session_calendar_events
-        WHERE training_session_id = $1
-        LIMIT 1
-      `,
-      [sessionId],
-    )
+    const result =
+      await query<{ id: string }>(
+        `
+          SELECT id
 
-    return Boolean(result.rows[0])
+          FROM training_session_calendar_events
+
+          WHERE training_session_id = $1
+
+          LIMIT 1
+        `,
+        [sessionId],
+      )
+
+    return Boolean(
+      result.rows[0],
+    )
   } catch (error) {
     console.error(
       "TRAINING SESSION CALENDAR STATE ERROR:",
       error,
     )
+
     return false
   }
 }
 
-async function attachCalendarSyncState<T extends { id: string }>(
-  session: T,
-) {
+async function attachCalendarSyncState<
+  T extends { id: string },
+>(session: T) {
   return {
     ...session,
+
     calendar_synced:
-      await getTrainingSessionCalendarSynced(session.id),
+      await getTrainingSessionCalendarSynced(
+        session.id,
+      ),
   }
 }
 
@@ -784,73 +1553,101 @@ export async function listSessions(
   engagementId: string,
 ) {
   type TrainingSessionQueryRow = {
-  id: string
-  [key: string]: unknown
-}
+    id: string
+    [key: string]: unknown
+  }
 
-const res = await query<TrainingSessionQueryRow>(
-  `
-    SELECT
-      ts.*,
-      COALESCE(
-        att.attendees,
-        '[]'::json
-      ) AS attendees
-    FROM training_sessions ts
-    LEFT JOIN (
-      SELECT
-        session_id,
-        json_agg(
-          json_build_object(
-            'id', id,
-            'profile_id', profile_id,
-            'user_id', user_id,
-            'email', email,
-            'partstat', partstat,
-            'responded_at', responded_at
-          )
-        ) AS attendees
-      FROM training_session_attendees
-      WHERE training_engagement_id = $1
-      GROUP BY session_id
-    ) att
-      ON att.session_id = ts.id
-    WHERE ts.training_engagement_id = $1
-    ORDER BY ts.scheduled_at NULLS LAST
-  `,
-  [engagementId],
-)
+  const res =
+    await query<TrainingSessionQueryRow>(
+      `
+        SELECT
+          ts.*,
 
-return Promise.all(
-  res.rows.map((session) =>
-    attachCalendarSyncState(session),
-  ),
-)
+          COALESCE(
+            att.attendees,
+            '[]'::json
+          ) AS attendees
+
+        FROM training_sessions ts
+
+        LEFT JOIN (
+          SELECT
+            session_id,
+
+            json_agg(
+              json_build_object(
+                'id', id,
+                'profile_id', profile_id,
+                'user_id', user_id,
+                'email', email,
+                'partstat', partstat,
+                'responded_at', responded_at
+              )
+            ) AS attendees
+
+          FROM training_session_attendees
+
+          WHERE training_engagement_id = $1
+
+          GROUP BY session_id
+        ) att
+          ON att.session_id = ts.id
+
+        WHERE
+          ts.training_engagement_id = $1
+
+        ORDER BY
+          ts.scheduled_at NULLS LAST
+      `,
+      [engagementId],
+    )
+
+  return Promise.all(
+    res.rows.map(
+      (session) =>
+        attachCalendarSyncState(
+          session,
+        ),
+    ),
+  )
 }
 
 export async function createSession(
   engagementId: string,
   payload: any,
-  actorOrProfile: AppUser | string | null,
+  actorOrProfile:
+    | AppUser
+    | string
+    | null,
   actorProfileId?: string | null,
 ) {
-  let actor: AppUser | null = null
-  let profileId: string | null = null
+  let actor: AppUser | null =
+    null
+
+  let profileId:
+    | string
+    | null = null
 
   if (
     actorOrProfile &&
-    typeof actorOrProfile === "object"
+    typeof actorOrProfile ===
+      "object"
   ) {
     actor = actorOrProfile
-    profileId = actorProfileId || null
+
+    profileId =
+      actorProfileId || null
   } else {
     profileId =
-      typeof actorOrProfile === "string"
+      typeof actorOrProfile ===
+      "string"
         ? actorOrProfile
         : null
 
     const role =
-      await getUserRoleByProfileId(profileId)
+      await getUserRoleByProfileId(
+        profileId,
+      )
 
     if (role) {
       actor = {
@@ -861,7 +1658,9 @@ export async function createSession(
   }
 
   if (!actor) {
-    throw new Error("Unauthorized")
+    throw new Error(
+      "Unauthorized",
+    )
   }
 
   await requireTrainingOperatorForEngagement(
@@ -870,55 +1669,121 @@ export async function createSession(
     profileId,
   )
 
-  const engagementTrainer =
-    await getEngagementTrainerState(engagementId)
+  /*
+   * Session trainers must themselves be
+   * approved for this engagement.
+   */
+  let sessionTrainerId =
+    payload.trainer_id ||
+    null
 
-  const assignedTrainerId =
-    engagementTrainer?.assigned_trainer || null
+  if (sessionTrainerId) {
+    const trainerCheck =
+      await query<{ id: string }>(
+        `
+          SELECT id
 
-  const sessionTrainerId =
-    payload.trainer_id || assignedTrainerId || null
+          FROM training_engagement_trainers
 
-  const res = await query(
-    `
-      INSERT INTO training_sessions (
-        training_engagement_id,
-        module_id,
-        trainer_id,
-        scheduled_at,
-        duration_minutes,
-        session_type,
-        meeting_url,
-        location,
-        status,
-        attendance_status,
-        session_notes,
-        created_at,
-        updated_at
+          WHERE
+            training_engagement_id = $1
+            AND trainer_profile_id = $2
+            AND assignment_status = $3
+            AND removed_at IS NULL
+
+          LIMIT 1
+        `,
+        [
+          engagementId,
+          sessionTrainerId,
+          TRAINER_APPROVAL_APPROVED,
+        ],
       )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-        NOW(),
-        NOW()
-      )
-      RETURNING *
-    `,
-    [
-      engagementId,
-      payload.module_id || null,
-      sessionTrainerId,
-      payload.scheduled_at || null,
-      payload.duration_minutes || null,
-      payload.session_type || null,
-      payload.meeting_url || null,
-      payload.location || null,
-      payload.status || "scheduled",
-      payload.attendance_status || "pending",
-      payload.session_notes || null,
-    ],
-  )
 
-  const session: any = res.rows[0]
+    if (!trainerCheck.rows[0]) {
+      throw new Error(
+        "Selected session trainer is not an approved trainer for this engagement",
+      )
+    }
+  } else {
+    /*
+     * If no trainer is explicitly selected,
+     * use the first approved trainer.
+     */
+    const trainers =
+      await listApprovedTrainers(
+        engagementId,
+      )
+
+    sessionTrainerId =
+      trainers[0]
+        ?.trainer_profile_id ||
+      null
+  }
+
+  const res =
+    await query(
+      `
+        INSERT INTO training_sessions (
+          training_engagement_id,
+          module_id,
+          trainer_id,
+          scheduled_at,
+          duration_minutes,
+          session_type,
+          meeting_url,
+          location,
+          status,
+          attendance_status,
+          session_notes,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          NOW(),
+          NOW()
+        )
+
+        RETURNING *
+      `,
+      [
+        engagementId,
+        payload.module_id ||
+          null,
+        sessionTrainerId,
+        payload.scheduled_at ||
+          null,
+        payload.duration_minutes ||
+          null,
+        payload.session_type ||
+          null,
+        payload.meeting_url ||
+          null,
+        payload.location ||
+          null,
+        payload.status ||
+          "scheduled",
+        payload.attendance_status ||
+          "pending",
+        payload.session_notes ||
+          null,
+      ],
+    )
+
+  const session: any =
+    res.rows[0]
 
   await createTrainingUpdate(
     engagementId,
@@ -928,15 +1793,6 @@ export async function createSession(
     "A training session has been scheduled.",
   )
 
-  /*
-   * Google Calendar synchronization.
-   *
-   * This is intentionally best-effort. A training session
-   * must still be created even when the client has not
-   * connected Google Calendar.
-   *
-   * ICS generation/email remains the fallback.
-   */
   try {
     await syncTrainingSessionToGoogle(
       session.id,
@@ -948,437 +1804,9 @@ export async function createSession(
     )
   }
 
-  try {
-    const start: string | null =
-      session.scheduled_at
-        ? String(session.scheduled_at)
-        : null
-
-    let end: string | null = null
-
-    if (
-      session.duration_minutes &&
-      start
-    ) {
-      end = new Date(
-        new Date(start).getTime() +
-          Number(session.duration_minutes) *
-            60000,
-      ).toISOString()
-    }
-
-    const title = String(
-      session.session_notes ||
-        session.session_type ||
-        "Training Session",
-    )
-
-    const e =
-      await query<{
-        client_profile_id: string | null
-      }>(
-        `
-          SELECT client_profile_id
-          FROM training_engagements
-          WHERE id = $1
-          LIMIT 1
-        `,
-        [engagementId],
-      )
-
-    const clientProfileId =
-      e.rows[0]?.client_profile_id || null
-
-    let trainerEmail: string | null = null
-
-    if (session.trainer_id) {
-      const t =
-        await query<{
-          email: string | null
-        }>(
-          `
-            SELECT u.email
-            FROM user_profiles up
-            JOIN app_users u
-              ON u.id = up.user_id
-            WHERE up.id = $1
-            LIMIT 1
-          `,
-          [session.trainer_id],
-        )
-
-      trainerEmail =
-        t.rows[0]?.email || null
-    }
-
-    let clientEmail: string | null = null
-
-    if (clientProfileId) {
-      const c =
-        await query<{
-          email: string | null
-        }>(
-          `
-            SELECT u.email
-            FROM user_profiles up
-            JOIN app_users u
-              ON u.id = up.user_id
-            WHERE up.id = $1
-            LIMIT 1
-          `,
-          [clientProfileId],
-        )
-
-      clientEmail =
-        c.rows[0]?.email || null
-    }
-
-    const usersToNotify:
-      (string | null)[] = []
-
-    if (session.trainer_id) {
-      const t =
-        await query<{
-          user_id: string | null
-        }>(
-          `
-            SELECT user_id
-            FROM user_profiles
-            WHERE id = $1
-            LIMIT 1
-          `,
-          [session.trainer_id],
-        )
-
-      if (t.rows[0]?.user_id) {
-        usersToNotify.push(
-          t.rows[0].user_id,
-        )
-      }
-    }
-
-    if (clientProfileId) {
-      const c =
-        await query<{
-          user_id: string | null
-        }>(
-          `
-            SELECT user_id
-            FROM user_profiles
-            WHERE id = $1
-            LIMIT 1
-          `,
-          [clientProfileId],
-        )
-
-      if (c.rows[0]?.user_id) {
-        usersToNotify.push(
-          c.rows[0].user_id,
-        )
-      }
-    }
-
-    const attendees =
-      [] as {
-        name?: string
-        email: string
-        rsvp?: boolean
-      }[]
-
-    if (trainerEmail) {
-      attendees.push({
-        email: trainerEmail,
-        rsvp: true,
-      })
-    }
-
-    if (clientEmail) {
-      attendees.push({
-        email: clientEmail,
-        rsvp: true,
-      })
-    }
-
-    try {
-      const persistPromises: Promise<any>[] = []
-
-      if (trainerEmail) {
-        const tuser =
-          await query<{
-            user_id: string | null
-          }>(
-            `
-              SELECT user_id
-              FROM user_profiles
-              WHERE id = $1
-              LIMIT 1
-            `,
-            [session.trainer_id],
-          )
-
-        const trainerUserId =
-          tuser.rows[0]?.user_id || null
-
-        if (trainerUserId) {
-          persistPromises.push(
-            query(
-              `
-                INSERT INTO training_session_attendees (
-                  session_id,
-                  training_engagement_id,
-                  profile_id,
-                  user_id,
-                  email,
-                  partstat,
-                  created_at,
-                  updated_at
-                )
-                VALUES (
-                  $1,$2,$3,$4,$5,$6,NOW(),NOW()
-                )
-                ON CONFLICT (
-                  session_id,
-                  user_id
-                )
-                DO NOTHING
-              `,
-              [
-                session.id,
-                engagementId,
-                session.trainer_id || null,
-                trainerUserId,
-                trainerEmail,
-                session.attendance_status ||
-                  null,
-              ],
-            ),
-          )
-        }
-      }
-
-      if (clientEmail) {
-        const cuser =
-          await query<{
-            user_id: string | null
-          }>(
-            `
-              SELECT user_id
-              FROM user_profiles
-              WHERE id = $1
-              LIMIT 1
-            `,
-            [clientProfileId],
-          )
-
-        const clientUserId =
-          cuser.rows[0]?.user_id || null
-
-        if (clientUserId) {
-          persistPromises.push(
-            query(
-              `
-                INSERT INTO training_session_attendees (
-                  session_id,
-                  training_engagement_id,
-                  profile_id,
-                  user_id,
-                  email,
-                  partstat,
-                  created_at,
-                  updated_at
-                )
-                VALUES (
-                  $1,$2,$3,$4,$5,$6,NOW(),NOW()
-                )
-                ON CONFLICT (
-                  session_id,
-                  user_id
-                )
-                DO NOTHING
-              `,
-              [
-                session.id,
-                engagementId,
-                clientProfileId || null,
-                clientUserId,
-                clientEmail,
-                session.attendance_status ||
-                  null,
-              ],
-            ),
-          )
-        }
-      }
-
-      await Promise.all(
-        persistPromises,
-      )
-    } catch {
-      // Do not block session creation.
-    }
-
-    const organizerEmail =
-      process.env.EMAIL_FROM || null
-
-    const organizerName =
-      process.env.EMAIL_FROM_NAME ||
-      "ShadowNode"
-
-    const ics = generateICS({
-      uid: `training-session-${String(
-        session.id,
-      )}`,
-      title,
-      description:
-        session.session_notes
-          ? String(
-              session.session_notes,
-            )
-          : undefined,
-      start,
-      end,
-      url: session.meeting_url
-        ? String(session.meeting_url)
-        : null,
-      location: session.location
-        ? String(session.location)
-        : null,
-      method: "REQUEST",
-      organizer: organizerEmail
-        ? {
-            email: organizerEmail,
-            name: organizerName,
-          }
-        : undefined,
-      attendees: attendees.length
-        ? attendees.map((a) => ({
-            ...a,
-            partstat:
-              session.attendance_status ||
-              undefined,
-          }))
-        : undefined,
-      sequence:
-        session.sequence || 0,
-    })
-
-    const trainerNotificationUserIds =
-      usersToNotify.length > 0 && session.trainer_id
-        ? (
-            await query<{ user_id: string | null }>(
-              `
-                SELECT user_id
-                FROM user_profiles
-                WHERE id = $1
-                LIMIT 1
-              `,
-              [session.trainer_id],
-            )
-          ).rows
-            .map((row) => row.user_id)
-            .filter(Boolean)
-        : []
-
-    await Promise.all(
-      trainerNotificationUserIds.map((uid) =>
-        notifyUser(uid, {
-          type:
-            "training_session_scheduled",
-          title:
-            "Training session scheduled",
-          message:
-            `A training session has been scheduled: ${title}`,
-          metadata: {
-            training_session_id:
-              session.id,
-            training_engagement_id:
-              engagementId,
-            target_page:
-              "client_training_schedule",
-            ics_url:
-              `/api/training/session/${session.id}/ics`,
-            ics,
-          },
-        }),
-      ),
-    )
-
-    try {
-      const uniqueUserIds =
-        Array.from(
-          new Set(
-            usersToNotify.filter(Boolean),
-          ),
-        ) as string[]
-
-      await Promise.all(
-        uniqueUserIds.map(
-          async (userId) => {
-            const ures =
-              await query<{
-                email: string | null
-              }>(
-                `
-                  SELECT email
-                  FROM app_users
-                  WHERE id = $1
-                  LIMIT 1
-                `,
-                [userId],
-              )
-
-            const email =
-              ures.rows[0]?.email || null
-
-            if (!email) return
-
-            const b64 =
-              Buffer.from(ics).toString(
-                "base64",
-              )
-
-            await sendEmail({
-              to: email,
-              subject:
-                `Training session scheduled: ${title}`,
-              html:
-                `<p>${title}</p>` +
-                `<p>Scheduled: ${
-                  start
-                    ? new Date(
-                        start,
-                      ).toLocaleString()
-                    : "TBD"
-                }</p>` +
-                `<p><a href="${
-                  session.meeting_url ||
-                  "#"
-                }">Join meeting</a></p>`,
-              attachments: [
-                {
-                  filename:
-                    `training-session-${session.id}.ics`,
-                  type: "text/calendar",
-                  data: b64,
-                },
-              ],
-            }).catch(
-              () => undefined,
-            )
-          },
-        ),
-      )
-    } catch {
-      // Ignore email errors.
-    }
-  } catch (notifyErr) {
-    console.error(
-      "SESSION NOTIFY ERROR",
-      notifyErr,
-    )
-  }
-
-  return attachCalendarSyncState(session)
+  return attachCalendarSyncState(
+    session,
+  )
 }
 
 export async function updateSession(
@@ -1388,81 +1816,142 @@ export async function updateSession(
 ) {
   const sessionRow =
     await query<{
-      training_engagement_id: string
+      training_engagement_id:
+        string
     }>(
       `
-        SELECT training_engagement_id
+        SELECT
+          training_engagement_id
+
         FROM training_sessions
+
         WHERE id = $1
+
         LIMIT 1
       `,
       [sessionId],
     )
 
   if (!sessionRow.rows[0]) {
-    throw new Error("Session not found")
+    throw new Error(
+      "Session not found",
+    )
   }
 
   const engagementId =
-    sessionRow.rows[0].training_engagement_id
-
-  const actorRole =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
-
-  if (!actorRole) {
-    throw new Error(
-      "User role could not be determined",
-    )
-  }
+    sessionRow.rows[0]
+      .training_engagement_id
 
   await requireTrainingOperatorByProfile(
     engagementId,
     actorProfileId,
   )
 
+  /*
+   * If the trainer is changed, the new trainer
+   * must already be approved for this engagement.
+   */
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "trainer_id",
+    )
+  ) {
+    if (
+      updates.trainer_id
+    ) {
+      const trainerCheck =
+        await query<{
+          id: string
+        }>(
+          `
+            SELECT id
+
+            FROM training_engagement_trainers
+
+            WHERE
+              training_engagement_id = $1
+              AND trainer_profile_id = $2
+              AND assignment_status = $3
+              AND removed_at IS NULL
+
+            LIMIT 1
+          `,
+          [
+            engagementId,
+            updates.trainer_id,
+            TRAINER_APPROVAL_APPROVED,
+          ],
+        )
+
+      if (
+        !trainerCheck.rows[0]
+      ) {
+        throw new Error(
+          "Selected session trainer is not an approved trainer for this engagement",
+        )
+      }
+    }
+  }
+
   const fields: string[] = []
   const values: any[] = []
+
   let ix = 1
 
-  for (const key of [
-    "module_id",
-    "trainer_id",
-    "scheduled_at",
-    "duration_minutes",
-    "session_type",
-    "meeting_url",
-    "location",
-    "status",
-    "attendance_status",
-    "session_notes",
-  ]) {
+  for (
+    const key of [
+      "module_id",
+      "trainer_id",
+      "scheduled_at",
+      "duration_minutes",
+      "session_type",
+      "meeting_url",
+      "location",
+      "status",
+      "attendance_status",
+      "session_notes",
+    ]
+  ) {
     if (
       Object.prototype.hasOwnProperty.call(
         updates,
         key,
       )
     ) {
-      fields.push(`${key} = $${ix}`)
-      values.push(updates[key])
+      fields.push(
+        `${key} = $${ix}`,
+      )
+
+      values.push(
+        updates[key],
+      )
+
       ix++
     }
   }
 
-  if (fields.length === 0) {
-    throw new Error("No updates provided")
+  if (
+    fields.length === 0
+  ) {
+    throw new Error(
+      "No updates provided",
+    )
   }
 
   values.push(sessionId)
 
   const sql = `
     UPDATE training_sessions
+
     SET
       ${fields.join(", ")},
-      sequence = COALESCE(sequence, 0) + 1,
+      sequence =
+        COALESCE(sequence, 0) + 1,
       updated_at = NOW()
+
     WHERE id = $${ix}
+
     RETURNING *
   `
 
@@ -1473,10 +1962,12 @@ export async function updateSession(
     )
 
   if (!res.rows[0]) {
-    throw new Error("Session not found")
+    throw new Error(
+      "Session not found",
+    )
   }
 
-  const session: any =
+  const session =
     res.rows[0]
 
   await createTrainingUpdate(
@@ -1487,14 +1978,6 @@ export async function updateSession(
     "Training session updated by trainer or training administrator.",
   )
 
-  /*
-   * Update the connected Google Calendar event.
-   *
-   * If the client has no Google Calendar connection,
-   * this simply becomes a no-op/error handled by the
-   * calendar service. The session update itself remains
-   * successful.
-   */
   try {
     await syncTrainingSessionToGoogle(
       session.id,
@@ -1506,345 +1989,33 @@ export async function updateSession(
     )
   }
 
-  try {
-    const start: string | null =
-      session.scheduled_at
-        ? String(session.scheduled_at)
-        : null
-
-    let end: string | null = null
-
-    if (
-      session.duration_minutes &&
-      start
-    ) {
-      end = new Date(
-        new Date(start).getTime() +
-          Number(
-            session.duration_minutes,
-          ) *
-            60000,
-      ).toISOString()
-    }
-
-    const title = String(
-      session.session_notes ||
-        session.session_type ||
-        "Training Session",
-    )
-
-    const e =
-      await query<{
-        client_profile_id: string | null
-      }>(
-        `
-          SELECT client_profile_id
-          FROM training_engagements
-          WHERE id = $1
-          LIMIT 1
-        `,
-        [engagementId],
-      )
-
-    const clientProfileId =
-      e.rows[0]?.client_profile_id ||
-      null
-
-    let trainerEmail: string | null =
-      null
-
-    if (session.trainer_id) {
-      const t =
-        await query<{
-          email: string | null
-        }>(
-          `
-            SELECT u.email
-            FROM user_profiles up
-            JOIN app_users u
-              ON u.id = up.user_id
-            WHERE up.id = $1
-            LIMIT 1
-          `,
-          [session.trainer_id],
-        )
-
-      trainerEmail =
-        t.rows[0]?.email || null
-    }
-
-    let clientEmail: string | null =
-      null
-
-    if (clientProfileId) {
-      const c =
-        await query<{
-          email: string | null
-        }>(
-          `
-            SELECT u.email
-            FROM user_profiles up
-            JOIN app_users u
-              ON u.id = up.user_id
-            WHERE up.id = $1
-            LIMIT 1
-          `,
-          [clientProfileId],
-        )
-
-      clientEmail =
-        c.rows[0]?.email || null
-    }
-
-    const usersToNotify:
-      (string | null)[] = []
-
-    if (session.trainer_id) {
-      const t =
-        await query<{
-          user_id: string | null
-        }>(
-          `
-            SELECT user_id
-            FROM user_profiles
-            WHERE id = $1
-            LIMIT 1
-          `,
-          [session.trainer_id],
-        )
-
-      if (t.rows[0]?.user_id) {
-        usersToNotify.push(
-          t.rows[0].user_id,
-        )
-      }
-    }
-
-    if (clientProfileId) {
-      const c =
-        await query<{
-          user_id: string | null
-        }>(
-          `
-            SELECT user_id
-            FROM user_profiles
-            WHERE id = $1
-            LIMIT 1
-          `,
-          [clientProfileId],
-        )
-
-      if (c.rows[0]?.user_id) {
-        usersToNotify.push(
-          c.rows[0].user_id,
-        )
-      }
-    }
-
-    const attendees =
-      [] as {
-        name?: string
-        email: string
-        rsvp?: boolean
-      }[]
-
-    if (trainerEmail) {
-      attendees.push({
-        email: trainerEmail,
-        rsvp: true,
-      })
-    }
-
-    if (clientEmail) {
-      attendees.push({
-        email: clientEmail,
-        rsvp: true,
-      })
-    }
-
-    const organizerEmail =
-      process.env.EMAIL_FROM || null
-
-    const organizerName =
-      process.env.EMAIL_FROM_NAME ||
-      "ShadowNode"
-
-    const ics = generateICS({
-      uid: `training-session-${String(
-        session.id,
-      )}`,
-      title,
-      description:
-        session.session_notes
-          ? String(
-              session.session_notes,
-            )
-          : undefined,
-      start,
-      end,
-      url: session.meeting_url
-        ? String(session.meeting_url)
-        : null,
-      location: session.location
-        ? String(session.location)
-        : null,
-      method: "REQUEST",
-      organizer: organizerEmail
-        ? {
-            email: organizerEmail,
-            name: organizerName,
-          }
-        : undefined,
-      attendees: attendees.length
-        ? attendees.map((a) => ({
-            ...a,
-            partstat:
-              session.attendance_status ||
-              undefined,
-          }))
-        : undefined,
-      sequence:
-        session.sequence || 0,
-    })
-
-    const trainerNotificationUserIds =
-      usersToNotify.length > 0 && session.trainer_id
-        ? (
-            await query<{ user_id: string | null }>(
-              `
-                SELECT user_id
-                FROM user_profiles
-                WHERE id = $1
-                LIMIT 1
-              `,
-              [session.trainer_id],
-            )
-          ).rows
-            .map((row) => row.user_id)
-            .filter(Boolean)
-        : []
-
-    await Promise.all(
-      trainerNotificationUserIds.map((uid) =>
-        notifyUser(uid, {
-          type:
-            "training_session_updated",
-          title:
-            "Training session updated",
-          message:
-            `A training session was updated: ${title}`,
-          metadata: {
-            training_session_id:
-              session.id,
-            training_engagement_id:
-              engagementId,
-            target_page:
-              "client_training_schedule",
-            ics_url:
-              `/api/training/session/${session.id}/ics`,
-            ics,
-          },
-        }),
-      ),
-    )
-
-    try {
-      const uniqueUserIds =
-        Array.from(
-          new Set(
-            usersToNotify.filter(Boolean),
-          ),
-        ) as string[]
-
-      await Promise.all(
-        uniqueUserIds.map(
-          async (userId) => {
-            const ures =
-              await query<{
-                email: string | null
-              }>(
-                `
-                  SELECT email
-                  FROM app_users
-                  WHERE id = $1
-                  LIMIT 1
-                `,
-                [userId],
-              )
-
-            const email =
-              ures.rows[0]?.email || null
-
-            if (!email) return
-
-            const b64 =
-              Buffer.from(ics).toString(
-                "base64",
-              )
-
-            await sendEmail({
-              to: email,
-              subject:
-                `Training session updated: ${title}`,
-              html:
-                `<p>${title}</p>` +
-                `<p>Scheduled: ${
-                  start
-                    ? new Date(
-                        start,
-                      ).toLocaleString()
-                    : "TBD"
-                }</p>` +
-                `<p><a href="${
-                  session.meeting_url ||
-                  "#"
-                }">Join meeting</a></p>`,
-              attachments: [
-                {
-                  filename:
-                    `training-session-${session.id}.ics`,
-                  type: "text/calendar",
-                  data: b64,
-                },
-              ],
-            }).catch(
-              () => undefined,
-            )
-          },
-        ),
-      )
-    } catch {
-      // Ignore email errors.
-    }
-  } catch (notifyErr) {
-    console.error(
-      "SESSION UPDATE NOTIFY ERROR",
-      notifyErr,
-    )
-  }
-
-  return attachCalendarSyncState(session)
+  return attachCalendarSyncState(
+    session,
+  )
 }
 
 export async function deleteSession(
   sessionId: string,
   actorProfileId: string | null,
 ) {
-  const sres = await query(
-    `
-      SELECT *
-      FROM training_sessions
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [sessionId],
-  )
+  const sres =
+    await query(
+      `
+        SELECT *
+        FROM training_sessions
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [sessionId],
+    )
 
   const session: any =
     sres.rows[0]
 
   if (!session) {
-    throw new Error("Session not found")
+    throw new Error(
+      "Session not found",
+    )
   }
 
   await requireTrainingOperatorByProfile(
@@ -1852,10 +2023,6 @@ export async function deleteSession(
     actorProfileId,
   )
 
-  /*
-   * Cancel the Google Calendar event before deleting
-   * the local session.
-   */
   try {
     await cancelTrainingSessionCalendarEvent(
       session.id,
@@ -1865,299 +2032,6 @@ export async function deleteSession(
       "GOOGLE CALENDAR CANCEL ERROR:",
       calendarError,
     )
-  }
-
-  try {
-    const start: string | null =
-      session.scheduled_at
-        ? String(session.scheduled_at)
-        : null
-
-    let end: string | null = null
-
-    if (
-      session.duration_minutes &&
-      start
-    ) {
-      end = new Date(
-        new Date(start).getTime() +
-          Number(
-            session.duration_minutes,
-          ) *
-            60000,
-      ).toISOString()
-    }
-
-    let trainerEmail: string | null =
-      null
-
-    if (session.trainer_id) {
-      const t =
-        await query<{
-          email: string | null
-        }>(
-          `
-            SELECT u.email
-            FROM user_profiles up
-            JOIN app_users u
-              ON u.id = up.user_id
-            WHERE up.id = $1
-            LIMIT 1
-          `,
-          [session.trainer_id],
-        )
-
-      trainerEmail =
-        t.rows[0]?.email || null
-    }
-
-    let clientEmail: string | null =
-      null
-
-    const e =
-      await query<{
-        client_profile_id: string | null
-      }>(
-        `
-          SELECT client_profile_id
-          FROM training_engagements
-          WHERE id = $1
-          LIMIT 1
-        `,
-        [session.training_engagement_id],
-      )
-
-    const clientProfileId =
-      e.rows[0]?.client_profile_id ||
-      null
-
-    if (clientProfileId) {
-      const c =
-        await query<{
-          email: string | null
-        }>(
-          `
-            SELECT u.email
-            FROM user_profiles up
-            JOIN app_users u
-              ON u.id = up.user_id
-            WHERE up.id = $1
-            LIMIT 1
-          `,
-          [clientProfileId],
-        )
-
-      clientEmail =
-        c.rows[0]?.email || null
-    }
-
-    const attendees =
-      [] as {
-        name?: string
-        email: string
-        rsvp?: boolean
-      }[]
-
-    if (trainerEmail) {
-      attendees.push({
-        email: trainerEmail,
-      })
-    }
-
-    if (clientEmail) {
-      attendees.push({
-        email: clientEmail,
-      })
-    }
-
-    const organizerEmail =
-      process.env.EMAIL_FROM || null
-
-    const organizerName =
-      process.env.EMAIL_FROM_NAME ||
-      "ShadowNode"
-
-    const ics = generateICS({
-      uid: `training-session-${String(
-        session.id,
-      )}`,
-      title:
-        session.session_notes ||
-        session.session_type ||
-        "Training Session",
-      description:
-        session.session_notes ||
-        undefined,
-      start,
-      end,
-      url:
-        session.meeting_url ||
-        null,
-      location:
-        session.location ||
-        null,
-      method: "CANCEL",
-      organizer: organizerEmail
-        ? {
-            email: organizerEmail,
-            name: organizerName,
-          }
-        : undefined,
-      attendees: attendees.length
-        ? attendees
-        : undefined,
-      sequence:
-        (session.sequence || 0) + 1,
-    })
-
-    const usersToNotify:
-      (string | null)[] = []
-
-    if (session.trainer_id) {
-      const t =
-        await query<{
-          user_id: string | null
-        }>(
-          `
-            SELECT user_id
-            FROM user_profiles
-            WHERE id = $1
-            LIMIT 1
-          `,
-          [session.trainer_id],
-        )
-
-      if (t.rows[0]?.user_id) {
-        usersToNotify.push(
-          t.rows[0].user_id,
-        )
-      }
-    }
-
-    if (clientProfileId) {
-      const c =
-        await query<{
-          user_id: string | null
-        }>(
-          `
-            SELECT user_id
-            FROM user_profiles
-            WHERE id = $1
-            LIMIT 1
-          `,
-          [clientProfileId],
-        )
-
-      if (c.rows[0]?.user_id) {
-        usersToNotify.push(
-          c.rows[0].user_id,
-        )
-      }
-    }
-
-    const trainerNotificationUserIds =
-      session.trainer_id
-        ? (
-            await query<{ user_id: string | null }>(
-              `
-                SELECT user_id
-                FROM user_profiles
-                WHERE id = $1
-                LIMIT 1
-              `,
-              [session.trainer_id],
-            )
-          ).rows
-            .map((row) => row.user_id)
-            .filter(Boolean)
-        : []
-
-    await Promise.all(
-      trainerNotificationUserIds.map((uid) =>
-        notifyUser(uid, {
-          type:
-            "training_session_cancelled",
-          title:
-            "Training session cancelled",
-          message:
-            "A training session was cancelled.",
-          metadata: {
-            training_session_id:
-              session.id,
-            training_engagement_id:
-              session.training_engagement_id,
-            target_page:
-              "client_training_schedule",
-            ics_url:
-              `/api/training/session/${session.id}/ics`,
-            ics,
-          },
-        }),
-      ),
-    ).catch(() => undefined)
-
-    try {
-      const uniqueUserIds =
-        Array.from(
-          new Set(
-            usersToNotify.filter(Boolean),
-          ),
-        ) as string[]
-
-      await Promise.all(
-        uniqueUserIds.map(
-          async (userId) => {
-            const ures =
-              await query<{
-                email: string | null
-              }>(
-                `
-                  SELECT email
-                  FROM app_users
-                  WHERE id = $1
-                  LIMIT 1
-                `,
-                [userId],
-              )
-
-            const email =
-              ures.rows[0]?.email || null
-
-            if (!email) return
-
-            const b64 =
-              Buffer.from(ics).toString(
-                "base64",
-              )
-
-            await sendEmail({
-              to: email,
-              subject:
-                `Training session cancelled: ${
-                  session.session_notes ||
-                  "Session"
-                }`,
-              html:
-                `<p>The training session has been cancelled.</p>`,
-              attachments: [
-                {
-                  filename:
-                    `training-session-${session.id}.ics`,
-                  type: "text/calendar",
-                  data: b64,
-                },
-              ],
-            }).catch(
-              () => undefined,
-            )
-          },
-        ),
-      )
-    } catch {
-      // Ignore email errors.
-    }
-  } catch {
-    // Ignore notification errors.
   }
 
   await query(
@@ -2185,25 +2059,66 @@ export async function deleteSession(
    Materials
    ======================================================= */
 
+export type TrainingMaterial = {
+  id: string
+  training_engagement_id: string
+  module_id: string | null
+  title: string
+  description: string | null
+  material_type: string | null
+  file_url: string | null
+  external_url: string | null
+  visibility: string | null
+  uploaded_by: string | null
+  created_at: string
+  updated_at: string
+  [key: string]: unknown
+}
+
 export async function listMaterials(
   engagementId: string,
 ) {
-  const res = await query(
-    `
-      SELECT *
-      FROM training_materials
-      WHERE training_engagement_id = $1
-      ORDER BY created_at DESC
-    `,
-    [engagementId],
-  )
+  const res =
+    await query<TrainingMaterial>(
+      `
+        SELECT
+          tm.*,
+          m.title AS module_title,
+          m.module_order
+
+        FROM training_materials tm
+
+        LEFT JOIN training_modules m
+          ON m.id = tm.module_id
+
+        WHERE
+          tm.training_engagement_id = $1
+
+        ORDER BY
+          COALESCE(
+            m.module_order,
+            999999
+          ) ASC,
+
+          tm.created_at ASC
+      `,
+      [engagementId],
+    )
 
   return res.rows
 }
 
 export async function createMaterial(
   engagementId: string,
-  payload: any,
+  payload: {
+    module_id?: string | null
+    title: string
+    description?: string | null
+    material_type?: string | null
+    file_url?: string | null
+    external_url?: string | null
+    visibility?: string | null
+  },
   actorProfileId: string | null,
 ) {
   await requireTrainingOperatorByProfile(
@@ -2211,47 +2126,103 @@ export async function createMaterial(
     actorProfileId,
   )
 
-  const res = await query(
-    `
-      INSERT INTO training_materials (
-        training_engagement_id,
-        module_id,
-        title,
-        description,
-        material_type,
-        file_url,
-        external_url,
-        visibility,
-        uploaded_by,
-        created_at,
-        updated_at
+  if (
+    !payload.title?.trim()
+  ) {
+    throw new Error(
+      "Material title is required",
+    )
+  }
+
+  if (
+    payload.module_id
+  ) {
+    const moduleCheck =
+      await query<{ id: string }>(
+        `
+          SELECT id
+
+          FROM training_modules
+
+          WHERE
+            id = $1
+            AND training_engagement_id = $2
+
+          LIMIT 1
+        `,
+        [
+          payload.module_id,
+          engagementId,
+        ],
       )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,
-        NOW(),
-        NOW()
+
+    if (!moduleCheck.rows[0]) {
+      throw new Error(
+        "Selected module does not belong to this training engagement",
       )
-      RETURNING *
-    `,
-    [
-      engagementId,
-      payload.module_id || null,
-      payload.title,
-      payload.description || null,
-      payload.material_type || "other",
-      payload.file_url || null,
-      payload.external_url || null,
-      payload.visibility || "private",
-      actorProfileId,
-    ],
-  )
+    }
+  }
+
+  const res =
+    await query<TrainingMaterial>(
+      `
+        INSERT INTO training_materials (
+          training_engagement_id,
+          module_id,
+          title,
+          description,
+          material_type,
+          file_url,
+          external_url,
+          visibility,
+          uploaded_by,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          NOW(),
+          NOW()
+        )
+
+        RETURNING *
+      `,
+      [
+        engagementId,
+        payload.module_id ||
+          null,
+        payload.title.trim(),
+        payload.description ||
+          null,
+        payload.material_type ||
+          "other",
+        payload.file_url ||
+          null,
+        payload.external_url ||
+          null,
+        payload.visibility ||
+          "private",
+        actorProfileId,
+      ],
+    )
 
   await createTrainingUpdate(
     engagementId,
     actorProfileId,
     "material_uploaded",
     `Material Uploaded: ${payload.title}`,
-    "A training material has been uploaded.",
+    payload.module_id
+      ? `Material '${payload.title}' was added to a training module.`
+      : `Material '${payload.title}' was uploaded to the training engagement.`,
   )
 
   return res.rows[0]
@@ -2264,77 +2235,140 @@ export async function updateMaterial(
 ) {
   const materialRow =
     await query<{
-      training_engagement_id: string
+      training_engagement_id:
+        string
     }>(
       `
-        SELECT training_engagement_id
+        SELECT
+          training_engagement_id
+
         FROM training_materials
+
         WHERE id = $1
+
         LIMIT 1
       `,
       [materialId],
     )
 
   if (!materialRow.rows[0]) {
-    throw new Error("Material not found")
+    throw new Error(
+      "Material not found",
+    )
   }
 
-  await requireTrainingOperatorByProfile(
+  const engagementId =
     materialRow.rows[0]
-      .training_engagement_id,
+      .training_engagement_id
+
+  await requireTrainingOperatorByProfile(
+    engagementId,
     actorProfileId,
   )
 
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "module_id",
+    ) &&
+    updates.module_id
+  ) {
+    const moduleCheck =
+      await query<{ id: string }>(
+        `
+          SELECT id
+
+          FROM training_modules
+
+          WHERE
+            id = $1
+            AND training_engagement_id = $2
+
+          LIMIT 1
+        `,
+        [
+          updates.module_id,
+          engagementId,
+        ],
+      )
+
+    if (!moduleCheck.rows[0]) {
+      throw new Error(
+        "Selected module does not belong to this training engagement",
+      )
+    }
+  }
+
   const fields: string[] = []
   const values: any[] = []
+
   let ix = 1
 
-  for (const key of [
-    "title",
-    "description",
-    "material_type",
-    "file_url",
-    "external_url",
-    "visibility",
-  ]) {
+  for (
+    const key of [
+      "module_id",
+      "title",
+      "description",
+      "material_type",
+      "file_url",
+      "external_url",
+      "visibility",
+    ]
+  ) {
     if (
       Object.prototype.hasOwnProperty.call(
         updates,
         key,
       )
     ) {
-      fields.push(`${key} = $${ix}`)
-      values.push(updates[key])
+      fields.push(
+        `${key} = $${ix}`,
+      )
+
+      values.push(
+        key === "title" &&
+        typeof updates[key] ===
+          "string"
+          ? updates[key].trim()
+          : updates[key],
+      )
+
       ix++
     }
   }
 
-  if (fields.length === 0) {
-    throw new Error("No updates provided")
+  if (
+    fields.length === 0
+  ) {
+    throw new Error(
+      "No updates provided",
+    )
   }
 
   values.push(materialId)
 
   const sql = `
     UPDATE training_materials
+
     SET
       ${fields.join(", ")},
       updated_at = NOW()
+
     WHERE id = $${ix}
+
     RETURNING *
   `
 
   const res =
-    await query<{
-      training_engagement_id: string
-      title: string
-    }>(
+    await query<TrainingMaterial>(
       sql,
       values,
     )
 
   if (!res.rows[0]) {
-    throw new Error("Material not found")
+    throw new Error(
+      "Material not found",
+    )
   }
 
   await createTrainingUpdate(
@@ -2343,7 +2377,7 @@ export async function updateMaterial(
     actorProfileId,
     "material_updated",
     `Material Updated: ${res.rows[0].title}`,
-    "Material updated by trainer or training administrator.",
+    "Training material updated by trainer or training administrator.",
   )
 
   return res.rows[0]
@@ -2355,22 +2389,28 @@ export async function deleteMaterial(
 ) {
   const m =
     await query<{
-      training_engagement_id: string
+      training_engagement_id:
+        string
       title: string
     }>(
       `
         SELECT
           training_engagement_id,
           title
+
         FROM training_materials
+
         WHERE id = $1
+
         LIMIT 1
       `,
       [materialId],
     )
 
   if (!m.rows[0]) {
-    throw new Error("Material not found")
+    throw new Error(
+      "Material not found",
+    )
   }
 
   await requireTrainingOperatorByProfile(
@@ -2393,7 +2433,7 @@ export async function deleteMaterial(
     actorProfileId,
     "material_deleted",
     `Material Deleted: ${m.rows[0].title}`,
-    "Material deleted by trainer or training administrator.",
+    "Training material deleted by trainer or training administrator.",
   )
 
   return {
@@ -2402,42 +2442,1245 @@ export async function deleteMaterial(
 }
 
 /* =======================================================
-   Progress
+   Material Consumption / Progress
+   ======================================================= */
+
+export type TrainingMaterialProgress = {
+  id: string
+  training_engagement_id: string
+  material_id: string
+  client_profile_id: string
+  status: string
+  progress_percentage: number
+  watched_seconds: number | null
+  duration_seconds: number | null
+  pages_viewed: number | null
+  total_pages: number | null
+  started_at: string | null
+  completed_at: string | null
+  last_accessed_at: string | null
+  created_at: string
+  updated_at: string
+  [key: string]: unknown
+}
+
+function normalizeMaterialStatus(
+  value: unknown,
+): string {
+  const status =
+    String(value || "")
+      .trim()
+      .toLowerCase()
+
+  if (
+    status === "completed" ||
+    status === "complete"
+  ) {
+    return "completed"
+  }
+
+  if (
+    status === "in_progress" ||
+    status === "in-progress" ||
+    status === "started"
+  ) {
+    return "in_progress"
+  }
+
+  return "not_started"
+}
+
+function normalizePercentage(
+  value: unknown,
+): number {
+  const numeric =
+    Number(value)
+
+  if (
+    !Number.isFinite(
+      numeric,
+    )
+  ) {
+    return 0
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(numeric),
+    ),
+  )
+}
+
+export async function listMaterialProgress(
+  engagementId: string,
+  clientProfileId?: string | null,
+) {
+  if (clientProfileId) {
+    const result =
+      await query<TrainingMaterialProgress>(
+        `
+          SELECT
+            tmp.*,
+
+            tm.title AS material_title,
+            tm.description AS material_description,
+            tm.material_type,
+            tm.file_url,
+            tm.external_url,
+            tm.module_id,
+
+            m.title AS module_title,
+            m.module_order
+
+          FROM training_material_progress tmp
+
+          JOIN training_materials tm
+            ON tm.id = tmp.material_id
+
+          LEFT JOIN training_modules m
+            ON m.id = tm.module_id
+
+          WHERE
+            tmp.training_engagement_id = $1
+            AND tmp.client_profile_id = $2
+
+          ORDER BY
+            COALESCE(
+              m.module_order,
+              999999
+            ) ASC,
+
+            tm.created_at ASC
+        `,
+        [
+          engagementId,
+          clientProfileId,
+        ],
+      )
+
+    return result.rows
+  }
+
+  const result =
+    await query<TrainingMaterialProgress>(
+      `
+        SELECT
+          tmp.*,
+
+          tm.title AS material_title,
+          tm.description AS material_description,
+          tm.material_type,
+          tm.file_url,
+          tm.external_url,
+          tm.module_id,
+
+          m.title AS module_title,
+          m.module_order
+
+        FROM training_material_progress tmp
+
+        JOIN training_materials tm
+          ON tm.id = tmp.material_id
+
+        LEFT JOIN training_modules m
+          ON m.id = tm.module_id
+
+        WHERE
+          tmp.training_engagement_id = $1
+
+        ORDER BY
+          COALESCE(
+            m.module_order,
+            999999
+          ) ASC,
+
+          tm.created_at ASC
+      `,
+      [engagementId],
+    )
+
+  return result.rows
+}
+
+export async function getMaterialProgress(
+  engagementId: string,
+  materialId: string,
+  clientProfileId: string,
+) {
+  const material =
+    await query<{
+      id: string
+      training_engagement_id:
+        string
+      module_id: string | null
+      title: string
+      material_type:
+        string | null
+    }>(
+      `
+        SELECT
+          id,
+          training_engagement_id,
+          module_id,
+          title,
+          material_type
+
+        FROM training_materials
+
+        WHERE
+          id = $1
+          AND training_engagement_id = $2
+
+        LIMIT 1
+      `,
+      [
+        materialId,
+        engagementId,
+      ],
+    )
+
+  if (!material.rows[0]) {
+    throw new Error(
+      "Material not found",
+    )
+  }
+
+  const result =
+    await query<TrainingMaterialProgress>(
+      `
+        SELECT *
+
+        FROM training_material_progress
+
+        WHERE
+          training_engagement_id = $1
+          AND material_id = $2
+          AND client_profile_id = $3
+
+        LIMIT 1
+      `,
+      [
+        engagementId,
+        materialId,
+        clientProfileId,
+      ],
+    )
+
+  return (
+    result.rows[0] ||
+    null
+  )
+}
+
+export async function updateMaterialProgress(
+  engagementId: string,
+  materialId: string,
+  clientProfileId: string,
+  updates: {
+    status?: string
+    progress_percentage?: number
+    watched_seconds?: number
+    duration_seconds?: number
+    pages_viewed?: number
+    total_pages?: number
+    completed?: boolean
+  },
+) {
+  const materialResult =
+    await query<{
+      id: string
+      title: string
+      material_type:
+        string | null
+      module_id: string | null
+    }>(
+      `
+        SELECT
+          id,
+          title,
+          material_type,
+          module_id
+
+        FROM training_materials
+
+        WHERE
+          id = $1
+          AND training_engagement_id = $2
+
+        LIMIT 1
+      `,
+      [
+        materialId,
+        engagementId,
+      ],
+    )
+
+  const material =
+    materialResult.rows[0]
+
+  if (!material) {
+    throw new Error(
+      "Material does not belong to this training engagement",
+    )
+  }
+
+  const existing =
+    await query<{
+      id: string
+      status: string
+      progress_percentage:
+        number
+    }>(
+      `
+        SELECT
+          id,
+          status,
+          progress_percentage
+
+        FROM training_material_progress
+
+        WHERE
+          training_engagement_id = $1
+          AND material_id = $2
+          AND client_profile_id = $3
+
+        LIMIT 1
+      `,
+      [
+        engagementId,
+        materialId,
+        clientProfileId,
+      ],
+    )
+
+  const previousPercentage =
+    existing.rows[0]
+      ?.progress_percentage ||
+    0
+
+  const previousStatus =
+    existing.rows[0]
+      ?.status ||
+    "not_started"
+
+  let progress =
+    normalizePercentage(
+      updates.progress_percentage,
+    )
+
+  let status =
+    normalizeMaterialStatus(
+      updates.status,
+    )
+
+  if (
+    updates.completed === true
+  ) {
+    progress = 100
+    status = "completed"
+  }
+
+  if (
+    progress >= 100
+  ) {
+    status = "completed"
+  } else if (
+    progress > 0 &&
+    status === "not_started"
+  ) {
+    status = "in_progress"
+  }
+
+  const completedAt =
+    status === "completed"
+      ? "NOW()"
+      : null
+
+  const activityDecision =
+    shouldCreateMaterialProgressUpdate(
+      Number(
+        previousPercentage,
+      ),
+      previousStatus,
+      progress,
+      status,
+    )
+
+  if (
+    existing.rows[0]
+  ) {
+    const fields: string[] = []
+    const values: any[] = []
+
+    let ix = 1
+
+    if (
+      updates.status !==
+        undefined ||
+      updates.completed !==
+        undefined ||
+      updates.progress_percentage !==
+        undefined
+    ) {
+      fields.push(
+        `status = $${ix}`,
+      )
+
+      values.push(status)
+
+      ix++
+    }
+
+    if (
+      updates.progress_percentage !==
+        undefined ||
+      updates.completed === true
+    ) {
+      fields.push(
+        `progress_percentage = $${ix}`,
+      )
+
+      values.push(progress)
+
+      ix++
+    }
+
+    if (
+      updates.watched_seconds !==
+        undefined
+    ) {
+      fields.push(
+        `watched_seconds = $${ix}`,
+      )
+
+      values.push(
+        Math.max(
+          0,
+          Number(
+            updates.watched_seconds,
+          ) || 0,
+        ),
+      )
+
+      ix++
+    }
+
+    if (
+      updates.duration_seconds !==
+        undefined
+    ) {
+      fields.push(
+        `duration_seconds = $${ix}`,
+      )
+
+      values.push(
+        Math.max(
+          0,
+          Number(
+            updates.duration_seconds,
+          ) || 0,
+        ),
+      )
+
+      ix++
+    }
+
+    if (
+      updates.pages_viewed !==
+        undefined
+    ) {
+      fields.push(
+        `pages_viewed = $${ix}`,
+      )
+
+      values.push(
+        Math.max(
+          0,
+          Math.floor(
+            Number(
+              updates.pages_viewed,
+            ) || 0,
+          ),
+        ),
+      )
+
+      ix++
+    }
+
+    if (
+      updates.total_pages !==
+        undefined
+    ) {
+      fields.push(
+        `total_pages = $${ix}`,
+      )
+
+      values.push(
+        Math.max(
+          0,
+          Math.floor(
+            Number(
+              updates.total_pages,
+            ) || 0,
+          ),
+        ),
+      )
+
+      ix++
+    }
+
+    fields.push(
+      `started_at = COALESCE(started_at, NOW())`,
+    )
+
+    fields.push(
+      `completed_at = ${
+        completedAt
+          ? "NOW()"
+          : "completed_at"
+      }`,
+    )
+
+    fields.push(
+      `last_accessed_at = NOW()`,
+    )
+
+    fields.push(
+      `updated_at = NOW()`,
+    )
+
+    values.push(
+      existing.rows[0].id,
+    )
+
+    const idIndex =
+      values.length
+
+    const sql = `
+      UPDATE training_material_progress
+
+      SET
+        ${fields.join(", ")}
+
+      WHERE id = $${idIndex}
+
+      RETURNING *
+    `
+
+    const result =
+      await query<TrainingMaterialProgress>(
+        sql,
+        values,
+      )
+
+    if (
+      activityDecision.shouldCreate
+    ) {
+      if (
+        activityDecision.updateType ===
+        "material_completed"
+      ) {
+        await createTrainingUpdate(
+          engagementId,
+          clientProfileId,
+          "material_completed",
+          `Material Completed: ${material.title}`,
+          `Client completed the training material '${material.title}'.`,
+        )
+      } else if (
+        activityDecision.updateType ===
+        "material_started"
+      ) {
+        await createTrainingUpdate(
+          engagementId,
+          clientProfileId,
+          "material_started",
+          `Material Started: ${material.title}`,
+          `Client started accessing the training material '${material.title}'.`,
+        )
+      } else {
+        const milestone =
+          getProgressMilestone(
+            progress,
+          )
+
+        await createTrainingUpdate(
+          engagementId,
+          clientProfileId,
+          "material_progress_updated",
+          `Material Progress: ${material.title}`,
+          `Client reached ${milestone}% progress on training material '${material.title}'.`,
+        )
+      }
+    }
+
+    return result.rows[0]
+  }
+
+  const result =
+    await query<TrainingMaterialProgress>(
+      `
+        INSERT INTO training_material_progress (
+          training_engagement_id,
+          material_id,
+          client_profile_id,
+          status,
+          progress_percentage,
+          watched_seconds,
+          duration_seconds,
+          pages_viewed,
+          total_pages,
+          started_at,
+          completed_at,
+          last_accessed_at,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          NOW(),
+          $10,
+          NOW(),
+          NOW(),
+          NOW()
+        )
+
+        RETURNING *
+      `,
+      [
+        engagementId,
+        materialId,
+        clientProfileId,
+        status,
+        progress,
+
+        updates.watched_seconds !==
+        undefined
+          ? Math.max(
+              0,
+              Number(
+                updates.watched_seconds,
+              ) || 0,
+            )
+          : null,
+
+        updates.duration_seconds !==
+        undefined
+          ? Math.max(
+              0,
+              Number(
+                updates.duration_seconds,
+              ) || 0,
+            )
+          : null,
+
+        updates.pages_viewed !==
+        undefined
+          ? Math.max(
+              0,
+              Math.floor(
+                Number(
+                  updates.pages_viewed,
+                ) || 0,
+              ),
+            )
+          : null,
+
+        updates.total_pages !==
+        undefined
+          ? Math.max(
+              0,
+              Math.floor(
+                Number(
+                  updates.total_pages,
+                ) || 0,
+              ),
+            )
+          : null,
+
+        completedAt
+          ? new Date()
+          : null,
+      ],
+    )
+
+  if (
+    status === "completed" ||
+    progress >= 100
+  ) {
+    await createTrainingUpdate(
+      engagementId,
+      clientProfileId,
+      "material_completed",
+      `Material Completed: ${material.title}`,
+      `Client completed the training material '${material.title}'.`,
+    )
+  } else if (
+    progress > 0
+  ) {
+    await createTrainingUpdate(
+      engagementId,
+      clientProfileId,
+      "material_started",
+      `Material Started: ${material.title}`,
+      `Client started accessing the training material '${material.title}'.`,
+    )
+  }
+
+  return result.rows[0]
+}
+
+/* =======================================================
+   Convenience Material Actions
+   ======================================================= */
+
+export async function recordMaterialOpened(
+  engagementId: string,
+  materialId: string,
+  clientProfileId: string,
+) {
+  return updateMaterialProgress(
+    engagementId,
+    materialId,
+    clientProfileId,
+    {
+      status: "in_progress",
+      progress_percentage: 1,
+    },
+  )
+}
+
+export async function recordMaterialVisited(
+  engagementId: string,
+  materialId: string,
+  clientProfileId: string,
+) {
+  return updateMaterialProgress(
+    engagementId,
+    materialId,
+    clientProfileId,
+    {
+      status: "completed",
+      progress_percentage: 100,
+      completed: true,
+    },
+  )
+}
+
+export async function recordVideoProgress(
+  engagementId: string,
+  materialId: string,
+  clientProfileId: string,
+  watchedSeconds: number,
+  durationSeconds: number,
+) {
+  const safeDuration =
+    Math.max(
+      0,
+      Number(durationSeconds) || 0,
+    )
+
+  const safeWatched =
+    Math.max(
+      0,
+      Math.min(
+        safeDuration ||
+          Number.MAX_SAFE_INTEGER,
+        Number(watchedSeconds) || 0,
+      ),
+    )
+
+  const percentage =
+    safeDuration > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (safeWatched /
+              safeDuration) *
+              100,
+          ),
+        )
+      : 0
+
+  const completed =
+    percentage >= 95
+
+  return updateMaterialProgress(
+    engagementId,
+    materialId,
+    clientProfileId,
+    {
+      status: completed
+        ? "completed"
+        : "in_progress",
+
+      progress_percentage:
+        completed
+          ? 100
+          : percentage,
+
+      watched_seconds:
+        safeWatched,
+
+      duration_seconds:
+        safeDuration,
+
+      completed,
+    },
+  )
+}
+
+export async function recordDocumentProgress(
+  engagementId: string,
+  materialId: string,
+  clientProfileId: string,
+  pagesViewed: number,
+  totalPages: number,
+) {
+  const safeTotal =
+    Math.max(
+      0,
+      Math.floor(
+        Number(totalPages) || 0,
+      ),
+    )
+
+  const safeViewed =
+    Math.max(
+      0,
+      Math.min(
+        safeTotal ||
+          Number.MAX_SAFE_INTEGER,
+        Math.floor(
+          Number(pagesViewed) || 0,
+        ),
+      ),
+    )
+
+  const percentage =
+    safeTotal > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (safeViewed /
+              safeTotal) *
+              100,
+          ),
+        )
+      : 0
+
+  const completed =
+    safeTotal > 0 &&
+    safeViewed >= safeTotal
+
+  return updateMaterialProgress(
+    engagementId,
+    materialId,
+    clientProfileId,
+    {
+      status: completed
+        ? "completed"
+        : "in_progress",
+
+      progress_percentage:
+        completed
+          ? 100
+          : percentage,
+
+      pages_viewed:
+        safeViewed,
+
+      total_pages:
+        safeTotal,
+
+      completed,
+    },
+  )
+}
+
+/* =======================================================
+   Material Readiness
+   ======================================================= */
+
+export type TrainingModuleMaterialReadiness = {
+  module_id: string
+  module_title: string
+  material_count: number
+  completed_material_count: number
+  readiness_percentage: number
+  all_materials_completed: boolean
+}
+
+export async function getModuleMaterialReadiness(
+  engagementId: string,
+  moduleId?: string,
+  clientProfileId?: string | null,
+) {
+  const values: any[] = [
+    engagementId,
+  ]
+
+  let moduleFilter = ""
+
+  if (moduleId) {
+    values.push(moduleId)
+
+    moduleFilter = `
+      AND m.id = $${values.length}
+    `
+  }
+
+  if (
+    clientProfileId
+  ) {
+    values.push(
+      clientProfileId,
+    )
+  }
+
+  const clientProgressJoin =
+    clientProfileId
+      ? `
+          LEFT JOIN training_material_progress mp
+            ON mp.training_engagement_id =
+              tm.training_engagement_id
+
+            AND mp.material_id =
+              tm.id
+
+            AND mp.client_profile_id =
+              $${values.length}
+        `
+      : `
+          LEFT JOIN training_material_progress mp
+            ON mp.training_engagement_id =
+              tm.training_engagement_id
+
+            AND mp.material_id =
+              tm.id
+        `
+
+  const result =
+    await query<{
+      module_id: string
+      module_title: string
+      material_count: number
+      completed_material_count:
+        number
+    }>(
+      `
+        SELECT
+          m.id AS module_id,
+          m.title AS module_title,
+
+          COUNT(tm.id) AS material_count,
+
+          COUNT(
+            CASE
+              WHEN mp.status =
+                'completed'
+              THEN 1
+            END
+          ) AS completed_material_count
+
+        FROM training_modules m
+
+        LEFT JOIN training_materials tm
+          ON tm.module_id = m.id
+          AND tm.training_engagement_id =
+            m.training_engagement_id
+
+        ${clientProgressJoin}
+
+        WHERE
+          m.training_engagement_id = $1
+
+        ${moduleFilter}
+
+        GROUP BY
+          m.id,
+          m.title
+
+        ORDER BY
+          MIN(m.module_order) ASC,
+          MIN(m.created_at) ASC
+      `,
+      values,
+    )
+
+  return result.rows.map(
+    (row) => {
+      const materialCount =
+        Number(
+          row.material_count,
+        ) || 0
+
+      const completedCount =
+        Number(
+          row.completed_material_count,
+        ) || 0
+
+      const readiness =
+        materialCount === 0
+          ? 100
+          : Math.round(
+              (completedCount /
+                materialCount) *
+                100,
+            )
+
+      return {
+        module_id:
+          row.module_id,
+
+        module_title:
+          row.module_title,
+
+        material_count:
+          materialCount,
+
+        completed_material_count:
+          completedCount,
+
+        readiness_percentage:
+          readiness,
+
+        all_materials_completed:
+          materialCount === 0 ||
+          completedCount >=
+            materialCount,
+      }
+    },
+  )
+}
+
+/* =======================================================
+   Module Progress
    ======================================================= */
 
 export async function listModuleProgress(
   engagementId: string,
   clientProfileId?: string,
 ) {
-  if (clientProfileId) {
-    const res = await query(
-      `
-        SELECT *
-        FROM training_module_progress
-        WHERE training_engagement_id = $1
-          AND client_profile_id = $2
-        ORDER BY created_at ASC
-      `,
-      [
-        engagementId,
-        clientProfileId,
-      ],
-    )
+  if (
+    clientProfileId
+  ) {
+    const res =
+      await query(
+        `
+          SELECT
+            tmp.*,
 
-    return res.rows
+            m.title AS module_title,
+            m.module_order,
+
+            COALESCE(
+              (
+                SELECT COUNT(*)
+
+                FROM training_materials mat
+
+                WHERE
+                  mat.training_engagement_id =
+                    tmp.training_engagement_id
+
+                  AND mat.module_id =
+                    tmp.module_id
+              ),
+              0
+            ) AS material_count,
+
+            COALESCE(
+              (
+                SELECT COUNT(*)
+
+                FROM training_material_progress mp
+
+                JOIN training_materials mat
+                  ON mat.id =
+                    mp.material_id
+
+                WHERE
+                  mp.training_engagement_id =
+                    tmp.training_engagement_id
+
+                  AND mat.module_id =
+                    tmp.module_id
+
+                  AND mp.client_profile_id =
+                    tmp.client_profile_id
+
+                  AND mp.status =
+                    'completed'
+              ),
+              0
+            ) AS completed_material_count
+
+          FROM training_module_progress tmp
+
+          LEFT JOIN training_modules m
+            ON m.id = tmp.module_id
+
+          WHERE
+            tmp.training_engagement_id = $1
+            AND tmp.client_profile_id = $2
+
+          ORDER BY
+            COALESCE(
+              m.module_order,
+              999999
+            ) ASC,
+
+            tmp.created_at ASC
+        `,
+        [
+          engagementId,
+          clientProfileId,
+        ],
+      )
+
+    return res.rows.map(
+      (row: any) => {
+        const materialCount =
+          Number(
+            row.material_count,
+          ) || 0
+
+        const completedMaterialCount =
+          Number(
+            row.completed_material_count,
+          ) || 0
+
+        return {
+          ...row,
+
+          material_readiness_percentage:
+            materialCount === 0
+              ? 100
+              : Math.round(
+                  (completedMaterialCount /
+                    materialCount) *
+                    100,
+                ),
+
+          all_materials_completed:
+            materialCount === 0 ||
+            completedMaterialCount >=
+              materialCount,
+        }
+      },
+    )
   }
 
-  const res = await query(
-    `
-      SELECT *
-      FROM training_module_progress
-      WHERE training_engagement_id = $1
-      ORDER BY created_at ASC
-    `,
-    [engagementId],
-  )
+  const res =
+    await query(
+      `
+        SELECT
+          tmp.*,
 
-  return res.rows
+          m.title AS module_title,
+          m.module_order,
+
+          COALESCE(
+            (
+              SELECT COUNT(*)
+
+              FROM training_materials mat
+
+              WHERE
+                mat.training_engagement_id =
+                  tmp.training_engagement_id
+
+                AND mat.module_id =
+                  tmp.module_id
+            ),
+            0
+          ) AS material_count,
+
+          COALESCE(
+            (
+              SELECT COUNT(*)
+
+              FROM training_material_progress mp
+
+              JOIN training_materials mat
+                ON mat.id =
+                  mp.material_id
+
+              WHERE
+                mp.training_engagement_id =
+                  tmp.training_engagement_id
+
+                AND mat.module_id =
+                  tmp.module_id
+
+                AND mp.status =
+                  'completed'
+            ),
+            0
+          ) AS completed_material_count
+
+        FROM training_module_progress tmp
+
+        LEFT JOIN training_modules m
+          ON m.id = tmp.module_id
+
+        WHERE
+          tmp.training_engagement_id = $1
+
+        ORDER BY
+          COALESCE(
+            m.module_order,
+            999999
+          ) ASC,
+
+          tmp.created_at ASC
+      `,
+      [engagementId],
+    )
+
+  return res.rows.map(
+    (row: any) => {
+      const materialCount =
+        Number(
+          row.material_count,
+        ) || 0
+
+      const completedMaterialCount =
+        Number(
+          row.completed_material_count,
+        ) || 0
+
+      return {
+        ...row,
+
+        material_readiness_percentage:
+          materialCount === 0
+            ? 100
+            : Math.round(
+                (completedMaterialCount /
+                  materialCount) *
+                  100,
+              ),
+
+        all_materials_completed:
+          materialCount === 0 ||
+          completedMaterialCount >=
+            materialCount,
+      }
+    },
+  )
 }
 
 export async function upsertModuleProgress(
@@ -2468,14 +3711,16 @@ export async function upsertModuleProgress(
   }
 
   const moduleCheck =
-    await query<{
-      id: string
-    }>(
+    await query<{ id: string }>(
       `
         SELECT id
+
         FROM training_modules
-        WHERE id = $1
+
+        WHERE
+          id = $1
           AND training_engagement_id = $2
+
         LIMIT 1
       `,
       [
@@ -2513,15 +3758,17 @@ export async function upsertModuleProgress(
   }
 
   const existing =
-    await query<{
-      id: string
-    }>(
+    await query<{ id: string }>(
       `
         SELECT id
+
         FROM training_module_progress
-        WHERE training_engagement_id = $1
+
+        WHERE
+          training_engagement_id = $1
           AND module_id = $2
           AND client_profile_id = $3
+
         LIMIT 1
       `,
       [
@@ -2531,9 +3778,12 @@ export async function upsertModuleProgress(
       ],
     )
 
-  if (existing.rows[0]) {
+  if (
+    existing.rows[0]
+  ) {
     const fields: string[] = []
     const values: any[] = []
+
     let ix = 1
 
     if (
@@ -2543,9 +3793,11 @@ export async function upsertModuleProgress(
       fields.push(
         `status = $${ix}`,
       )
+
       values.push(
         updates.status,
       )
+
       ix++
     }
 
@@ -2556,9 +3808,11 @@ export async function upsertModuleProgress(
       fields.push(
         `completion_percentage = $${ix}`,
       )
+
       values.push(
         updates.completion_percentage,
       )
+
       ix++
     }
 
@@ -2569,13 +3823,17 @@ export async function upsertModuleProgress(
       fields.push(
         `trainer_notes = $${ix}`,
       )
+
       values.push(
         updates.trainer_notes,
       )
+
       ix++
     }
 
-    if (fields.length === 0) {
+    if (
+      fields.length === 0
+    ) {
       throw new Error(
         "No progress updates provided",
       )
@@ -2597,11 +3855,15 @@ export async function upsertModuleProgress(
 
     const sql = `
       UPDATE training_module_progress
+
       SET
         ${fields.join(", ")},
-        updated_by = $${updatedByIndex},
+        updated_by =
+          $${updatedByIndex},
         updated_at = NOW()
+
       WHERE id = $${idIndex}
+
       RETURNING *
     `
 
@@ -2628,39 +3890,52 @@ export async function upsertModuleProgress(
     return res.rows[0]
   }
 
-  const res = await query(
-    `
-      INSERT INTO training_module_progress (
-        training_engagement_id,
-        module_id,
-        client_profile_id,
-        status,
-        completion_percentage,
-        trainer_notes,
-        updated_by,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,$7,
-        NOW(),
-        NOW()
-      )
-      RETURNING *
-    `,
-    [
-      engagementId,
-      moduleId,
-      clientProfileId,
-      updates.status ||
-        "not_started",
-      updates.completion_percentage ??
-        0,
-      updates.trainer_notes ||
-        null,
-      actorProfileId,
-    ],
-  )
+  const res =
+    await query(
+      `
+        INSERT INTO training_module_progress (
+          training_engagement_id,
+          module_id,
+          client_profile_id,
+          status,
+          completion_percentage,
+          trainer_notes,
+          updated_by,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          NOW(),
+          NOW()
+        )
+
+        RETURNING *
+      `,
+      [
+        engagementId,
+        moduleId,
+        clientProfileId,
+
+        updates.status ||
+          "not_started",
+
+        updates.completion_percentage ??
+          0,
+
+        updates.trainer_notes ||
+          null,
+
+        actorProfileId,
+      ],
+    )
 
   await recomputeEngagementProgress(
     engagementId,
@@ -2688,32 +3963,87 @@ async function recomputeEngagementProgress(
   actorProfileId: string | null,
   actorRole: string,
 ) {
+  /*
+   * =====================================================
+   * OVERALL TRAINING PROGRESS
+   * =====================================================
+   *
+   * Every curriculum module counts.
+   *
+   * If a module does not yet have a
+   * training_module_progress row, it is treated as 0%.
+   *
+   * Example:
+   *
+   * Module 1 = 100%
+   * Module 2 = 75%
+   * Module 3 = no progress row
+   *
+   * Overall =
+   * (100 + 75 + 0) / 3
+   * = 58%
+   *
+   * Material consumption and session attendance
+   * do NOT directly change trainer-controlled
+   * module progress.
+   */
+
   const res =
     await query<{
-      avg_completion: number
+      module_count: number
+      avg_completion: number | null
     }>(
       `
         SELECT
-          AVG(completion_percentage) AS avg_completion
-        FROM training_module_progress
-        WHERE training_engagement_id = $1
+          COUNT(tm.id) AS module_count,
+
+          AVG(
+            COALESCE(
+              tmp.completion_percentage,
+              0
+            )
+          ) AS avg_completion
+
+        FROM training_modules tm
+
+        LEFT JOIN training_module_progress tmp
+          ON tmp.module_id = tm.id
+          AND tmp.training_engagement_id =
+            tm.training_engagement_id
+
+        WHERE
+          tm.training_engagement_id = $1
       `,
       [engagementId],
     )
 
-  const avg = Math.round(
+  const moduleCount =
     Number(
-      res.rows[0]?.avg_completion ||
-        0,
-    ),
-  )
+      res.rows[0]?.module_count || 0,
+    )
+
+  /*
+   * No curriculum modules means
+   * there is no measurable module progress yet.
+   */
+  const avg =
+    moduleCount === 0
+      ? 0
+      : Math.round(
+          Number(
+            res.rows[0]
+              ?.avg_completion || 0,
+          ),
+        )
 
   await query(
     `
       UPDATE training_engagements
+
       SET
         progress = $1,
         updated_at = NOW()
+
       WHERE id = $2
     `,
     [
@@ -2722,60 +4052,79 @@ async function recomputeEngagementProgress(
     ],
   )
 
+  /*
+   * =====================================================
+   * COMPLETION GUARD
+   * =====================================================
+   */
+
   if (avg < 100) {
     return
   }
 
-  const e =
-    await query<{
-      assigned_trainer: string | null
-      trainer_approval_status: string | null
-    }>(
-      `
-        SELECT
-          assigned_trainer,
-          trainer_approval_status
-        FROM training_engagements
-        WHERE id = $1
-        LIMIT 1
-      `,
-      [engagementId],
+  /*
+   * =====================================================
+   * APPROVED TRAINER CHECK
+   * =====================================================
+   */
+
+  const approvedTrainers =
+    await listApprovedTrainers(
+      engagementId,
     )
 
-  const assignedTrainer =
-    e.rows[0]?.assigned_trainer ||
-    null
-
-  const approvalStatus =
-    e.rows[0]?.trainer_approval_status ||
-    null
-
-  if (!assignedTrainer) {
+  if (
+    approvedTrainers.length === 0
+  ) {
     await createTrainingUpdate(
       engagementId,
       actorProfileId,
       "progress_complete",
       "Progress Reached 100%",
-      "Overall progress reached 100% but no trainer is assigned. Assign a trainer to complete the engagement.",
+      "Overall progress reached 100%, but no approved trainer is assigned. At least one approved trainer must confirm completion.",
     )
 
     return
   }
 
   /*
-   * Only the approved assigned trainer can trigger
-   * automatic completion from module progress.
-   *
-   * Super Administrator retains full authority through
-   * the completion workflow, but is not falsely treated
-   * as the assigned trainer here.
+   * =====================================================
+   * ACTOR AUTHORIZATION
+   * =====================================================
    */
+
+  const actorIsApprovedTrainer =
+    Boolean(
+      actorProfileId &&
+        approvedTrainers.some(
+          (trainer) =>
+            trainer.trainer_profile_id ===
+            actorProfileId,
+        ),
+    )
+
+  const actorIsSuperAdmin =
+    isSuperAdminRole(
+      actorRole,
+    )
+
+  /*
+   * =====================================================
+   * EXISTING COMPLETION SERVICE
+   * =====================================================
+   *
+   * Do not replace the existing completion
+   * workflow.
+   */
+
   if (
-    actorProfileId &&
-    assignedTrainer === actorProfileId &&
-    approvalStatus ===
-      TRAINER_APPROVAL_APPROVED
+    actorIsApprovedTrainer ||
+    actorIsSuperAdmin
   ) {
+    if (!actorProfileId) {
+      return
+    }
+
     try {
       await completeTrainingEngagement(
         engagementId,
@@ -2788,9 +4137,16 @@ async function recomputeEngagementProgress(
         actorProfileId,
         "auto_completion",
         "Training Completed",
-        "Training was marked completed automatically after progress reached 100% by the approved assigned trainer.",
+        actorIsSuperAdmin
+          ? "Training was marked completed by the Super Administrator after overall module progress reached 100%."
+          : "Training was marked completed after overall module progress reached 100% and an approved trainer confirmed completion.",
       )
     } catch (err: any) {
+      console.error(
+        "TRAINING COMPLETION ERROR:",
+        err,
+      )
+
       await createTrainingUpdate(
         engagementId,
         actorProfileId,
@@ -2806,48 +4162,51 @@ async function recomputeEngagementProgress(
   }
 
   /*
-   * Progress reached 100%, but the actor is not the
-   * approved assigned trainer. Notify the trainer.
+   * =====================================================
+   * WAITING FOR TRAINER CONFIRMATION
+   * =====================================================
    */
-  try {
-    const trainerUser =
-      await query<{
-        user_id: string | null
-      }>(
-        `
-          SELECT user_id
-          FROM user_profiles
-          WHERE id = $1
-          LIMIT 1
-        `,
-        [assignedTrainer],
-      )
 
-    const trainerUserId =
-      trainerUser.rows[0]?.user_id ||
-      null
+  for (
+    const trainer of approvedTrainers
+  ) {
+    try {
+      if (!trainer.user_id) {
+        continue
+      }
 
-    if (trainerUserId) {
       await notifyUser(
-        trainerUserId,
+        trainer.user_id,
         {
           type:
             "training_progress_complete",
+
           title:
             "Training progress reached 100%",
+
           message:
-            "Overall progress reached 100%. Please confirm completion of the training engagement.",
+            "Overall training progress has reached 100%. Please confirm completion of the training engagement.",
+
           metadata: {
             training_engagement_id:
               engagementId,
+
             action:
               "confirm_completion",
+
+            trainer_profile_id:
+              trainer.trainer_profile_id,
           },
         },
       )
+    } catch (
+      notificationError
+    ) {
+      console.error(
+        "TRAINER COMPLETION NOTIFICATION ERROR:",
+        notificationError,
+      )
     }
-  } catch {
-    // Ignore notification failure.
   }
 
   await createTrainingUpdate(
@@ -2855,6 +4214,6 @@ async function recomputeEngagementProgress(
     actorProfileId,
     "progress_complete_pending",
     "Progress Reached 100%",
-    "Overall progress reached 100%. Awaiting approved assigned trainer confirmation to complete the engagement.",
+    "Overall progress reached 100%. Awaiting confirmation from an approved trainer to complete the training engagement.",
   )
 }

@@ -1,6 +1,10 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 
 type TrainerSuggestion = {
   id: string
@@ -12,19 +16,33 @@ type TrainerSuggestion = {
 type AssignTrainerFormProps = {
   engagementId: string
   currentTrainer: string | null
+  isSuperAdmin?: boolean
+}
+
+type AssignResponse = {
+  success?: boolean
+  error?: string
+  pending_approval?: boolean
+  assignment_status?: string
 }
 
 export default function AssignTrainerForm({
   engagementId,
   currentTrainer,
+  isSuperAdmin = false,
 }: AssignTrainerFormProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] =
+    useState(false)
 
-  const [trainerProfileId, setTrainerProfileId] = useState("")
+  const [trainerProfileId, setTrainerProfileId] =
+    useState("")
+
   const [selectedTrainer, setSelectedTrainer] =
     useState<TrainerSuggestion | null>(null)
 
-  const [query, setQuery] = useState("")
+  const [searchQuery, setSearchQuery] =
+    useState("")
+
   const [suggestions, setSuggestions] =
     useState<TrainerSuggestion[]>([])
 
@@ -34,20 +52,40 @@ export default function AssignTrainerForm({
   const [highlightedIndex, setHighlightedIndex] =
     useState(-1)
 
-  const [reason, setReason] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [reason, setReason] =
+    useState("")
 
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
+  const [loading, setLoading] =
+    useState(false)
 
-  const timerRef = useRef<number | null>(null)
+  const [searchLoading, setSearchLoading] =
+    useState(false)
+
+  const [error, setError] =
+    useState("")
+
+  const [success, setSuccess] =
+    useState("")
+
+  const timerRef =
+    useRef<number | null>(null)
+
+  const searchRequestRef =
+    useRef(0)
+
   const searchContainerRef =
     useRef<HTMLDivElement | null>(null)
+
+  /*
+   * ============================================================
+   * RESET
+   * ============================================================
+   */
 
   function resetForm() {
     setTrainerProfileId("")
     setSelectedTrainer(null)
-    setQuery("")
+    setSearchQuery("")
     setSuggestions([])
     setShowSuggestions(false)
     setHighlightedIndex(-1)
@@ -55,7 +93,14 @@ export default function AssignTrainerForm({
     setError("")
     setSuccess("")
     setLoading(false)
+    setSearchLoading(false)
   }
+
+  /*
+   * ============================================================
+   * MODAL
+   * ============================================================
+   */
 
   function openModal() {
     resetForm()
@@ -63,16 +108,28 @@ export default function AssignTrainerForm({
   }
 
   function closeModal() {
-    if (loading) return
+    if (loading) {
+      return
+    }
 
     setIsOpen(false)
     resetForm()
   }
 
-  useEffect(() => {
-    if (!isOpen) return
+  /*
+   * ============================================================
+   * ESCAPE KEY
+   * ============================================================
+   */
 
-    function handleEscape(event: KeyboardEvent) {
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    function handleEscape(
+      event: KeyboardEvent,
+    ) {
       if (event.key === "Escape") {
         closeModal()
       }
@@ -91,71 +148,164 @@ export default function AssignTrainerForm({
     }
   }, [isOpen, loading])
 
-  useEffect(() => {
-    if (!isOpen) return
+  /*
+   * ============================================================
+   * TRAINER SEARCH
+   * ============================================================
+   */
 
-    if (!query.trim()) {
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const trimmedQuery =
+      searchQuery.trim()
+
+    if (!trimmedQuery) {
       setSuggestions([])
       setShowSuggestions(false)
+      setSearchLoading(false)
       return
     }
 
     if (timerRef.current) {
-      window.clearTimeout(timerRef.current)
+      window.clearTimeout(
+        timerRef.current,
+      )
     }
 
-    timerRef.current = window.setTimeout(
-      async () => {
-        try {
-          const res = await fetch(
-            `/api/training/trainer-search?q=${encodeURIComponent(
-              query.trim(),
-            )}`,
-          )
+    const requestId =
+      ++searchRequestRef.current
 
-          if (!res.ok) {
-            throw new Error(
-              `Trainer search failed: ${res.status}`,
+    timerRef.current =
+      window.setTimeout(
+        async () => {
+          setSearchLoading(true)
+
+          try {
+            const response =
+              await fetch(
+                `/api/training/trainer-search?q=${encodeURIComponent(
+                  trimmedQuery,
+                )}`,
+                {
+                  method: "GET",
+                  cache: "no-store",
+                },
+              )
+
+            if (
+              requestId !==
+              searchRequestRef.current
+            ) {
+              return
+            }
+
+            if (!response.ok) {
+              throw new Error(
+                `Trainer search failed: ${response.status}`,
+              )
+            }
+
+            const payload =
+              await response.json()
+
+            const trainers: TrainerSuggestion[] =
+              Array.isArray(
+                payload?.trainers,
+              )
+                ? payload.trainers.filter(
+                    (
+                      trainer: unknown,
+                    ): trainer is TrainerSuggestion => {
+                      if (
+                        !trainer ||
+                        typeof trainer !==
+                          "object"
+                      ) {
+                        return false
+                      }
+
+                      const item =
+                        trainer as Partial<TrainerSuggestion>
+
+                      return (
+                        typeof item.id ===
+                          "string" &&
+                        typeof item.full_name ===
+                          "string"
+                      )
+                    },
+                  )
+                : []
+
+            setSuggestions(trainers)
+
+            setShowSuggestions(true)
+
+            setHighlightedIndex(
+              trainers.length > 0
+                ? 0
+                : -1,
             )
+          } catch (searchError) {
+            if (
+              requestId !==
+              searchRequestRef.current
+            ) {
+              return
+            }
+
+            console.error(
+              "TRAINER SEARCH ERROR:",
+              searchError,
+            )
+
+            setSuggestions([])
+            setShowSuggestions(false)
+          } finally {
+            if (
+              requestId ===
+              searchRequestRef.current
+            ) {
+              setSearchLoading(false)
+            }
           }
-
-          const payload = await res.json()
-
-          const trainers: TrainerSuggestion[] =
-            Array.isArray(payload?.trainers)
-              ? payload.trainers
-              : []
-
-          setSuggestions(trainers)
-          setShowSuggestions(true)
-          setHighlightedIndex(
-            trainers.length > 0 ? 0 : -1,
-          )
-        } catch (searchError) {
-          console.error(
-            "TRAINER SEARCH ERROR:",
-            searchError,
-          )
-
-          setSuggestions([])
-          setShowSuggestions(false)
-        }
-      },
-      250,
-    )
+        },
+        250,
+      )
 
     return () => {
       if (timerRef.current) {
-        window.clearTimeout(timerRef.current)
+        window.clearTimeout(
+          timerRef.current,
+        )
       }
     }
-  }, [query, isOpen])
+  }, [searchQuery, isOpen])
+
+  /*
+   * ============================================================
+   * CLICK OUTSIDE
+   * ============================================================
+   */
 
   useEffect(() => {
-    function onClickOutside(event: MouseEvent) {
-      if (!searchContainerRef.current) return
+    function onClickOutside(
+      event: MouseEvent,
+    ) {
+      if (
+        !searchContainerRef.current
+      ) {
+        return
+      }
 
-      if (!(event.target instanceof Node)) return
+      if (
+        !(event.target instanceof Node)
+      ) {
+        return
+      }
 
       if (
         !searchContainerRef.current.contains(
@@ -179,25 +329,55 @@ export default function AssignTrainerForm({
     }
   }, [])
 
+  /*
+   * ============================================================
+   * SELECT TRAINER
+   * ============================================================
+   */
+
   function chooseSuggestion(
     trainer: TrainerSuggestion,
   ) {
-    setTrainerProfileId(trainer.id)
+    setTrainerProfileId(
+      trainer.id,
+    )
+
     setSelectedTrainer(trainer)
-    setQuery(trainer.full_name)
+
+    setSearchQuery(
+      trainer.full_name,
+    )
+
+    setSuggestions([])
+
+    setShowSuggestions(false)
+
+    setHighlightedIndex(-1)
+
+    setError("")
+  }
+
+  /*
+   * ============================================================
+   * REMOVE SELECTED TRAINER
+   * ============================================================
+   */
+
+  function removeTrainer() {
+    setTrainerProfileId("")
+    setSelectedTrainer(null)
+    setSearchQuery("")
+    setSuggestions([])
     setShowSuggestions(false)
     setHighlightedIndex(-1)
     setError("")
   }
 
-  function removeTrainer() {
-    setTrainerProfileId("")
-    setSelectedTrainer(null)
-    setQuery("")
-    setSuggestions([])
-    setShowSuggestions(false)
-    setHighlightedIndex(-1)
-  }
+  /*
+   * ============================================================
+   * KEYBOARD NAVIGATION
+   * ============================================================
+   */
 
   function onInputKeyDown(
     event: React.KeyboardEvent<HTMLInputElement>,
@@ -212,40 +392,58 @@ export default function AssignTrainerForm({
     if (event.key === "ArrowDown") {
       event.preventDefault()
 
-      setHighlightedIndex((index) =>
-        Math.min(
-          index + 1,
-          suggestions.length - 1,
-        ),
+      setHighlightedIndex(
+        (index) =>
+          Math.min(
+            index + 1,
+            suggestions.length - 1,
+          ),
       )
+
+      return
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault()
 
-      setHighlightedIndex((index) =>
-        Math.max(index - 1, 0),
+      setHighlightedIndex(
+        (index) =>
+          Math.max(index - 1, 0),
       )
+
+      return
     }
 
     if (event.key === "Enter") {
       if (
         highlightedIndex >= 0 &&
-        highlightedIndex < suggestions.length
+        highlightedIndex <
+          suggestions.length
       ) {
         event.preventDefault()
 
         chooseSuggestion(
-          suggestions[highlightedIndex],
+          suggestions[
+            highlightedIndex
+          ],
         )
       }
+
+      return
     }
 
     if (event.key === "Escape") {
       event.preventDefault()
+
       setShowSuggestions(false)
     }
   }
+
+  /*
+   * ============================================================
+   * ROLE DISPLAY
+   * ============================================================
+   */
 
   function formatRole(
     role: string | null,
@@ -262,105 +460,232 @@ export default function AssignTrainerForm({
       )
   }
 
+  /*
+   * ============================================================
+   * SUBMIT
+   * ============================================================
+   */
+
   async function assignTrainer(
     event: React.FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
 
+    if (loading) {
+      return
+    }
+
     setError("")
     setSuccess("")
 
-    if (!trainerProfileId || !selectedTrainer) {
+    /*
+     * ----------------------------------------------------------
+     * TRAINER VALIDATION
+     * ----------------------------------------------------------
+     */
+
+    if (
+      !trainerProfileId ||
+      !selectedTrainer
+    ) {
       setError(
         "Please select a trainer before submitting.",
       )
+
       return
     }
 
-    const trimmedReason = reason.trim()
+    /*
+     * ----------------------------------------------------------
+     * REASON VALIDATION
+     * ----------------------------------------------------------
+     */
+
+    const trimmedReason =
+      reason.trim()
 
     if (!trimmedReason) {
       setError(
-        "Please provide a reason for proposing this trainer.",
+        isSuperAdmin
+          ? "Please provide a reason for assigning this trainer."
+          : "Please provide a reason for proposing this trainer.",
       )
+
       return
     }
 
-    if (trimmedReason.length < 20) {
+    if (
+      trimmedReason.length < 20
+    ) {
       setError(
-        "Please provide a more detailed reason. Explain the trainer's relevant background, education, experience, or specialization.",
+        "Please provide a more detailed reason. Explain the trainer's relevant background, education, experience, specialization, or suitability for this engagement.",
       )
+
       return
     }
 
-    if (trimmedReason.length > 2000) {
+    if (
+      trimmedReason.length > 2000
+    ) {
       setError(
         "The assignment reason must be 2000 characters or less.",
       )
+
       return
     }
+
+    /*
+     * ----------------------------------------------------------
+     * SUBMIT
+     * ----------------------------------------------------------
+     */
 
     setLoading(true)
 
     try {
-      const response = await fetch(
-        `/api/training/${engagementId}/assign`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+      const response =
+        await fetch(
+          `/api/training/${engagementId}/assign`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              trainerProfileId,
+              reason: trimmedReason,
+            }),
           },
-          body: JSON.stringify({
-            trainerProfileId,
-            reason: trimmedReason,
-          }),
-        },
-      )
+        )
 
-      const payload = await response.json()
+      let payload:
+        | AssignResponse
+        | null = null
 
-      if (!response.ok || !payload?.success) {
+      try {
+        payload =
+          await response.json()
+      } catch {
+        payload = null
+      }
+
+      if (
+        !response.ok ||
+        !payload?.success
+      ) {
         throw new Error(
           payload?.error ||
-            "Failed to submit trainer assignment.",
+            "Failed to process the trainer assignment.",
         )
       }
 
-      if (payload.pending_approval) {
+      /*
+       * --------------------------------------------------------
+       * SUPER ADMIN
+       * --------------------------------------------------------
+       */
+
+      if (isSuperAdmin) {
         setSuccess(
-          "Trainer proposal submitted successfully. It is now pending Super Administrator approval.",
-        )
-      } else {
-        setSuccess(
-          "Trainer assigned successfully.",
+          "Trainer assigned successfully. Trainer access is now active for this engagement.",
         )
       }
 
-      setTimeout(() => {
+      /*
+       * --------------------------------------------------------
+       * ADMINISTRATOR
+       * --------------------------------------------------------
+       */
+
+      else if (
+        payload.pending_approval
+      ) {
+        setSuccess(
+          "Trainer proposal submitted successfully. It is now awaiting Super Administrator approval.",
+        )
+      }
+
+      /*
+       * --------------------------------------------------------
+       * FALLBACK
+       * --------------------------------------------------------
+       */
+
+      else {
+        setSuccess(
+          "Trainer assignment processed successfully.",
+        )
+      }
+
+      /*
+       * --------------------------------------------------------
+       * RELOAD
+       * --------------------------------------------------------
+       */
+
+      window.setTimeout(() => {
         window.location.reload()
       }, 1400)
-    } catch (assignmentError) {
+    } catch (
+      assignmentError
+    ) {
       console.error(
         "TRAINER ASSIGNMENT ERROR:",
         assignmentError,
       )
 
       setError(
-        assignmentError instanceof Error
+        assignmentError instanceof
+          Error
           ? assignmentError.message
-          : "An error occurred while submitting the trainer assignment.",
+          : "An error occurred while processing the trainer assignment.",
       )
 
       setLoading(false)
     }
   }
 
+  /*
+   * ============================================================
+   * UI LABELS
+   * ============================================================
+   */
+
+  const actionLabel =
+    isSuperAdmin
+      ? currentTrainer
+        ? "Reassign Trainer"
+        : "Assign Trainer"
+      : "Propose Trainer"
+
+  const modalTitle =
+    isSuperAdmin
+      ? currentTrainer
+        ? "Reassign Trainer"
+        : "Assign Trainer"
+      : "Propose Trainer"
+
+  const submitLabel =
+    isSuperAdmin
+      ? currentTrainer
+        ? "Confirm Reassignment"
+        : "Assign Trainer"
+      : "Submit for Approval"
+
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
+
   return (
     <>
       <div className="mt-2">
         <p className="text-xs text-white/50">
           Assigned:{" "}
-          {currentTrainer || "Not assigned"}
+          {currentTrainer ||
+            "No active trainer"}
         </p>
 
         <button
@@ -372,18 +697,19 @@ export default function AssignTrainerForm({
             +
           </span>
 
-          {currentTrainer
-            ? "Assign Trainer"
-            : "Select Trainer"}
+          {actionLabel}
         </button>
       </div>
 
       {isOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm"
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event,
+          ) => {
             if (
-              event.target === event.currentTarget
+              event.target ===
+              event.currentTarget
             ) {
               closeModal()
             }
@@ -395,6 +721,10 @@ export default function AssignTrainerForm({
             aria-modal="true"
             aria-labelledby="assign-trainer-title"
           >
+            {/* ==================================================
+                HEADER
+            ================================================== */}
+
             <div className="sticky top-0 z-20 flex items-start justify-between border-b border-[#143b28] bg-[#020806] px-6 py-5">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#20dc73]">
@@ -405,12 +735,13 @@ export default function AssignTrainerForm({
                   id="assign-trainer-title"
                   className="mt-1 text-xl font-semibold text-white"
                 >
-                  Assign Trainer
+                  {modalTitle}
                 </h2>
 
-                <p className="mt-1 max-w-lg text-sm text-white/50">
-                  Select a suitable trainer and provide
-                  the reason for the proposed assignment.
+                <p className="mt-1 max-w-lg text-sm leading-6 text-white/50">
+                  {isSuperAdmin
+                    ? "Select a trainer and provide the reason for this assignment. Super Administrator assignments take effect immediately."
+                    : "Select a suitable trainer and provide the reason for the proposed assignment. Administrator proposals require Super Administrator approval."}
                 </p>
               </div>
 
@@ -425,12 +756,24 @@ export default function AssignTrainerForm({
               </button>
             </div>
 
+            {/* ==================================================
+                FORM
+            ================================================== */}
+
             <form
-              onSubmit={assignTrainer}
+              onSubmit={
+                assignTrainer
+              }
               className="space-y-6 px-6 py-6"
             >
+              {/* ==================================================
+                  TRAINER SEARCH
+              ================================================== */}
+
               <div
-                ref={searchContainerRef}
+                ref={
+                  searchContainerRef
+                }
                 className="relative"
               >
                 <label
@@ -438,6 +781,7 @@ export default function AssignTrainerForm({
                   className="mb-2 block text-sm font-medium text-white"
                 >
                   Select Trainer
+
                   <span className="ml-1 text-[#20dc73]">
                     *
                   </span>
@@ -450,49 +794,103 @@ export default function AssignTrainerForm({
 
                   <input
                     id="trainer-search"
-                    value={query}
-                    onChange={(event) => {
-                      setQuery(event.target.value)
-                      setTrainerProfileId("")
-                      setSelectedTrainer(null)
+                    value={
+                      searchQuery
+                    }
+                    onChange={(
+                      event,
+                    ) => {
+                      const value =
+                        event.target.value
+
+                      setSearchQuery(
+                        value,
+                      )
+
+                      setTrainerProfileId(
+                        "",
+                      )
+
+                      setSelectedTrainer(
+                        null,
+                      )
+
                       setError("")
+
+                      if (
+                        !value.trim()
+                      ) {
+                        setSuggestions(
+                          [],
+                        )
+
+                        setShowSuggestions(
+                          false,
+                        )
+                      }
                     }}
                     onFocus={() => {
                       if (
-                        suggestions.length > 0
+                        suggestions.length >
+                        0
                       ) {
-                        setShowSuggestions(true)
+                        setShowSuggestions(
+                          true,
+                        )
                       }
                     }}
-                    onKeyDown={onInputKeyDown}
-                    placeholder="Search trainer by name..."
+                    onKeyDown={
+                      onInputKeyDown
+                    }
+                    placeholder="Search by trainer name..."
                     autoComplete="off"
-                    className="w-full rounded-xl border border-[#143b28] bg-[#06150d] py-3 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#20dc73]/60 focus:ring-1 focus:ring-[#20dc73]/20"
+                    disabled={loading}
+                    className="w-full rounded-xl border border-[#143b28] bg-[#06150d] py-3 pl-10 pr-12 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#20dc73]/60 focus:ring-1 focus:ring-[#20dc73]/20 disabled:cursor-not-allowed disabled:opacity-60"
                   />
+
+                  {searchLoading && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#20dc73]">
+                      Searching...
+                    </span>
+                  )}
                 </div>
 
+                {/* ==================================================
+                    SUGGESTIONS
+                ================================================== */}
+
                 {showSuggestions &&
-                  suggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-[#143b28] bg-[#020806] p-1 shadow-2xl">
+                  suggestions.length >
+                    0 && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-xl border border-[#143b28] bg-[#020806] p-1 shadow-2xl">
                       {suggestions.map(
-                        (trainer, index) => (
+                        (
+                          trainer,
+                          index,
+                        ) => (
                           <button
-                            key={trainer.id}
+                            key={
+                              trainer.id
+                            }
                             type="button"
                             onMouseDown={(
                               event,
                             ) => {
                               event.preventDefault()
+
                               chooseSuggestion(
                                 trainer,
                               )
                             }}
-                            className={`flex w-full items-center justify-between gap-4 rounded-lg px-4 py-3 text-left transition ${
+                            className={[
+                              "flex w-full items-center justify-between gap-4 rounded-lg px-4 py-3 text-left transition",
                               index ===
-                              highlightedIndex
+                                highlightedIndex
                                 ? "bg-[#0b2a18]"
-                                : "hover:bg-[#06150d]"
-                            }`}
+                                : "hover:bg-[#06150d]",
+                            ].join(
+                              " ",
+                            )}
                           >
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-white">
@@ -502,14 +900,16 @@ export default function AssignTrainerForm({
                               </p>
 
                               <p className="mt-0.5 text-xs text-white/40">
-                                Trainer profile
+                                {
+                                  formatRole(
+                                    trainer.role,
+                                  )
+                                }
                               </p>
                             </div>
 
                             <span className="shrink-0 rounded-full border border-[#20dc73]/20 bg-[#20dc73]/5 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-[#20dc73]">
-                              {formatRole(
-                                trainer.role,
-                              )}
+                              TRAINER
                             </span>
                           </button>
                         ),
@@ -518,23 +918,30 @@ export default function AssignTrainerForm({
                   )}
 
                 {showSuggestions &&
-                  query.trim() &&
-                  suggestions.length === 0 && (
+                  !searchLoading &&
+                  searchQuery.trim() &&
+                  suggestions.length ===
+                    0 && (
                     <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-xl border border-[#143b28] bg-[#020806] px-4 py-4 text-sm text-white/40 shadow-2xl">
-                      No active trainer-capable users found.
+                      No active trainer-capable
+                      users found.
                     </div>
                   )}
               </div>
 
+              {/* ==================================================
+                  SELECTED TRAINER
+              ================================================== */}
+
               {selectedTrainer && (
                 <div className="rounded-xl border border-[#20dc73]/20 bg-[#06150d] p-4">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-[#20dc73]/70">
                         Selected Trainer
                       </p>
 
-                      <p className="mt-1 text-base font-semibold text-white">
+                      <p className="mt-1 truncate text-base font-semibold text-white">
                         {
                           selectedTrainer.full_name
                         }
@@ -549,15 +956,35 @@ export default function AssignTrainerForm({
 
                     <button
                       type="button"
-                      onClick={removeTrainer}
-                      disabled={loading}
-                      className="text-xs text-white/40 transition hover:text-white disabled:opacity-40"
+                      onClick={
+                        removeTrainer
+                      }
+                      disabled={
+                        loading
+                      }
+                      className="shrink-0 text-xs text-white/40 transition hover:text-white disabled:opacity-40"
                     >
                       Remove
                     </button>
                   </div>
+
+                  {/* ==================================================
+                      WORKFLOW NOTICE
+                  ================================================== */}
+
+                  <div className="mt-4 border-t border-white/5 pt-4">
+                    <p className="text-xs leading-5 text-white/45">
+                      {isSuperAdmin
+                        ? "This trainer will receive active access to the engagement immediately after assignment."
+                        : "This is a proposal only. Trainer access will remain inactive until a Super Administrator approves the assignment."}
+                    </p>
+                  </div>
                 </div>
               )}
+
+              {/* ==================================================
+                  REASON
+              ================================================== */}
 
               <div>
                 <div className="mb-2 flex items-end justify-between gap-4">
@@ -565,33 +992,45 @@ export default function AssignTrainerForm({
                     htmlFor="assignment-reason"
                     className="text-sm font-medium text-white"
                   >
-                    Reason for Assignment
+                    {isSuperAdmin
+                      ? "Reason for Assignment"
+                      : "Reason for Assignment Proposal"}
+
                     <span className="ml-1 text-[#20dc73]">
                       *
                     </span>
                   </label>
 
                   <span className="text-[10px] text-white/30">
-                    {reason.length}/2000
+                    {reason.length}
+                    /2000
                   </span>
                 </div>
 
                 <textarea
                   id="assignment-reason"
                   value={reason}
-                  onChange={(event) =>
-                    setReason(event.target.value)
+                  onChange={(
+                    event,
+                  ) =>
+                    setReason(
+                      event.target.value,
+                    )
                   }
-                  placeholder="Explain why this person is suitable for this training engagement. Consider their background, education, cybersecurity experience, specialization, certifications, or relevant skills."
+                  placeholder={
+                    isSuperAdmin
+                      ? "Explain why this trainer is suitable for this engagement."
+                      : "Explain why this person is suitable for this engagement."
+                  }
                   rows={6}
                   maxLength={2000}
                   disabled={loading}
                   className="w-full resize-none rounded-xl border border-[#143b28] bg-[#06150d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-white/30 focus:border-[#20dc73]/60 focus:ring-1 focus:ring-[#20dc73]/20 disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
-                <div className="mt-2 grid gap-2 text-[11px] text-white/35 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 text-[11px] text-white/35 sm:grid-cols-2">
                   <span>
-                    • Relevant professional background
+                    • Professional background
                   </span>
 
                   <span>
@@ -603,27 +1042,47 @@ export default function AssignTrainerForm({
                   </span>
 
                   <span>
-                    • Specialization or technical skills
+                    • Specialization and skills
                   </span>
                 </div>
               </div>
 
+              {/* ==================================================
+                  ERROR
+              ================================================== */}
+
               {error && (
-                <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm leading-6 text-red-300"
+                >
                   {error}
                 </div>
               )}
 
+              {/* ==================================================
+                  SUCCESS
+              ================================================== */}
+
               {success && (
-                <div className="rounded-xl border border-[#20dc73]/20 bg-[#20dc73]/5 px-4 py-3 text-sm text-[#20dc73]">
+                <div
+                  role="status"
+                  className="rounded-xl border border-[#20dc73]/20 bg-[#20dc73]/5 px-4 py-3 text-sm leading-6 text-[#20dc73]"
+                >
                   {success}
                 </div>
               )}
 
+              {/* ==================================================
+                  ACTIONS
+              ================================================== */}
+
               <div className="flex flex-col-reverse gap-3 border-t border-[#143b28] pt-5 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={closeModal}
+                  onClick={
+                    closeModal
+                  }
                   disabled={loading}
                   className="rounded-xl border border-[#143b28] px-5 py-2.5 text-sm font-medium text-white/60 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -640,8 +1099,10 @@ export default function AssignTrainerForm({
                   className="rounded-xl bg-[#20dc73] px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-[#32e982] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {loading
-                    ? "Submitting..."
-                    : "Submit for Approval"}
+                    ? isSuperAdmin
+                      ? "Assigning..."
+                      : "Submitting..."
+                    : submitLabel}
                 </button>
               </div>
             </form>

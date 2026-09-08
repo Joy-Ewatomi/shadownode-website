@@ -53,13 +53,6 @@ type SessionsManagerProps = {
   canManageSessions?: boolean
   isClient?: boolean
 
-  /*
-   * Optional module list.
-   *
-   * The schedule API already supports module_id.
-   * Supplying modules allows sessions to be attached
-   * to a specific curriculum module.
-   */
   modules?: TrainingModule[]
 }
 
@@ -67,6 +60,11 @@ type RsvpValue =
   | "ACCEPTED"
   | "TENTATIVE"
   | "DECLINED"
+
+type DurationParts = {
+  hours: number
+  minutes: number
+}
 
 const SESSION_TYPES = [
   {
@@ -108,13 +106,10 @@ function formatDate(
     return "TBD"
   }
 
-  return date.toLocaleString(
-    undefined,
-    {
-      dateStyle: "medium",
-      timeStyle: "short",
-    },
-  )
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
 }
 
 function formatDateInput(
@@ -151,8 +146,7 @@ function normalizeRsvp(
     return null
   }
 
-  const normalized =
-    value.toUpperCase()
+  const normalized = value.toUpperCase()
 
   if (
     normalized === "ACCEPTED" ||
@@ -190,11 +184,9 @@ function formatSessionType(
     return "Training Session"
   }
 
-  const found =
-    SESSION_TYPES.find(
-      (item) =>
-        item.value === value,
-    )
+  const found = SESSION_TYPES.find(
+    (item) => item.value === value,
+  )
 
   if (found) {
     return found.label
@@ -204,47 +196,39 @@ function formatSessionType(
     .replace(/_/g, " ")
     .replace(
       /\b\w/g,
-      (letter) =>
-        letter.toUpperCase(),
+      (letter) => letter.toUpperCase(),
     )
 }
 
 function formatStatus(
   value?: string | null,
 ) {
-  const normalized =
-    String(value || "scheduled")
-      .replace(/_/g, " ")
+  const normalized = String(
+    value || "scheduled",
+  ).replace(/_/g, " ")
 
   return normalized.replace(
     /\b\w/g,
-    (letter) =>
-      letter.toUpperCase(),
+    (letter) => letter.toUpperCase(),
   )
 }
 
 function getStatusClass(
   value?: string | null,
 ) {
-  const normalized =
-    String(value || "scheduled")
-      .toLowerCase()
+  const normalized = String(
+    value || "scheduled",
+  ).toLowerCase()
 
-  if (
-    normalized === "completed"
-  ) {
+  if (normalized === "completed") {
     return "border-[#20dc73]/30 bg-[#20dc73]/10 text-[#20dc73]"
   }
 
-  if (
-    normalized === "cancelled"
-  ) {
+  if (normalized === "cancelled") {
     return "border-red-500/30 bg-red-500/10 text-red-300"
   }
 
-  if (
-    normalized === "rescheduled"
-  ) {
+  if (normalized === "rescheduled") {
     return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
   }
 
@@ -254,23 +238,140 @@ function getStatusClass(
 function getAttendanceClass(
   value?: string | null,
 ) {
-  const normalized =
-    String(value || "pending")
-      .toLowerCase()
+  const normalized = String(
+    value || "pending",
+  ).toLowerCase()
 
-  if (
-    normalized === "attended"
-  ) {
+  if (normalized === "attended") {
     return "text-[#20dc73]"
   }
 
-  if (
-    normalized === "absent"
-  ) {
+  if (normalized === "absent") {
     return "text-red-300"
   }
 
   return "text-yellow-300"
+}
+
+function formatDuration(
+  minutes?: number | null,
+) {
+  const total = Number(minutes)
+
+  if (
+    !Number.isFinite(total) ||
+    total <= 0
+  ) {
+    return "Not specified"
+  }
+
+  const rounded = Math.round(total)
+  const hours = Math.floor(rounded / 60)
+  const remainingMinutes = rounded % 60
+
+  if (hours === 0) {
+    return `${remainingMinutes} ${
+      remainingMinutes === 1
+        ? "minute"
+        : "minutes"
+    }`
+  }
+
+  if (remainingMinutes === 0) {
+    return `${hours} ${
+      hours === 1
+        ? "hour"
+        : "hours"
+    }`
+  }
+
+  return `${hours} ${
+    hours === 1
+      ? "hour"
+      : "hours"
+  } ${remainingMinutes} minutes`
+}
+
+function durationToParts(
+  durationMinutes?: number | null,
+): DurationParts {
+  const total = Number(
+    durationMinutes,
+  )
+
+  if (
+    !Number.isFinite(total) ||
+    total <= 0
+  ) {
+    return {
+      hours: 1,
+      minutes: 0,
+    }
+  }
+
+  const rounded = Math.round(total)
+
+  return {
+    hours: Math.floor(
+      rounded / 60,
+    ),
+    minutes: rounded % 60,
+  }
+}
+
+function durationPartsToMinutes(
+  hours: string,
+  minutes: string,
+) {
+  const parsedHours =
+    Number(hours)
+
+  const parsedMinutes =
+    Number(minutes)
+
+  if (
+    !Number.isFinite(
+      parsedHours,
+    ) ||
+    !Number.isFinite(
+      parsedMinutes,
+    )
+  ) {
+    return 0
+  }
+
+  return (
+    Math.max(
+      0,
+      Math.floor(parsedHours),
+    ) *
+      60 +
+    Math.max(
+      0,
+      Math.floor(parsedMinutes),
+    )
+  )
+}
+
+async function readJsonResponse(
+  response: Response,
+) {
+  const text =
+    await response.text()
+
+  if (!text.trim()) {
+    throw new Error(
+      `Server returned an empty response (${response.status}).`,
+    )
+  }
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error(
+      `Server returned an invalid JSON response (${response.status}).`,
+    )
+  }
 }
 
 export default function SessionsManager({
@@ -287,14 +388,23 @@ export default function SessionsManager({
       initialSessions,
     )
 
+  /*
+   * ================================================================
+   * CREATE SESSION STATE
+   * ================================================================
+   */
+
   const [title, setTitle] =
     useState("")
 
   const [scheduledAt, setScheduledAt] =
     useState("")
 
-  const [durationMinutes, setDurationMinutes] =
-    useState("60")
+  const [durationHours, setDurationHours] =
+    useState("1")
+
+  const [durationMinutesPart, setDurationMinutesPart] =
+    useState("0")
 
   const [sessionType, setSessionType] =
     useState("live_online")
@@ -307,6 +417,41 @@ export default function SessionsManager({
 
   const [location, setLocation] =
     useState("")
+
+  /*
+   * ================================================================
+   * EDIT SESSION STATE
+   * ================================================================
+   */
+
+  const [editingSession, setEditingSession] =
+    useState<TrainingSession | null>(
+      null,
+    )
+
+  const [editTitle, setEditTitle] =
+    useState("")
+
+  const [editScheduledAt, setEditScheduledAt] =
+    useState("")
+
+  const [editDurationHours, setEditDurationHours] =
+    useState("1")
+
+  const [editDurationMinutes, setEditDurationMinutes] =
+    useState("0")
+
+  const [editMeetingUrl, setEditMeetingUrl] =
+    useState("")
+
+  const [editLocation, setEditLocation] =
+    useState("")
+
+  /*
+   * ================================================================
+   * GENERAL STATE
+   * ================================================================
+   */
 
   const [loading, setLoading] =
     useState(false)
@@ -330,21 +475,23 @@ export default function SessionsManager({
     useMemo(() => {
       return [...sessions].sort(
         (a, b) => {
-          const aTime = a.scheduled_at
-            ? new Date(
-                String(
-                  a.scheduled_at,
-                ),
-              ).getTime()
-            : Number.MAX_SAFE_INTEGER
+          const aTime =
+            a.scheduled_at
+              ? new Date(
+                  String(
+                    a.scheduled_at,
+                  ),
+                ).getTime()
+              : Number.MAX_SAFE_INTEGER
 
-          const bTime = b.scheduled_at
-            ? new Date(
-                String(
-                  b.scheduled_at,
-                ),
-              ).getTime()
-            : Number.MAX_SAFE_INTEGER
+          const bTime =
+            b.scheduled_at
+              ? new Date(
+                  String(
+                    b.scheduled_at,
+                  ),
+                ).getTime()
+              : Number.MAX_SAFE_INTEGER
 
           return aTime - bTime
         },
@@ -353,24 +500,20 @@ export default function SessionsManager({
 
   const upcomingSessions =
     useMemo(() => {
-      const now =
-        Date.now()
+      const now = Date.now()
 
       return sessions.filter(
         (session) => {
           if (
             String(
-              session.status ||
-                "",
+              session.status || "",
             ).toLowerCase() ===
             "cancelled"
           ) {
             return false
           }
 
-          if (
-            !session.scheduled_at
-          ) {
+          if (!session.scheduled_at) {
             return false
           }
 
@@ -394,8 +537,7 @@ export default function SessionsManager({
       return sessions.filter(
         (session) =>
           String(
-            session.status ||
-              "",
+            session.status || "",
           ).toLowerCase() ===
           "completed",
       ).length
@@ -410,11 +552,76 @@ export default function SessionsManager({
   function resetCreateForm() {
     setTitle("")
     setScheduledAt("")
-    setDurationMinutes("60")
+    setDurationHours("1")
+    setDurationMinutesPart("0")
     setSessionType("live_online")
     setModuleId("")
     setMeetingUrl("")
     setLocation("")
+  }
+
+  /*
+   * ================================================================
+   * EDIT MODAL
+   * ================================================================
+   */
+
+  function openEditModal(
+    session: TrainingSession,
+  ) {
+    const duration =
+      durationToParts(
+        session.duration_minutes,
+      )
+
+    setEditingSession(session)
+
+    setEditTitle(
+      session.session_notes ||
+        "",
+    )
+
+    setEditScheduledAt(
+      formatDateInput(
+        session.scheduled_at,
+      ),
+    )
+
+    setEditDurationHours(
+      String(duration.hours),
+    )
+
+    setEditDurationMinutes(
+      String(duration.minutes),
+    )
+
+    setEditMeetingUrl(
+      session.meeting_url ||
+        "",
+    )
+
+    setEditLocation(
+      session.location ||
+        "",
+    )
+
+    setError(null)
+    setSuccess(null)
+  }
+
+  function closeEditModal() {
+    if (loading) {
+      return
+    }
+
+    setEditingSession(null)
+
+    setEditTitle("")
+    setEditScheduledAt("")
+    setEditDurationHours("1")
+    setEditDurationMinutes("0")
+    setEditMeetingUrl("")
+    setEditLocation("")
   }
 
   /*
@@ -458,8 +665,9 @@ export default function SessionsManager({
     }
 
     const duration =
-      Number(
-        durationMinutes,
+      durationPartsToMinutes(
+        durationHours,
+        durationMinutesPart,
       )
 
     if (
@@ -520,7 +728,9 @@ export default function SessionsManager({
         )
 
       const payload =
-        await res.json()
+        await readJsonResponse(
+          res,
+        )
 
       if (!res.ok) {
         throw new Error(
@@ -551,9 +761,7 @@ export default function SessionsManager({
 
       resetCreateForm()
 
-      setShowCreateForm(
-        false,
-      )
+      setShowCreateForm(false)
 
       setSuccess(
         "Training session scheduled successfully.",
@@ -566,6 +774,181 @@ export default function SessionsManager({
       )
     } finally {
       setLoading(false)
+    }
+  }
+
+  /*
+   * ================================================================
+   * SAVE EDITED SESSION
+   * ================================================================
+   */
+
+  async function saveEditedSession(
+    e: React.FormEvent,
+  ) {
+    e.preventDefault()
+
+    if (!editingSession) {
+      return
+    }
+
+    setError(null)
+    setSuccess(null)
+
+    const trimmedTitle =
+      editTitle.trim()
+
+    const trimmedScheduledAt =
+      editScheduledAt.trim()
+
+    const trimmedMeetingUrl =
+      editMeetingUrl.trim()
+
+    const trimmedLocation =
+      editLocation.trim()
+
+    if (!trimmedTitle) {
+      setError(
+        "Please provide a session title or description.",
+      )
+      return
+    }
+
+    if (!trimmedScheduledAt) {
+      setError(
+        "Please provide a scheduled date and time.",
+      )
+      return
+    }
+
+    const duration =
+      durationPartsToMinutes(
+        editDurationHours,
+        editDurationMinutes,
+      )
+
+    if (
+      !Number.isFinite(
+        duration,
+      ) ||
+      duration <= 0
+    ) {
+      setError(
+        "Session duration must be greater than zero.",
+      )
+      return
+    }
+
+    if (
+      Number(
+        editDurationMinutes,
+      ) > 59
+    ) {
+      setError(
+        "Minutes must be between 0 and 59.",
+      )
+      return
+    }
+
+    setActionSessionId(
+      editingSession.id,
+    )
+
+    try {
+      const updates: Record<
+        string,
+        unknown
+      > = {
+        session_notes:
+          trimmedTitle,
+
+        scheduled_at:
+          trimmedScheduledAt ||
+          null,
+
+        duration_minutes:
+          duration,
+
+        meeting_url:
+          trimmedMeetingUrl ||
+          null,
+
+        location:
+          trimmedLocation ||
+          null,
+      }
+
+      const res =
+        await fetch(
+          `/api/training/${engagementId}/schedule`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              sessionId:
+                editingSession.id,
+              updates,
+            }),
+          },
+        )
+
+      const payload =
+        await readJsonResponse(
+          res,
+        )
+
+      if (!res.ok) {
+        throw new Error(
+          payload?.error ||
+            "Failed to update session",
+        )
+      }
+
+      if (!payload?.session) {
+        throw new Error(
+          "The server did not return the updated session.",
+        )
+      }
+
+      setSessions(
+        (current) =>
+          current.map(
+            (item) =>
+              item.id ===
+              editingSession.id
+                ? {
+                    ...payload.session,
+
+                    /*
+                     * Preserve persistent calendar state
+                     * if the schedule API does not include it.
+                     */
+                    calendar_synced:
+                      payload.session
+                        ?.calendar_synced ??
+                      item.calendar_synced ??
+                      false,
+                  }
+                : item,
+          ),
+      )
+
+      setEditingSession(null)
+
+      setSuccess(
+        "Training session updated successfully.",
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update session",
+      )
+    } finally {
+      setActionSessionId(null)
     }
   }
 
@@ -588,8 +971,7 @@ export default function SessionsManager({
     const session =
       sessions.find(
         (item) =>
-          item.id ===
-          sessionId,
+          item.id === sessionId,
       )
 
     if (session?.calendar_synced) {
@@ -620,12 +1002,11 @@ export default function SessionsManager({
         )
 
       const payload =
-        await res.json()
+        await readJsonResponse(
+          res,
+        )
 
-      if (
-        res.status ===
-        409
-      ) {
+      if (res.status === 409) {
         throw new Error(
           "Google Calendar is not connected to your ShadowNode account. Connect Google Calendar first, then try again.",
         )
@@ -772,12 +1153,11 @@ export default function SessionsManager({
         )
 
       const payload =
-        await res.json()
+        await readJsonResponse(
+          res,
+        )
 
-      if (
-        res.status ===
-        409
-      ) {
+      if (res.status === 409) {
         const serverPartstat =
           normalizeRsvp(
             payload?.partstat,
@@ -998,203 +1378,6 @@ export default function SessionsManager({
 
   /*
    * ================================================================
-   * EDIT SESSION
-   * ================================================================
-   */
-
-  async function editSession(
-    session: TrainingSession,
-  ) {
-    setError(null)
-    setSuccess(null)
-
-    const newDate =
-      window.prompt(
-        "New date/time (YYYY-MM-DDTHH:MM):",
-        formatDateInput(
-          session.scheduled_at,
-        ),
-      )
-
-    if (newDate === null) {
-      return
-    }
-
-    const newTitle =
-      window.prompt(
-        "Session title or notes:",
-        session.session_notes ||
-          "",
-      )
-
-    if (newTitle === null) {
-      return
-    }
-
-    const newDuration =
-      window.prompt(
-        "Duration in minutes:",
-        String(
-          session.duration_minutes ||
-            60,
-        ),
-      )
-
-    if (
-      newDuration ===
-      null
-    ) {
-      return
-    }
-
-    const newMeetingUrl =
-      window.prompt(
-        "Meeting URL:",
-        session.meeting_url ||
-          "",
-      )
-
-    if (
-      newMeetingUrl ===
-      null
-    ) {
-      return
-    }
-
-    const newLocation =
-      window.prompt(
-        "Location:",
-        session.location ||
-          "",
-      )
-
-    if (
-      newLocation ===
-      null
-    ) {
-      return
-    }
-
-    const duration =
-      Number(
-        newDuration,
-      )
-
-    if (
-      !Number.isFinite(
-        duration,
-      ) ||
-      duration <= 0
-    ) {
-      setError(
-        "Duration must be a valid positive number.",
-      )
-      return
-    }
-
-    const updates: Record<
-      string,
-      unknown
-    > = {
-      session_notes:
-        newTitle.trim(),
-
-      scheduled_at:
-        newDate.trim() ||
-        null,
-
-      duration_minutes:
-        duration,
-
-      meeting_url:
-        newMeetingUrl.trim() ||
-        null,
-
-      location:
-        newLocation.trim() ||
-        null,
-    }
-
-    setActionSessionId(
-      session.id,
-    )
-
-    try {
-      const res =
-        await fetch(
-          `/api/training/${engagementId}/schedule`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              sessionId:
-                session.id,
-              updates,
-            }),
-          },
-        )
-
-      const payload =
-        await res.json()
-
-      if (!res.ok) {
-        throw new Error(
-          payload?.error ||
-            "Failed to update session",
-        )
-      }
-
-      if (!payload?.session) {
-        throw new Error(
-          "The server did not return the updated session.",
-        )
-      }
-
-      setSessions(
-        (current) =>
-          current.map(
-            (item) =>
-              item.id ===
-              session.id
-                ? {
-                    ...payload.session,
-
-                    /*
-                     * Preserve persistent calendar
-                     * state if the schedule API does
-                     * not include it.
-                     */
-                    calendar_synced:
-                      payload.session
-                        ?.calendar_synced ??
-                      item.calendar_synced ??
-                      false,
-                  }
-                : item,
-          ),
-      )
-
-      setSuccess(
-        "Training session updated successfully.",
-      )
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update session",
-      )
-    } finally {
-      setActionSessionId(
-        null,
-      )
-    }
-  }
-
-  /*
-   * ================================================================
    * CANCEL SESSION
    * ================================================================
    */
@@ -1235,7 +1418,9 @@ export default function SessionsManager({
         )
 
       const payload =
-        await res.json()
+        await readJsonResponse(
+          res,
+        )
 
       if (!res.ok) {
         throw new Error(
@@ -1251,11 +1436,6 @@ export default function SessionsManager({
         )
       }
 
-      /*
-       * The current backend removes cancelled
-       * sessions from the returned list, so keep
-       * the existing behavior here.
-       */
       setSessions(
         (current) =>
           current.filter(
@@ -1280,6 +1460,18 @@ export default function SessionsManager({
       )
     }
   }
+
+  /*
+   * ================================================================
+   * SHARED INPUT CLASS
+   * ================================================================
+   */
+
+  const inputClass =
+    "w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#20dc73]/50 disabled:cursor-not-allowed disabled:opacity-50"
+
+  const selectClass =
+    "w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#20dc73]/50 disabled:cursor-not-allowed disabled:opacity-50"
 
   /*
    * ================================================================
@@ -1439,7 +1631,7 @@ export default function SessionsManager({
                     }
                     placeholder="e.g. Advanced Search Techniques"
                     disabled={loading}
-                    className="w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#20dc73]/50"
+                    className={inputClass}
                   />
                 </div>
 
@@ -1457,63 +1649,8 @@ export default function SessionsManager({
                       )
                     }
                     disabled={loading}
-                    className="w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#20dc73]/50"
+                    className={inputClass}
                   />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
-                    Duration
-                  </label>
-
-                  <select
-                    value={
-                      durationMinutes
-                    }
-                    onChange={(event) =>
-                      setDurationMinutes(
-                        event.target.value,
-                      )
-                    }
-                    disabled={loading}
-                    className="w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#20dc73]/50"
-                  >
-                    <option value="30">
-                      30 minutes
-                    </option>
-
-                    <option value="45">
-                      45 minutes
-                    </option>
-
-                    <option value="60">
-                      1 hour
-                    </option>
-
-                    <option value="90">
-                      1 hour 30 minutes
-                    </option>
-
-                    <option value="120">
-                      2 hours
-                    </option>
-
-                    <option value="180">
-                      3 hours
-                    </option>
-
-                    <option value="240">
-                      4 hours
-                    </option>
-
-                    <option value="360">
-                      6 hours
-                    </option>
-
-                    <option value="480">
-                      8 hours
-                    </option>
-                  </select>
                 </div>
 
                 <div>
@@ -1531,7 +1668,7 @@ export default function SessionsManager({
                       )
                     }
                     disabled={loading}
-                    className="w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#20dc73]/50"
+                    className={selectClass}
                   >
                     {SESSION_TYPES.map(
                       (item) => (
@@ -1550,8 +1687,121 @@ export default function SessionsManager({
                   </select>
                 </div>
 
-                {modules.length >
-                  0 && (
+                {/* Duration */}
+                <div className="lg:col-span-2">
+                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
+                    Duration
+                  </label>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-[10px] uppercase tracking-wider text-white/25">
+                        Hours
+                      </label>
+
+                      <input
+                        type="number"
+                        min="0"
+                        max="24"
+                        step="1"
+                        value={
+                          durationHours
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setDurationHours(
+                            event.target
+                              .value,
+                          )
+                        }
+                        disabled={
+                          loading
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-[10px] uppercase tracking-wider text-white/25">
+                        Minutes
+                      </label>
+
+                      <select
+                        value={
+                          durationMinutesPart
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setDurationMinutesPart(
+                            event.target
+                              .value,
+                          )
+                        }
+                        disabled={
+                          loading
+                        }
+                        className={selectClass}
+                      >
+                        <option value="0">
+                          0 minutes
+                        </option>
+
+                        <option value="5">
+                          5 minutes
+                        </option>
+
+                        <option value="10">
+                          10 minutes
+                        </option>
+
+                        <option value="15">
+                          15 minutes
+                        </option>
+
+                        <option value="20">
+                          20 minutes
+                        </option>
+
+                        <option value="25">
+                          25 minutes
+                        </option>
+
+                        <option value="30">
+                          30 minutes
+                        </option>
+
+                        <option value="35">
+                          35 minutes
+                        </option>
+
+                        <option value="40">
+                          40 minutes
+                        </option>
+
+                        <option value="45">
+                          45 minutes
+                        </option>
+
+                        <option value="50">
+                          50 minutes
+                        </option>
+
+                        <option value="55">
+                          55 minutes
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 text-xs text-white/30">
+                    Duration will be stored internally
+                    as total minutes.
+                  </p>
+                </div>
+
+                {modules.length > 0 && (
                   <div>
                     <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
                       Curriculum module
@@ -1561,18 +1811,15 @@ export default function SessionsManager({
                       value={
                         moduleId
                       }
-                      onChange={(
-                        event,
-                      ) =>
+                      onChange={(event) =>
                         setModuleId(
-                          event.target
-                            .value,
+                          event.target.value,
                         )
                       }
                       disabled={
                         loading
                       }
-                      className="w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#20dc73]/50"
+                      className={selectClass}
                     >
                       <option value="">
                         General training session
@@ -1627,13 +1874,12 @@ export default function SessionsManager({
                     }
                     onChange={(event) =>
                       setMeetingUrl(
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="https://..."
                     disabled={loading}
-                    className="w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#20dc73]/50"
+                    className={inputClass}
                   />
                 </div>
 
@@ -1648,13 +1894,12 @@ export default function SessionsManager({
                     }
                     onChange={(event) =>
                       setLocation(
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="Online, ShadowNode training facility, or other location"
                     disabled={loading}
-                    className="w-full rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#20dc73]/50"
+                    className={inputClass}
                   />
                 </div>
               </div>
@@ -1662,9 +1907,7 @@ export default function SessionsManager({
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="submit"
-                  disabled={
-                    loading
-                  }
+                  disabled={loading}
                   className="rounded-lg bg-[#20dc73] px-5 py-2.5 text-sm font-medium text-black transition hover:bg-[#20dc73]/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading
@@ -1674,9 +1917,7 @@ export default function SessionsManager({
 
                 <button
                   type="button"
-                  disabled={
-                    loading
-                  }
+                  disabled={loading}
                   onClick={() => {
                     resetCreateForm()
                     setShowCreateForm(
@@ -1713,8 +1954,7 @@ export default function SessionsManager({
           ============================================================ */}
 
       <div className="space-y-4">
-        {sortedSessions.length ===
-          0 && (
+        {sortedSessions.length === 0 && (
           <div className="rounded-xl border border-[#143b28] bg-[#020806]/90 p-8 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#143b28] bg-black/20 text-[#20dc73]">
               ◷
@@ -1785,21 +2025,17 @@ export default function SessionsManager({
 
             const rsvpLocked =
               isClient &&
-              Boolean(
-                partstat,
-              )
+              Boolean(partstat)
 
             const sessionCancelled =
               String(
-                session.status ||
-                  "",
+                session.status || "",
               ).toLowerCase() ===
               "cancelled"
 
             const sessionCompleted =
               String(
-                session.status ||
-                  "",
+                session.status || "",
               ).toLowerCase() ===
               "completed"
 
@@ -1814,9 +2050,7 @@ export default function SessionsManager({
 
             return (
               <article
-                key={
-                  session.id
-                }
+                key={session.id}
                 className="group rounded-xl border border-[#143b28] bg-[#020806]/90 p-5 transition hover:border-[#20dc73]/30 hover:bg-[#06150d]/95"
               >
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -1825,8 +2059,7 @@ export default function SessionsManager({
                       <span className="text-[10px] uppercase tracking-[0.18em] text-[#20dc73]/60">
                         Session{" "}
                         {String(
-                          index +
-                            1,
+                          index + 1,
                         ).padStart(
                           2,
                           "0",
@@ -1871,9 +2104,9 @@ export default function SessionsManager({
                         </div>
 
                         <div className="mt-1 text-sm text-white/70">
-                          {session.duration_minutes
-                            ? `${session.duration_minutes} minutes`
-                            : "Not specified"}
+                          {formatDuration(
+                            session.duration_minutes,
+                          )}
                         </div>
                       </div>
 
@@ -2127,7 +2360,7 @@ export default function SessionsManager({
                               sessionCancelled
                             }
                             onClick={() =>
-                              editSession(
+                              openEditModal(
                                 session,
                               )
                             }
@@ -2164,6 +2397,364 @@ export default function SessionsManager({
           },
         )}
       </div>
+
+      {/* ============================================================
+          EDIT SESSION MODAL
+          ============================================================ */}
+
+      {editingSession && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              closeEditModal()
+            }
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#143b28] bg-[#020806] shadow-2xl shadow-black/50">
+            {/* Modal header */}
+            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#143b28] bg-[#020806]/95 px-5 py-4 backdrop-blur">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[#20dc73]/70">
+                  Training Delivery
+                </div>
+
+                <h3 className="mt-1 text-lg font-semibold text-white">
+                  Edit Session
+                </h3>
+
+                <p className="mt-1 text-sm text-white/40">
+                  Update the schedule and delivery
+                  details for this training session.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  closeEditModal
+                }
+                disabled={
+                  actionSessionId ===
+                  editingSession.id
+                }
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#143b28] bg-black/20 text-lg text-white/50 transition hover:border-[#20dc73]/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Close edit session"
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              onSubmit={
+                saveEditedSession
+              }
+              className="space-y-5 p-5"
+            >
+              {/* Session title */}
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
+                  Session title
+                </label>
+
+                <input
+                  value={editTitle}
+                  onChange={(event) =>
+                    setEditTitle(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="e.g. Advanced Search Techniques"
+                  disabled={
+                    actionSessionId ===
+                    editingSession.id
+                  }
+                  className={inputClass}
+                  autoFocus
+                />
+              </div>
+
+              {/* Date and time */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
+                    Date & time
+                  </label>
+
+                  <input
+                    type="datetime-local"
+                    value={
+                      editScheduledAt
+                    }
+                    onChange={(event) =>
+                      setEditScheduledAt(
+                        event.target
+                          .value,
+                      )
+                    }
+                    disabled={
+                      actionSessionId ===
+                      editingSession.id
+                    }
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              {/* Duration */}
+              <div className="rounded-xl border border-[#143b28]/80 bg-black/20 p-4">
+                <div className="mb-3">
+                  <div className="text-xs uppercase tracking-wider text-white/40">
+                    Session duration
+                  </div>
+
+                  <div className="mt-1 text-xs text-white/30">
+                    Specify the duration in hours and
+                    minutes.
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-[10px] uppercase tracking-wider text-white/30">
+                      Hours
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="24"
+                      step="1"
+                      value={
+                        editDurationHours
+                      }
+                      onChange={(event) =>
+                        setEditDurationHours(
+                          event.target
+                            .value,
+                        )
+                      }
+                      disabled={
+                        actionSessionId ===
+                        editingSession.id
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-[10px] uppercase tracking-wider text-white/30">
+                      Minutes
+                    </label>
+
+                    <select
+                      value={
+                        editDurationMinutes
+                      }
+                      onChange={(event) =>
+                        setEditDurationMinutes(
+                          event.target
+                            .value,
+                        )
+                      }
+                      disabled={
+                        actionSessionId ===
+                        editingSession.id
+                      }
+                      className={selectClass}
+                    >
+                      <option value="0">
+                        0 minutes
+                      </option>
+
+                      <option value="5">
+                        5 minutes
+                      </option>
+
+                      <option value="10">
+                        10 minutes
+                      </option>
+
+                      <option value="15">
+                        15 minutes
+                      </option>
+
+                      <option value="20">
+                        20 minutes
+                      </option>
+
+                      <option value="25">
+                        25 minutes
+                      </option>
+
+                      <option value="30">
+                        30 minutes
+                      </option>
+
+                      <option value="35">
+                        35 minutes
+                      </option>
+
+                      <option value="40">
+                        40 minutes
+                      </option>
+
+                      <option value="45">
+                        45 minutes
+                      </option>
+
+                      <option value="50">
+                        50 minutes
+                      </option>
+
+                      <option value="55">
+                        55 minutes
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-[#143b28]/60 bg-[#020806] px-3 py-2">
+                  <span className="text-[10px] uppercase tracking-wider text-white/25">
+                    New duration
+                  </span>
+
+                  <div className="mt-1 text-sm font-medium text-[#20dc73]">
+                    {formatDuration(
+                      durationPartsToMinutes(
+                        editDurationHours,
+                        editDurationMinutes,
+                      ),
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Meeting URL */}
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
+                  Meeting URL
+                </label>
+
+                <input
+                  value={
+                    editMeetingUrl
+                  }
+                  onChange={(event) =>
+                    setEditMeetingUrl(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="https://..."
+                  disabled={
+                    actionSessionId ===
+                    editingSession.id
+                  }
+                  className={inputClass}
+                />
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
+                  Location
+                </label>
+
+                <input
+                  value={
+                    editLocation
+                  }
+                  onChange={(event) =>
+                    setEditLocation(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Online, ShadowNode training facility, or other location"
+                  disabled={
+                    actionSessionId ===
+                    editingSession.id
+                  }
+                  className={inputClass}
+                />
+              </div>
+
+              {/* Session information */}
+              <div className="rounded-xl border border-[#143b28]/70 bg-black/20 p-4">
+                <div className="text-[10px] uppercase tracking-wider text-white/25">
+                  Session information
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-white/25">
+                      Format
+                    </div>
+
+                    <div className="mt-1 text-sm text-white/65">
+                      {formatSessionType(
+                        editingSession.session_type,
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-white/25">
+                      Current status
+                    </div>
+
+                    <div className="mt-1 text-sm text-white/65">
+                      {formatStatus(
+                        editingSession.status,
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-3 text-xs leading-5 text-white/30">
+                  Session format and curriculum module
+                  are not changed from this editor.
+                  Use the existing training structure
+                  when those details need to change.
+                </p>
+              </div>
+
+              {/* Modal actions */}
+              <div className="flex flex-col-reverse gap-2 border-t border-[#143b28]/80 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={
+                    closeEditModal
+                  }
+                  disabled={
+                    actionSessionId ===
+                    editingSession.id
+                  }
+                  className="rounded-lg border border-[#143b28] bg-black/20 px-4 py-2.5 text-sm text-white/60 transition hover:border-[#20dc73]/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    actionSessionId ===
+                    editingSession.id
+                  }
+                  className="rounded-lg bg-[#20dc73] px-5 py-2.5 text-sm font-medium text-black transition hover:bg-[#20dc73]/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionSessionId ===
+                  editingSession.id
+                    ? "Saving Changes..."
+                    : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

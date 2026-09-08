@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+
 import { getCurrentUser } from "@/lib/auth"
+
 import {
   listSessions,
   createSession,
@@ -8,9 +10,15 @@ import {
   ensureAccess,
 } from "@/lib/services/training-operations-service"
 
+type RouteContext = {
+  params: Promise<{
+    id: string
+  }>
+}
+
 function isSuperAdministrator(
   role: string | null | undefined,
-) {
+): boolean {
   return (
     role === "super_administrator" ||
     role === "super-administrator"
@@ -19,7 +27,7 @@ function isSuperAdministrator(
 
 function isTrainerCapableRole(
   role: string | null | undefined,
-) {
+): boolean {
   return (
     role === "investigator" ||
     role === "analyst" ||
@@ -28,110 +36,297 @@ function isTrainerCapableRole(
   )
 }
 
-function errorMessage(error: unknown) {
+function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : String(error)
+    : String(error || "Unknown error")
 }
 
-export async function GET(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
-) {
-  const user = await getCurrentUser()
+function getErrorStatus(
+  error: unknown,
+): number {
+  const message =
+    errorMessage(error)
+
+  if (
+    message ===
+      "Unauthorized" ||
+    message.toLowerCase().includes(
+      "unauthorized",
+    )
+  ) {
+    return 401
+  }
+
+  if (
+    message === "Forbidden" ||
+    message.toLowerCase().includes(
+      "forbidden",
+    ) ||
+    message.toLowerCase().includes(
+      "not the approved trainer",
+    ) ||
+    message.toLowerCase().includes(
+      "not authorized",
+    )
+  ) {
+    return 403
+  }
+
+  if (
+    message ===
+      "Training engagement not found" ||
+    message ===
+      "Session not found" ||
+    message ===
+      "Training session not found" ||
+    message.toLowerCase().includes(
+      "does not belong to this training engagement",
+    )
+  ) {
+    return 404
+  }
+
+  if (
+    message.toLowerCase().includes(
+      "required",
+    ) ||
+    message.toLowerCase().includes(
+      "invalid",
+    ) ||
+    message.toLowerCase().includes(
+      "must be",
+    )
+  ) {
+    return 400
+  }
+
+  return 500
+}
+
+async function parseJsonBody(
+  request: NextRequest,
+): Promise<Record<string, unknown> | null> {
+  const raw = await request.text()
+
+  if (!raw.trim()) {
+    return null
+  }
 
   try {
-    const { id } = await context.params
+    const parsed =
+      JSON.parse(raw)
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      return null
+    }
+
+    return parsed as Record<
+      string,
+      unknown
+    >
+  } catch {
+    throw new Error(
+      "Request body must contain valid JSON.",
+    )
+  }
+}
+
+/* =======================================================
+   GET
+   List training sessions
+   ======================================================= */
+
+export async function GET(
+  _request: NextRequest,
+  context: RouteContext,
+) {
+  try {
+    const user =
+      await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
+      )
+    }
+
+    const { id } =
+      await context.params
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     /*
-     * Viewing sessions is not a trainer-only operation.
+     * Viewing sessions is not trainer-only.
      *
-     * Administrators can view.
-     * Super Administrators can view.
-     * Assigned trainers can view.
-     * Clients can view their own engagement.
+     * Access is still enforced against the
+     * engagement relationship.
      */
-    await ensureAccess(id, user, false)
+    await ensureAccess(
+      id,
+      {
+        id: user.id,
+        role: user.role,
+      },
+      false,
+    )
 
-    const sessions = await listSessions(id)
+    const sessions =
+      await listSessions(id)
 
-    return NextResponse.json({
-      success: true,
-      sessions,
-    })
-  } catch (error: unknown) {
     return NextResponse.json(
       {
+        success: true,
+        sessions,
+      },
+      {
+        status: 200,
+      },
+    )
+  } catch (error: unknown) {
+    console.error(
+      "TRAINING SESSION GET ERROR:",
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        success: false,
         error: errorMessage(error),
       },
       {
-        status:
-          errorMessage(error) === "Unauthorized"
-            ? 401
-            : 403,
+        status: getErrorStatus(error),
       },
     )
   }
 }
 
-export async function POST(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
-) {
-  const user = await getCurrentUser()
+/* =======================================================
+   POST
+   Create training session
+   ======================================================= */
 
+export async function POST(
+  request: NextRequest,
+  context: RouteContext,
+) {
   try {
+    const user =
+      await getCurrentUser()
+
     if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 },
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
       )
     }
 
-    if (!isTrainerCapableRole(user.role)) {
+    if (
+      !isTrainerCapableRole(
+        user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
             "You are not authorized to schedule training sessions.",
         },
-        { status: 403 },
+        {
+          status: 403,
+        },
       )
     }
 
-    const { id } = await context.params
+    const { id } =
+      await context.params
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     /*
-     * IMPORTANT:
+     * Super Administrator can operate across
+     * training engagements.
      *
-     * For an Administrator, ensureAccess(..., true)
-     * will only succeed if that Administrator is the
-     * APPROVED trainer for this specific engagement.
-     *
-     * Super Administrator remains able to manage training
-     * without being assigned as the trainer.
+     * Other trainer-capable users must be
+     * approved for this specific engagement.
      */
-    const access = await ensureAccess(
-      id,
-      user,
-      !isSuperAdministrator(user.role),
+    const access =
+      await ensureAccess(
+        id,
+        {
+          id: user.id,
+          role: user.role,
+        },
+        !isSuperAdministrator(
+          user.role,
+        ),
+      )
+
+    const body =
+      await parseJsonBody(
+        request,
+      )
+
+    if (!body) {
+      return NextResponse.json(
+        {
+          error:
+            "Request body must contain valid JSON.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    const created =
+      await createSession(
+        id,
+        body,
+        access.profileId,
+      )
+
+    return NextResponse.json(
+      {
+        success: true,
+        session: created,
+      },
+      {
+        status: 201,
+      },
     )
-
-    const body = await req.json()
-
-    const created = await createSession(
-      id,
-      body,
-      access.profileId,
-    )
-
-    return NextResponse.json({
-      success: true,
-      session: created,
-    })
   } catch (error: unknown) {
     console.error(
       "TRAINING SESSION CREATE ERROR:",
@@ -140,81 +335,212 @@ export async function POST(
 
     return NextResponse.json(
       {
+        success: false,
         error: errorMessage(error),
       },
       {
-        status: 403,
+        status: getErrorStatus(error),
       },
     )
   }
 }
 
-export async function PUT(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
-) {
-  const user = await getCurrentUser()
+/* =======================================================
+   PUT
+   Update training session
+   ======================================================= */
 
+export async function PUT(
+  request: NextRequest,
+  context: RouteContext,
+) {
   try {
+    const user =
+      await getCurrentUser()
+
     if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 },
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
       )
     }
 
-    if (!isTrainerCapableRole(user.role)) {
+    if (
+      !isTrainerCapableRole(
+        user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
             "You are not authorized to manage training sessions.",
         },
-        { status: 403 },
+        {
+          status: 403,
+        },
       )
     }
 
-    const { id } = await context.params
+    const { id } =
+      await context.params
 
-    const access = await ensureAccess(
-      id,
-      user,
-      !isSuperAdministrator(user.role),
-    )
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
-    const body = await req.json()
+    /*
+     * For normal trainer-capable users this
+     * requires approved trainer access.
+     *
+     * Super Administrator remains able to
+     * manage the engagement without being
+     * assigned as its trainer.
+     */
+    const access =
+      await ensureAccess(
+        id,
+        {
+          id: user.id,
+          role: user.role,
+        },
+        !isSuperAdministrator(
+          user.role,
+        ),
+      )
+
+    const body =
+      await parseJsonBody(
+        request,
+      )
+
+    if (!body) {
+      return NextResponse.json(
+        {
+          error:
+            "Request body must contain valid JSON.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     const sessionId =
-      typeof body?.sessionId === "string"
+      typeof body.sessionId ===
+      "string"
         ? body.sessionId.trim()
         : ""
 
     if (!sessionId) {
       return NextResponse.json(
         {
-          error: "sessionId is required",
+          error:
+            "sessionId is required.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    if (
+      !body.updates ||
+      typeof body.updates !==
+        "object" ||
+      Array.isArray(
+        body.updates,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "updates must be a valid object.",
+        },
+        {
+          status: 400,
+        },
       )
     }
 
     const updates =
-      body?.updates &&
-      typeof body.updates === "object"
-        ? body.updates
-        : {}
+      body.updates as Record<
+        string,
+        unknown
+      >
 
-    const updated = await updateSession(
-      sessionId,
-      updates,
-      access.profileId,
+    /*
+     * IMPORTANT:
+     *
+     * Verify that the session being modified
+     * actually belongs to this engagement.
+     *
+     * The service should also enforce this,
+     * but the route should never trust a
+     * session ID supplied by the browser.
+     */
+    const sessions =
+      await listSessions(id)
+
+    const sessionExists =
+      sessions.some(
+        (session) =>
+          String(
+            session.id,
+          ) === sessionId,
+      )
+
+    if (!sessionExists) {
+      return NextResponse.json(
+        {
+          error:
+            "Training session not found for this engagement.",
+        },
+        {
+          status: 404,
+        },
+      )
+    }
+
+    const updated =
+      await updateSession(
+        sessionId,
+        updates,
+        access.profileId,
+      )
+
+    if (!updated) {
+      return NextResponse.json(
+        {
+          error:
+            "The training session could not be updated.",
+        },
+        {
+          status: 500,
+        },
+      )
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        session: updated,
+      },
+      {
+        status: 200,
+      },
     )
-
-    return NextResponse.json({
-      success: true,
-      session: updated,
-    })
   } catch (error: unknown) {
     console.error(
       "TRAINING SESSION UPDATE ERROR:",
@@ -223,74 +549,133 @@ export async function PUT(
 
     return NextResponse.json(
       {
+        success: false,
         error: errorMessage(error),
       },
       {
-        status: 403,
+        status: getErrorStatus(error),
       },
     )
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
-) {
-  const user = await getCurrentUser()
+/* =======================================================
+   DELETE
+   Cancel training session
+   ======================================================= */
 
+export async function DELETE(
+  request: NextRequest,
+  context: RouteContext,
+) {
   try {
+    const user =
+      await getCurrentUser()
+
     if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 },
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
       )
     }
 
-    if (!isTrainerCapableRole(user.role)) {
+    if (
+      !isTrainerCapableRole(
+        user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
             "You are not authorized to manage training sessions.",
         },
-        { status: 403 },
+        {
+          status: 403,
+        },
       )
     }
 
-    const { id } = await context.params
+    const { id } =
+      await context.params
 
-    const access = await ensureAccess(
-      id,
-      user,
-      !isSuperAdministrator(user.role),
-    )
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
-    const body = await req.json()
+    const access =
+      await ensureAccess(
+        id,
+        {
+          id: user.id,
+          role: user.role,
+        },
+        !isSuperAdministrator(
+          user.role,
+        ),
+      )
+
+    const body =
+      await parseJsonBody(
+        request,
+      )
+
+    if (!body) {
+      return NextResponse.json(
+        {
+          error:
+            "Request body must contain valid JSON.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     const sessionId =
-      typeof body?.sessionId === "string"
+      typeof body.sessionId ===
+      "string"
         ? body.sessionId.trim()
         : ""
 
     if (!sessionId) {
       return NextResponse.json(
         {
-          error: "sessionId is required",
+          error:
+            "sessionId is required.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
-    const result = await deleteSession(
-      sessionId,
-      access.profileId,
-    )
+    const result =
+      await deleteSession(
+        sessionId,
+        access.profileId,
+      )
 
-    return NextResponse.json({
-      success: true,
-      result,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        result,
+      },
+      {
+        status: 200,
+      },
+    )
   } catch (error: unknown) {
     console.error(
       "TRAINING SESSION DELETE ERROR:",
@@ -299,10 +684,11 @@ export async function DELETE(
 
     return NextResponse.json(
       {
+        success: false,
         error: errorMessage(error),
       },
       {
-        status: 403,
+        status: getErrorStatus(error),
       },
     )
   }

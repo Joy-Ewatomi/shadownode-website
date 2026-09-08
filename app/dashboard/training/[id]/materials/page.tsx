@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth"
 import {
   ensureAccess,
   listMaterials,
+  listModules,
   isApprovedTrainerForEngagement,
 } from "@/lib/services/training-operations-service"
 
@@ -22,12 +23,27 @@ type EngagementRow = {
   status: string | null
 }
 
+
 function isSuperAdminRole(
   role: string | null | undefined,
 ) {
+  const normalized = String(role || "")
+    .trim()
+    .toLowerCase()
+
   return (
-    role === "super_administrator" ||
-    role === "super-administrator"
+    normalized === "super_administrator" ||
+    normalized === "super-administrator"
+  )
+}
+
+function isClientRole(
+  role: string | null | undefined,
+) {
+  return (
+    String(role || "")
+      .trim()
+      .toLowerCase() === "client"
   )
 }
 
@@ -35,6 +51,10 @@ export default async function MaterialsPage({
   params,
 }: Props) {
   const { id } = await params
+
+  if (!id) {
+    return notFound()
+  }
 
   const user = await getCurrentUser()
 
@@ -47,14 +67,10 @@ export default async function MaterialsPage({
    * VIEW ACCESS
    * ============================================================
    *
-   * Viewing materials does not require trainer-level access.
+   * Viewing materials is allowed through the existing
+   * training engagement authorization layer.
    *
-   * Clients can view their own engagement.
-   * Administrators can oversee training.
-   * Super Administrators have full access.
-   * Approved trainers can access their engagement.
-   *
-   * Uploading/managing materials is handled separately below.
+   * We do not introduce a second permission system here.
    */
 
   let access
@@ -65,7 +81,12 @@ export default async function MaterialsPage({
       user,
       false,
     )
-  } catch {
+  } catch (error) {
+    console.error(
+      "TRAINING MATERIALS ACCESS ERROR:",
+      error,
+    )
+
     return notFound()
   }
 
@@ -98,6 +119,71 @@ export default async function MaterialsPage({
 
   /*
    * ============================================================
+   * LOAD CURRENT CURRICULUM
+   * ============================================================
+   *
+   * IMPORTANT:
+   *
+   * Materials are attached to curriculum modules.
+   *
+   * The previous version of this page loaded materials but
+   * never loaded the modules. That caused MaterialsManager's
+   * default:
+   *
+   *     modules = []
+   *
+   * and therefore displayed:
+   *
+   * "Create at least one curriculum module..."
+   *
+   * even when modules already existed.
+   *
+   * We now reuse the existing listModules() service so the
+   * Materials workspace and Curriculum Roadmap use the same
+   * source of truth.
+   */
+
+  const rawModules =
+    await listModules(id)
+
+ const modules =
+  (rawModules || [])
+    .map((module) => ({
+      id: String(module.id),
+      title:
+        module.title != null
+          ? String(module.title)
+          : null,
+      description:
+        module.description != null
+          ? String(module.description)
+          : null,
+      module_order:
+        module.module_order != null
+          ? Number(module.module_order)
+          : null,
+      status:
+        module.status != null
+          ? String(module.status)
+          : null,
+      completion_percentage:
+        module.completion_percentage != null
+          ? Number(
+              module.completion_percentage,
+            )
+          : null,
+    }))
+    .sort(
+      (a, b) =>
+        Number(
+          a.module_order ?? 0,
+        ) -
+        Number(
+          b.module_order ?? 0,
+        ),
+    )
+  /*
+   * ============================================================
    * LOAD MATERIALS
    * ============================================================
    */
@@ -107,7 +193,7 @@ export default async function MaterialsPage({
 
   const materials =
     (rawMaterials || []).map(
-      (material: any) => ({
+      (material) => ({
         ...material,
 
         created_at:
@@ -132,18 +218,18 @@ export default async function MaterialsPage({
    * ============================================================
    *
    * Super Administrator:
-   *   Always allowed.
+   *   Full training management access.
    *
    * Approved trainer:
-   *   Allowed only when assigned and approved
-   *   for this engagement.
+   *   Can manage materials only for an engagement
+   *   where they are actually approved.
    *
-   * Normal Administrator:
-   *   View only unless separately approved
-   *   as the trainer for this engagement.
+   * Administrator:
+   *   View only unless they are separately approved
+   *   as a trainer for this engagement.
    *
-   * Unassigned Investigator/Analyst:
-   *   View only.
+   * Investigator / Analyst:
+   *   View only unless approved as trainer.
    *
    * Client:
    *   View only.
@@ -151,7 +237,9 @@ export default async function MaterialsPage({
 
   let canManageMaterials = false
 
-  if (isSuperAdminRole(user.role)) {
+  if (
+    isSuperAdminRole(user.role)
+  ) {
     canManageMaterials = true
   } else {
     canManageMaterials =
@@ -161,6 +249,9 @@ export default async function MaterialsPage({
         access.profileId,
       )
   }
+
+  const isClient =
+    isClientRole(user.role)
 
   /*
    * ============================================================
@@ -192,6 +283,8 @@ export default async function MaterialsPage({
             canManageMaterials={
               canManageMaterials
             }
+            modules={modules}
+            isClient={isClient}
           />
         </section>
       </div>

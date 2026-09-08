@@ -31,13 +31,29 @@ type ModuleRow = {
   module_order: number | null
 }
 
+function normalizeRole(
+  role: string | null | undefined,
+): string {
+  return String(role || "")
+    .trim()
+    .toLowerCase()
+}
+
 function isSuperAdminRole(
   role: string | null | undefined,
-) {
+): boolean {
+  const normalized = normalizeRole(role)
+
   return (
-    role === "super_administrator" ||
-    role === "super-administrator"
+    normalized === "super_administrator" ||
+    normalized === "super-administrator"
   )
+}
+
+function isClientRole(
+  role: string | null | undefined,
+): boolean {
+  return normalizeRole(role) === "client"
 }
 
 export default async function SchedulePage({
@@ -54,19 +70,26 @@ export default async function SchedulePage({
   const user = await getCurrentUser()
 
   if (!user) {
-    return redirect("/login")
+    redirect("/login")
   }
+
+  const userRole = normalizeRole(
+    user.role,
+  )
+
+  const isClient =
+    isClientRole(userRole)
 
   /*
    * ============================================================
    * ENGAGEMENT VIEW ACCESS
    * ============================================================
    *
-   * Viewing the schedule is separate from managing sessions.
+   * Viewing a training schedule is controlled by the existing
+   * centralized training authorization system.
    *
-   * Clients, assigned trainers, administrators and
-   * super administrators may view according to the existing
-   * training authorization system.
+   * This is intentionally separate from session-management
+   * authorization.
    */
 
   let access
@@ -77,7 +100,12 @@ export default async function SchedulePage({
       user,
       false,
     )
-  } catch {
+  } catch (error) {
+    console.error(
+      "TRAINING SCHEDULE ACCESS ERROR:",
+      error,
+    )
+
     return notFound()
   }
 
@@ -87,7 +115,7 @@ export default async function SchedulePage({
    * ============================================================
    */
 
-  const engRes =
+  const engagementResult =
     await query<EngagementRow>(
       `
         SELECT
@@ -103,7 +131,7 @@ export default async function SchedulePage({
     )
 
   const engagement =
-    engRes.rows[0]
+    engagementResult.rows[0]
 
   if (!engagement) {
     return notFound()
@@ -111,16 +139,33 @@ export default async function SchedulePage({
 
   /*
    * ============================================================
-   * LOAD SESSIONS
+   * LOAD TRAINING SESSIONS
    * ============================================================
+   *
+   * IMPORTANT:
+   *
+   * listSessions() already owns the authoritative TrainingSession
+   * query/result type.
+   *
+   * Do not recreate a competing SessionRow type here.
    */
 
   const rawSessions =
     await listSessions(id)
 
+  /*
+   * listSessions() already returns the structure expected by
+   * SessionsManager.
+   *
+   * Only normalize database Date values where necessary.
+   *
+   * The cast is deliberately kept local because the service
+   * owns the actual TrainingSessionQueryRow shape.
+   */
+
   const sessions =
-    (rawSessions || []).map(
-      (session: any) => ({
+    rawSessions.map(
+      (session) => ({
         ...session,
 
         scheduled_at:
@@ -143,13 +188,6 @@ export default async function SchedulePage({
                 session.updated_at,
               )
             : null,
-
-        attendees:
-          Array.isArray(
-            session.attendees,
-          )
-            ? session.attendees
-            : [],
       }),
     )
 
@@ -158,10 +196,10 @@ export default async function SchedulePage({
    * LOAD CURRICULUM MODULES
    * ============================================================
    *
-   * Sessions can optionally belong to a specific
-   * Curriculum Roadmap module.
+   * Sessions may optionally be associated with a Curriculum
+   * Roadmap module.
    *
-   * This keeps the relationship:
+   * Relationship:
    *
    * Curriculum Roadmap
    *        ↓
@@ -174,15 +212,18 @@ export default async function SchedulePage({
     await listModules(id)
 
   const modules: ModuleRow[] =
-    (rawModules || [])
+    rawModules
       .map(
-        (module: any) => ({
+        (module) => ({
           id: String(
             module.id,
           ),
 
           title:
-            module.title
+            module.title !==
+              null &&
+            module.title !==
+              undefined
               ? String(
                   module.title,
                 )
@@ -190,7 +231,7 @@ export default async function SchedulePage({
 
           module_order:
             module.module_order !==
-            null &&
+              null &&
             module.module_order !==
               undefined
               ? Number(
@@ -202,10 +243,10 @@ export default async function SchedulePage({
       .sort(
         (a, b) =>
           Number(
-            a.module_order || 0,
+            a.module_order ?? 0,
           ) -
           Number(
-            b.module_order || 0,
+            b.module_order ?? 0,
           ),
       )
 
@@ -213,12 +254,16 @@ export default async function SchedulePage({
    * ============================================================
    * CURRENT USER PROFILE
    * ============================================================
+   *
+   * Training engagement authorization uses the user's
+   * user_profiles record.
    */
 
-  const profileRes =
+  const profileResult =
     await query<{ id: string }>(
       `
-        SELECT id
+        SELECT
+          id
         FROM user_profiles
         WHERE user_id = $1
         LIMIT 1
@@ -227,7 +272,7 @@ export default async function SchedulePage({
     )
 
   const profileId =
-    profileRes.rows[0]?.id ||
+    profileResult.rows[0]?.id ||
     access.profileId ||
     null
 
@@ -240,24 +285,37 @@ export default async function SchedulePage({
    *   Full session management.
    *
    * Approved trainer:
-   *   Full session management for this engagement.
+   *   Session management for this engagement.
    *
-   * Normal Administrator:
-   *   View only unless approved as trainer.
+   * Administrator:
+   *   View only unless explicitly approved as a trainer.
    *
    * Investigator / Analyst:
-   *   Manage only when approved trainer.
+   *   Manage only when explicitly approved as a trainer.
    *
    * Client:
-   *   View schedule and respond to attendance.
+   *   View schedule and perform permitted client actions.
+   *
+   * IMPORTANT:
+   *
+   * Selecting/proposing a trainer does NOT grant trainer access.
+   *
+   * Access is activated only when the trainer assignment is
+   * approved and exists in:
+   *
+   * training_engagement_trainers
+   *
+   * with:
+   *
+   * assignment_status = approved
+   * removed_at IS NULL
    */
 
-  let canManageSessions =
-    false
+  let canManageSessions = false
 
   if (
     isSuperAdminRole(
-      user.role,
+      userRole,
     )
   ) {
     canManageSessions = true
@@ -291,12 +349,12 @@ export default async function SchedulePage({
       )}
     >
       <div className="space-y-6">
+
         {/* ======================================================
             CLIENT GOOGLE CALENDAR CONNECTION
             ====================================================== */}
 
-        {user.role ===
-          "client" && (
+        {isClient && (
           <GoogleCalendarConnection />
         )}
 
@@ -320,14 +378,14 @@ export default async function SchedulePage({
               canManageSessions
             }
             isClient={
-              user.role ===
-              "client"
+              isClient
             }
             modules={
               modules
             }
           />
         </section>
+
       </div>
     </TrainingShell>
   )

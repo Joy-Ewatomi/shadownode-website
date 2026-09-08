@@ -9,6 +9,7 @@ import {
   isApprovedTrainerForEngagement,
 } from "@/lib/services/training-operations-service"
 import AssignTrainerForm from "@/components/training/AssignTrainerForm"
+import TrainerApprovalActions from "@/components/training/TrainerApprovalActions"
 
 type TrainingEngagementPageProps = {
   params: Promise<{
@@ -38,6 +39,13 @@ type TrainingEngagementRow = {
 
   status: string | null
   payment_status: string | null
+
+  /*
+   * Legacy compatibility fields.
+   *
+   * These are intentionally NOT used as the authoritative
+   * trainer source of truth.
+   */
   assigned_trainer: string | null
   pending_trainer_id: string | null
   trainer_approval_status: string | null
@@ -65,6 +73,23 @@ type ProfileRow = {
   full_name: string | null
 }
 
+type TrainerAssignmentRow = {
+  id: string
+  training_engagement_id: string
+  trainer_profile_id: string
+  assignment_status: string
+  assigned_by: string | null
+  approval_requested_by: string | null
+  approved_by: string | null
+  approval_reason: string | null
+  assigned_at: string | Date | null
+  approved_at: string | Date | null
+  removed_at: string | Date | null
+  trainer_name: string | null
+}
+
+type PendingTrainerRow = TrainerAssignmentRow
+
 /*
  * ============================================================
  * DISPLAY HELPERS
@@ -85,14 +110,11 @@ function formatDate(value: string | Date | null): string {
     return String(value)
   }
 
-  return new Intl.DateTimeFormat(
-    "en-GB",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    },
-  ).format(date)
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date)
 }
 
 function formatDateTime(
@@ -111,19 +133,18 @@ function formatDateTime(
     return String(value)
   }
 
-  return new Intl.DateTimeFormat(
-    "en-GB",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    },
-  ).format(date)
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
 }
 
-function formatStatus(value: string | null): string {
+function formatStatus(
+  value: string | null | undefined,
+): string {
   if (!value) {
     return "Unknown"
   }
@@ -141,6 +162,16 @@ function isSuperAdminRole(
   return (
     role === "super_administrator" ||
     role === "super-administrator"
+  )
+}
+
+function isPendingAssignment(
+  status: string | null | undefined,
+): boolean {
+  return (
+    status ===
+      "pending_super_admin_approval" ||
+    status === "pending"
   )
 }
 
@@ -198,8 +229,8 @@ export default async function TrainingEngagementPage({
 
           status,
           payment_status,
-          assigned_trainer,
 
+          assigned_trainer,
           pending_trainer_id,
           trainer_approval_status,
           trainer_approval_requested_by,
@@ -248,21 +279,6 @@ export default async function TrainingEngagementPage({
   /*
    * ============================================================
    * AUTHORIZATION
-   *
-   * Client:
-   *   Only their own engagement.
-   *
-   * Investigator / Analyst:
-   *   Only if explicitly approved as trainer
-   *   for THIS engagement.
-   *
-   * Administrator:
-   *   Can oversee training when training:view exists.
-   *   Administrator role alone does NOT make them
-   *   the trainer.
-   *
-   * Super Administrator:
-   *   Full training oversight.
    * ============================================================
    */
 
@@ -327,11 +343,8 @@ export default async function TrainingEngagementPage({
             title,
             description,
             service_type
-
           FROM requests
-
           WHERE id = $1
-
           LIMIT 1
         `,
         [engagement.request_id],
@@ -357,11 +370,8 @@ export default async function TrainingEngagementPage({
           SELECT
             id,
             full_name
-
           FROM user_profiles
-
           WHERE id = $1
-
           LIMIT 1
         `,
         [engagement.client_profile_id],
@@ -375,67 +385,116 @@ export default async function TrainingEngagementPage({
 
   /*
    * ============================================================
-   * TRAINER
+   * AUTHORITATIVE TRAINER ASSIGNMENTS
+   *
+   * IMPORTANT:
+   *
+   * training_engagement_trainers is now the source of truth.
+   *
+   * We intentionally do NOT derive the active trainer list
+   * from training_engagements.assigned_trainer.
    * ============================================================
    */
 
-  let trainerName =
-    "Not assigned"
+  const trainerAssignmentsResult =
+    await query<TrainerAssignmentRow>(
+      `
+        SELECT
+          tet.id,
+          tet.training_engagement_id,
+          tet.trainer_profile_id,
+          tet.assignment_status,
+          tet.assigned_by,
+          tet.approval_requested_by,
+          tet.approved_by,
+          tet.approval_reason,
+          tet.assigned_at,
+          tet.approved_at,
+          tet.removed_at,
 
-  if (engagement.assigned_trainer) {
-    const trainerResult =
-      await query<ProfileRow>(
-        `
-          SELECT
-            id,
-            full_name
+          COALESCE(
+            NULLIF(TRIM(up.full_name), ''),
+            'Unnamed Trainer'
+          ) AS trainer_name
 
-          FROM user_profiles
+        FROM training_engagement_trainers tet
 
-          WHERE id = $1
+        LEFT JOIN user_profiles up
+          ON up.id = tet.trainer_profile_id
 
-          LIMIT 1
-        `,
-        [engagement.assigned_trainer],
-      )
+        WHERE tet.training_engagement_id = $1
 
-    trainerName =
-      trainerResult.rows[0]
-        ?.full_name?.trim() ||
-      trainerName
-  }
+        ORDER BY
+          CASE
+            WHEN tet.assignment_status = 'approved'
+              THEN 0
+            WHEN tet.assignment_status = 'pending_super_admin_approval'
+              THEN 1
+            ELSE 2
+          END,
+          tet.created_at ASC
+      `,
+      [id],
+    )
+
+  const trainerAssignments =
+    trainerAssignmentsResult.rows
 
   /*
    * ============================================================
-   * PENDING TRAINER
+   * APPROVED TRAINERS
    * ============================================================
    */
 
-  let pendingTrainerName =
+  const approvedTrainers =
+    trainerAssignments.filter(
+      (trainer) =>
+        trainer.assignment_status ===
+          "approved" &&
+        !trainer.removed_at,
+    )
+
+  /*
+   * ============================================================
+   * PENDING PROPOSAL
+   *
+   * Current design intentionally supports only one pending
+   * proposal at a time.
+   * ============================================================
+   */
+
+  const pendingTrainer =
+    trainerAssignments.find(
+      (trainer) =>
+        isPendingAssignment(
+          trainer.assignment_status,
+        ) &&
+        !trainer.removed_at,
+    ) || null
+
+  const hasPendingTrainerApproval =
+    Boolean(pendingTrainer)
+
+  /*
+   * ============================================================
+   * TRAINER DISPLAY
+   * ============================================================
+   */
+
+  const trainerName =
+    approvedTrainers.length > 0
+      ? approvedTrainers
+          .map(
+            (trainer) =>
+              trainer.trainer_name ||
+              "Unnamed Trainer",
+          )
+          .join(", ")
+      : "Not assigned"
+
+  const pendingTrainerName =
+    pendingTrainer?.trainer_name?.trim() ||
     "Not specified"
-
-  if (engagement.pending_trainer_id) {
-    const pendingTrainerResult =
-      await query<ProfileRow>(
-        `
-          SELECT
-            id,
-            full_name
-
-          FROM user_profiles
-
-          WHERE id = $1
-
-          LIMIT 1
-        `,
-        [engagement.pending_trainer_id],
-      )
-
-    pendingTrainerName =
-      pendingTrainerResult.rows[0]
-        ?.full_name?.trim() ||
-      pendingTrainerName
-  }
 
   /*
    * ============================================================
@@ -467,19 +526,55 @@ export default async function TrainingEngagementPage({
   const paymentLabel =
     formatStatus(paymentStatus)
 
+  /*
+   * Administrator can propose a trainer.
+   *
+   * Super Administrator can directly assign a trainer,
+   * except while a pending proposal is awaiting a decision.
+   *
+   * This is intentionally separate from trainer capability.
+   */
   const canAssignTrainer =
     user.role === "administrator" ||
     isSuperAdminRole(user.role)
 
-  const trainerApprovalStatus =
+  /*
+   * A normal administrator does NOT become a trainer simply
+   * because they are an administrator.
+   *
+   * They only gain trainer capabilities if they themselves
+   * become an approved trainer in training_engagement_trainers.
+   */
+
+  const isCurrentUserApprovedTrainer =
+    Boolean(
+      profileId &&
+        approvedTrainers.some(
+          (trainer) =>
+            trainer.trainer_profile_id ===
+            profileId,
+        ),
+    )
+
+  /*
+   * ============================================================
+   * LEGACY APPROVAL STATUS
+   *
+   * Only used for displaying old compatibility information
+   * when the junction table has no current pending proposal.
+   *
+   * The actual pending state comes from the junction table.
+   * ============================================================
+   */
+
+  const legacyApprovalStatus =
     engagement.trainer_approval_status ||
     "none"
 
-  const hasPendingTrainerApproval =
-    trainerApprovalStatus ===
-      "pending" ||
-    trainerApprovalStatus ===
-      "pending_super_admin_approval"
+  const trainerApprovalReason =
+    pendingTrainer?.approval_reason ||
+    engagement.trainer_approval_reason ||
+    null
 
   /*
    * ============================================================
@@ -509,7 +604,7 @@ export default async function TrainingEngagementPage({
 
   /*
    * ============================================================
-   * OVERVIEW
+   * PAGE
    * ============================================================
    */
 
@@ -552,10 +647,14 @@ export default async function TrainingEngagementPage({
                 </span>
               )}
 
-              {trainerApprovalStatus ===
-                "approved" && (
+              {approvedTrainers.length > 0 && (
                 <span className="rounded-md border border-[#20dc73]/20 bg-[#20dc73]/5 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[#20dc73]">
-                  Trainer Approved
+                  {approvedTrainers.length}{" "}
+                  {approvedTrainers.length ===
+                  1
+                    ? "Trainer"
+                    : "Trainers"}{" "}
+                  Assigned
                 </span>
               )}
             </div>
@@ -606,33 +705,120 @@ export default async function TrainingEngagementPage({
           value={clientName}
         />
 
-        <div>
-          <InfoCard
-            label="Trainer"
-            value={trainerName}
-          />
+        {/* ====================================================
+            TRAINERS
+        ==================================================== */}
 
-          {canAssignTrainer && (
-            <AssignTrainerForm
-              engagementId={id}
-              currentTrainer={trainerName}
-            />
+        <div className="rounded-xl border border-[#143b28] bg-[#04100b]/60 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-white/35">
+                Assigned Trainers
+              </p>
+
+              <p className="mt-2 text-sm font-medium text-white">
+                {trainerName}
+              </p>
+            </div>
+
+            {approvedTrainers.length >
+              0 && (
+              <span className="rounded-md border border-[#20dc73]/20 bg-[#20dc73]/5 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[#20dc73]">
+                {approvedTrainers.length}
+              </span>
+            )}
+          </div>
+
+          {approvedTrainers.length >
+            0 && (
+            <div className="mt-4 space-y-2">
+              {approvedTrainers.map(
+                (trainer) => (
+                  <div
+                    key={trainer.id}
+                    className="rounded-lg border border-white/5 bg-black/20 px-3 py-2"
+                  >
+                    <p className="text-xs font-medium text-white">
+                      {trainer.trainer_name ||
+                        "Unnamed Trainer"}
+                    </p>
+
+                    <p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-[#20dc73]/50">
+                      Approved Trainer
+                    </p>
+                  </div>
+                ),
+              )}
+            </div>
           )}
 
+          {/* ==================================================
+              ASSIGNMENT FORM
+          ================================================== */}
+
+          {canAssignTrainer &&
+            !(
+              isSuperAdminRole(
+                user.role,
+              ) &&
+              hasPendingTrainerApproval
+            ) && (
+              <div className="mt-4">
+                <AssignTrainerForm
+                  engagementId={id}
+                  currentTrainer={trainerName}
+                  isSuperAdmin={isSuperAdminRole(
+                    user.role,
+                  )}
+                />
+              </div>
+            )}
+
+          {/* ==================================================
+              PENDING PROPOSAL
+          ================================================== */}
+
           {hasPendingTrainerApproval && (
-            <div className="mt-3 rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-3">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-yellow-300/70">
-                Pending Trainer
+            <div className="mt-4 rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-yellow-300/70">
+                    Pending Trainer Proposal
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium text-white">
+                    {pendingTrainerName}
+                  </p>
+
+                  <p className="mt-1 text-[10px] leading-4 text-white/35">
+                    Awaiting Super Administrator
+                    approval. This person does not
+                    have trainer access yet.
+                  </p>
+                </div>
+
+                <span className="shrink-0 rounded-md border border-yellow-400/20 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.1em] text-yellow-300">
+                  Pending
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ==================================================
+              TRAINER ACCESS NOTICE
+          ================================================== */}
+
+          {isCurrentUserApprovedTrainer && (
+            <div className="mt-4 rounded-lg border border-[#20dc73]/20 bg-[#20dc73]/5 p-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-[#20dc73]/70">
+                Trainer Access Active
               </p>
 
-              <p className="mt-1 text-sm font-medium text-white">
-                {pendingTrainerName}
-              </p>
-
-              <p className="mt-1 text-[10px] leading-4 text-white/35">
-                Awaiting Super Administrator
-                approval before this person
-                becomes the assigned trainer.
+              <p className="mt-1 text-xs leading-5 text-white/55">
+                You are an approved trainer for
+                this engagement and may access the
+                training operational functions
+                available to your role.
               </p>
             </div>
           )}
@@ -717,16 +903,15 @@ export default async function TrainingEngagementPage({
       </section>
 
       {/* ======================================================
-          TRAINER APPROVAL INFORMATION
+          TRAINER ASSIGNMENT / APPROVAL
       ====================================================== */}
 
       {(hasPendingTrainerApproval ||
-        trainerApprovalStatus ===
-          "approved") &&
+        approvedTrainers.length > 0 ||
+        legacyApprovalStatus ===
+          "rejected") &&
         (canAssignTrainer ||
-          isSuperAdminRole(
-            user.role,
-          )) && (
+          isSuperAdminRole(user.role)) && (
           <section className="rounded-xl border border-[#143b28] bg-[#04100b]/60 p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -735,58 +920,206 @@ export default async function TrainingEngagementPage({
                 </p>
 
                 <h3 className="mt-1 text-lg font-semibold text-white">
-                  Assignment Approval
+                  Assignment Management
                 </h3>
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">
-                  Trainer assignments proposed
-                  by Administrators require
-                  Super Administrator approval
-                  before trainer access is
-                  activated.
+                  {hasPendingTrainerApproval
+                    ? "A trainer assignment has been proposed and is awaiting Super Administrator review."
+                    : approvedTrainers.length >
+                        0
+                      ? "Approved trainers currently have active access to this training engagement."
+                      : "No trainer is currently assigned to this engagement."}
                 </p>
               </div>
 
-              <div className="rounded-lg border border-[#143b28] bg-black/20 px-4 py-3">
+              <div
+                className={[
+                  "rounded-lg border px-4 py-3",
+                  hasPendingTrainerApproval
+                    ? "border-yellow-400/20 bg-yellow-400/5"
+                    : approvedTrainers.length >
+                        0
+                      ? "border-[#20dc73]/20 bg-[#20dc73]/5"
+                      : "border-red-400/20 bg-red-400/5",
+                ].join(" ")}
+              >
                 <p className="text-[10px] uppercase tracking-[0.12em] text-white/30">
                   Status
                 </p>
 
-                <p className="mt-1 text-sm font-medium text-white">
-                  {formatStatus(
-                    trainerApprovalStatus,
-                  )}
+                <p
+                  className={[
+                    "mt-1 text-sm font-medium",
+                    hasPendingTrainerApproval
+                      ? "text-yellow-300"
+                      : approvedTrainers.length >
+                          0
+                        ? "text-[#20dc73]"
+                        : "text-red-300",
+                  ].join(" ")}
+                >
+                  {hasPendingTrainerApproval
+                    ? "Pending Super Admin Approval"
+                    : approvedTrainers.length >
+                        0
+                      ? "Active"
+                      : "Unassigned"}
                 </p>
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <InfoCard
-                label="Proposed Trainer"
-                value={
-                  pendingTrainerName
-                }
-              />
+            {/* ==================================================
+                APPROVED TRAINER LIST
+            ================================================== */}
 
-              <InfoCard
-                label="Current Trainer"
-                value={trainerName}
-              />
-            </div>
-
-            {engagement.trainer_approval_reason && (
-              <div className="mt-4 rounded-lg border border-white/5 bg-black/20 p-4">
+            {approvedTrainers.length >
+              0 && (
+              <div className="mt-5">
                 <p className="text-[10px] uppercase tracking-[0.12em] text-white/30">
-                  Assignment Reason
+                  Active Trainers
                 </p>
 
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/55">
-                  {
-                    engagement.trainer_approval_reason
-                  }
-                </p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {approvedTrainers.map(
+                    (trainer) => (
+                      <div
+                        key={trainer.id}
+                        className="rounded-lg border border-[#143b28] bg-black/20 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-white">
+                              {trainer.trainer_name ||
+                                "Unnamed Trainer"}
+                            </p>
+
+                            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[#20dc73]/50">
+                              Approved Trainer
+                            </p>
+                          </div>
+
+                          <span className="rounded-md border border-[#20dc73]/20 bg-[#20dc73]/5 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.1em] text-[#20dc73]">
+                            ACTIVE
+                          </span>
+                        </div>
+
+                        <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
+                          <DetailRow
+                            label="Assigned"
+                            value={formatDateTime(
+                              trainer.assigned_at,
+                            )}
+                          />
+
+                          <DetailRow
+                            label="Approved"
+                            value={formatDateTime(
+                              trainer.approved_at,
+                            )}
+                          />
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
               </div>
             )}
+
+            {/* ==================================================
+                PENDING APPROVAL
+            ================================================== */}
+
+            {hasPendingTrainerApproval &&
+              pendingTrainer && (
+                <div className="mt-5 rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-yellow-300/70">
+                        Pending Trainer Proposal
+                      </p>
+
+                      <h4 className="mt-1 text-base font-semibold text-white">
+                        {pendingTrainerName}
+                      </h4>
+
+                      <p className="mt-2 text-xs leading-5 text-white/45">
+                        This assignment is not active
+                        yet. Super Administrator approval
+                        is required before trainer access is
+                        granted.
+                      </p>
+                    </div>
+
+                    <span className="shrink-0 rounded-md border border-yellow-400/20 bg-yellow-400/5 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-yellow-300">
+                      Awaiting Review
+                    </span>
+                  </div>
+
+                  {trainerApprovalReason && (
+                    <div className="mt-4 rounded-lg border border-white/5 bg-black/20 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-white/30">
+                        Assignment Reason
+                      </p>
+
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/55">
+                        {trainerApprovalReason}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ==================================================
+                      SUPER ADMIN APPROVAL ACTIONS
+                  ================================================== */}
+
+                  {isSuperAdminRole(
+                    user.role,
+                  ) && (
+                    <TrainerApprovalActions
+                      engagementId={id}
+                      pendingTrainerName={
+                        pendingTrainerName
+                      }
+                    />
+                  )}
+                </div>
+              )}
+
+            {/* ==================================================
+                REJECTED
+            ================================================== */}
+
+            {!hasPendingTrainerApproval &&
+              legacyApprovalStatus ===
+                "rejected" &&
+              approvedTrainers.length ===
+                0 && (
+                <div className="mt-5 rounded-lg border border-red-400/20 bg-red-400/5 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-red-300/70">
+                    Previous Proposal Rejected
+                  </p>
+
+                  <p className="mt-2 text-sm leading-6 text-white/50">
+                    The previous trainer assignment
+                    proposal was rejected. An Administrator
+                    may submit a new proposal.
+                  </p>
+
+                  {engagement.trainer_approval_reason && (
+                    <div className="mt-3 rounded-lg border border-white/5 bg-black/20 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-white/30">
+                        Previous Decision Reason
+                      </p>
+
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/50">
+                        {
+                          engagement.trainer_approval_reason
+                        }
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
           </section>
         )}
 
@@ -806,11 +1139,11 @@ export default async function TrainingEngagementPage({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-         <WorkspaceLink
-  href={`/dashboard/training/${id}/plan`}
-  title="Curriculum Roadmap"
-  description="Learning path, modules, objectives and training structure."
-/>
+          <WorkspaceLink
+            href={`/dashboard/training/${id}/plan`}
+            title="Curriculum Roadmap"
+            description="Learning path, modules, objectives and training structure."
+          />
 
           <WorkspaceLink
             href={`/dashboard/training/${id}/schedule`}
