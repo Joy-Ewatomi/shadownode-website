@@ -19,6 +19,39 @@ function isSuperAdminRole(
   )
 }
 
+function toNumber(
+  value: unknown,
+  fallback = 0,
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return fallback
+  }
+
+  const numeric = Number(value)
+
+  return Number.isFinite(numeric)
+    ? numeric
+    : fallback
+}
+
+function toNullableString(
+  value: unknown,
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null
+  }
+
+  const result = String(value).trim()
+
+  return result || null
+}
+
 export default async function CertificatePage({
   params,
 }: {
@@ -32,22 +65,15 @@ export default async function CertificatePage({
     return redirect("/login")
   }
 
+  /*
+   * ============================================================
+   * TRAINING ACCESS
+   * ============================================================
+   */
+
   let access
 
   try {
-    /*
-     * Certificate viewing is an engagement-access operation.
-     *
-     * We do NOT require trainer access here because:
-     *
-     * - Client should be able to view their certificate
-     * - Super Admin should be able to view any certificate
-     * - Approved trainer can view the certificate
-     * - Admin can view the certificate where their normal
-     *   training access allows it
-     *
-     * Issuing the certificate is authorized separately below.
-     */
     access = await ensureAccess(
       id,
       user,
@@ -57,13 +83,21 @@ export default async function CertificatePage({
     return notFound()
   }
 
+  /*
+   * ============================================================
+   * LOAD ENGAGEMENT
+   * ============================================================
+   */
+
   const engRes = await query(
     `
       SELECT
         id,
         engagement_number,
         status,
-        training_goal
+        progress,
+        training_goal,
+        client_profile_id
       FROM training_engagements
       WHERE id = $1
       LIMIT 1
@@ -71,51 +105,224 @@ export default async function CertificatePage({
     [id],
   )
 
-  const engagement = engRes.rows[0]
+  const rawEngagement =
+    engRes.rows[0] as
+      | Record<string, unknown>
+      | undefined
 
-  if (!engagement) {
+  if (!rawEngagement) {
     return notFound()
   }
 
-  const certificateRes = await query(
-    `
-      SELECT
-        id,
-        certificate_number,
-        recipient_name,
-        issued_at,
-        verification_url
-      FROM training_certificates
-      WHERE training_engagement_id = $1
-      LIMIT 1
-    `,
-    [id],
-  )
+  const engagement = {
+    id:
+      toNullableString(
+        rawEngagement.id,
+      ) || id,
 
-  const certificateRow =
-    certificateRes.rows[0]
+    engagement_number:
+      toNullableString(
+        rawEngagement.engagement_number,
+      ) || id,
 
-  const certificate = certificateRow
-    ? {
-        ...certificateRow,
-        issued_at: certificateRow.issued_at
-          ? String(certificateRow.issued_at)
-          : null,
-      }
-    : null
+    status:
+      toNullableString(
+        rawEngagement.status,
+      ) || "unknown",
+
+    progress:
+      toNumber(
+        rawEngagement.progress,
+        0,
+      ),
+
+    training_goal:
+      toNullableString(
+        rawEngagement.training_goal,
+      ),
+
+    client_profile_id:
+      toNullableString(
+        rawEngagement.client_profile_id,
+      ),
+  }
 
   /*
-   * Certificate issuance authority:
-   *
-   * 1. Super Administrator
-   * 2. Approved trainer assigned to this engagement
-   *
-   * Being an Administrator, Investigator, or Analyst alone
-   * is NOT enough.
+   * ============================================================
+   * LOAD EXISTING CERTIFICATE
+   * ============================================================
    */
+
+  const certificateRes =
+    await query(
+      `
+        SELECT
+          id,
+          certificate_number,
+          recipient_name,
+          training_title,
+          training_type,
+          trainer_name,
+          completion_date,
+          issued_at,
+          verification_url
+        FROM training_certificates
+        WHERE training_engagement_id = $1
+        ORDER BY issued_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      [id],
+    )
+
+  const rawCertificate =
+    certificateRes.rows[0] as
+      | Record<string, unknown>
+      | undefined
+
+  const certificate =
+    rawCertificate
+      ? {
+          id:
+            toNullableString(
+              rawCertificate.id,
+            ) || "",
+
+          certificate_number:
+            toNullableString(
+              rawCertificate.certificate_number,
+            ) || "",
+
+          recipient_name:
+            toNullableString(
+              rawCertificate.recipient_name,
+            ),
+
+          training_title:
+            toNullableString(
+              rawCertificate.training_title,
+            ),
+
+          training_type:
+            toNullableString(
+              rawCertificate.training_type,
+            ),
+
+          trainer_name:
+            toNullableString(
+              rawCertificate.trainer_name,
+            ),
+
+          completion_date:
+            toNullableString(
+              rawCertificate.completion_date,
+            ),
+
+          issued_at:
+            toNullableString(
+              rawCertificate.issued_at,
+            ),
+
+          verification_url:
+            toNullableString(
+              rawCertificate.verification_url,
+            ),
+        }
+      : null
+
+  /*
+   * ============================================================
+   * LOAD CLIENT FEEDBACK
+   * ============================================================
+   *
+   * The certificate recipient name comes from the name the
+   * client entered specifically for the Certificate of Completion.
+   *
+   * Username/nickname is NOT used here.
+   * ============================================================
+   */
+
+  let feedbackSubmitted = false
+
+  let feedbackRating:
+    | number
+    | null = null
+
+  let feedbackComments:
+    | string
+    | null = null
+
+  let certificateRecipientName:
+    | string
+    | null = null
+
+  if (
+    engagement.client_profile_id
+  ) {
+    const feedbackRes =
+      await query(
+        `
+          SELECT
+            rating,
+            feedback,
+            certificate_recipient_name,
+            submitted_at,
+            created_at
+          FROM training_feedback
+          WHERE training_engagement_id = $1
+            AND client_profile_id = $2
+          ORDER BY
+            submitted_at DESC NULLS LAST,
+            created_at DESC
+          LIMIT 1
+        `,
+        [
+          id,
+          engagement.client_profile_id,
+        ],
+      )
+
+    const rawFeedback =
+      feedbackRes.rows[0] as
+        | Record<string, unknown>
+        | undefined
+
+    if (rawFeedback) {
+      feedbackSubmitted = true
+
+      feedbackRating =
+        rawFeedback.rating !== null &&
+        rawFeedback.rating !== undefined
+          ? toNumber(
+              rawFeedback.rating,
+              0,
+            )
+          : null
+
+      feedbackComments =
+        toNullableString(
+          rawFeedback.feedback,
+        )
+
+      certificateRecipientName =
+        toNullableString(
+          rawFeedback.certificate_recipient_name,
+        )
+    }
+  }
+
+  /*
+   * ============================================================
+   * CERTIFICATE ISSUANCE PERMISSION
+   * ============================================================
+   */
+
   let canIssueCertificate = false
 
-  if (isSuperAdminRole(user.role)) {
+  if (
+    isSuperAdminRole(
+      user.role,
+    )
+  ) {
     canIssueCertificate = true
   } else {
     canIssueCertificate =
@@ -127,38 +334,75 @@ export default async function CertificatePage({
   }
 
   /*
-   * A certificate cannot be issued while one already exists.
-   *
-   * This is only a UI decision. The API and completion
-   * service remain the real security/business boundaries.
+   * ============================================================
+   * PAGE
+   * ============================================================
    */
-  const showIssueCertificate =
-    !certificate && canIssueCertificate
 
   return (
     <TrainingShell
       user={user}
       engagementId={id}
-      engagementNumber={String(
-        engagement.engagement_number || id,
-      )}
+      engagementNumber={
+        engagement.engagement_number
+      }
       title="Certificate"
-      status={String(
-        engagement.status || "unknown",
-      )}
+      status={engagement.status}
     >
-      <div className="space-y-6">
-        <section className="rounded-xl border border-[#143b28] bg-[#04100b]/60 p-6">
-          <TrainingCertificate
-            certificate={certificate}
-            engagementId={id}
-            userRole={user.role}
-            canIssueCertificate={
-              showIssueCertificate
-            }
-          />
-        </section>
+      <div className="certificate-page-container">
+        <TrainingCertificate
+          certificate={certificate}
+          engagementId={id}
+          userRole={user.role}
+          canIssueCertificate={
+            canIssueCertificate
+          }
+          progress={engagement.progress}
+          trainingStatus={
+            engagement.status
+          }
+          feedbackSubmitted={
+            feedbackSubmitted
+          }
+          trainingTitle={
+            engagement.training_goal
+          }
+          trainerName={
+            certificate?.trainer_name ||
+            "ShadowNode Training Facilitator"
+          }
+          completionDate={
+            certificate?.completion_date ||
+            null
+          }
+          feedbackRating={
+            feedbackRating
+          }
+          feedbackComments={
+            feedbackComments
+          }
+          certificateRecipientName={
+            certificateRecipientName
+          }
+        />
       </div>
+
+      <style>{`
+        .certificate-page-container {
+          width: 100%;
+        }
+
+        @media print {
+          .certificate-page-container {
+            width: 297mm !important;
+            height: 210mm !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
+        }
+      `}</style>
     </TrainingShell>
   )
 }

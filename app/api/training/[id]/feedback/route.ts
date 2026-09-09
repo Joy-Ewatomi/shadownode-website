@@ -1,41 +1,703 @@
 import { NextRequest, NextResponse } from "next/server"
+
 import { getCurrentUser } from "@/lib/auth"
-import { ensureAccess } from "@/lib/services/training-operations-service"
 import { query } from "@/lib/db"
+import {
+  ensureAccess,
+} from "@/lib/services/training-operations-service"
 
-export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser()
+type RouteContext = {
+  params: Promise<{
+    id: string
+  }>
+}
 
+type TrainingEngagementRow = {
+  id: string
+  progress: number | string | null
+  status: string | null
+  client_profile_id: string | null
+}
+
+type FeedbackRow = {
+  id: string
+  client_profile_id: string
+  rating: number | string
+  comments: string | null
+  created_at: string | null
+}
+
+function errorMessage(
+  error: unknown,
+): string {
+  return error instanceof Error
+    ? error.message
+    : String(
+        error ||
+          "Unable to process training feedback.",
+      )
+}
+
+function isSuperAdminRole(
+  role: string | null | undefined,
+): boolean {
+  return (
+    role === "super_administrator" ||
+    role === "super-administrator"
+  )
+}
+
+function isOperationalRole(
+  role: string | null | undefined,
+): boolean {
+  return (
+    role === "investigator" ||
+    role === "analyst" ||
+    role === "administrator" ||
+    isSuperAdminRole(role)
+  )
+}
+
+async function getTrainingEngagement(
+  engagementId: string,
+): Promise<TrainingEngagementRow> {
+  const result =
+    await query<TrainingEngagementRow>(
+      `
+        SELECT
+          id,
+          progress,
+          status,
+          client_profile_id
+        FROM training_engagements
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [engagementId],
+    )
+
+  if (!result.rows[0]) {
+    throw new Error(
+      "Training engagement not found",
+    )
+  }
+
+  return result.rows[0]
+}
+
+async function listFeedbackForEngagement(
+  engagementId: string,
+): Promise<FeedbackRow[]> {
+  const result =
+    await query<FeedbackRow>(
+      `
+        SELECT
+          id,
+          client_profile_id,
+          rating,
+          feedback AS comments,
+          created_at
+        FROM training_feedback
+        WHERE training_engagement_id = $1
+        ORDER BY created_at DESC
+      `,
+      [engagementId],
+    )
+
+  return result.rows
+}
+
+/* ============================================================
+   GET
+   ============================================================ */
+
+export async function GET(
+  _request: NextRequest,
+  context: RouteContext,
+) {
   try {
-    const { id } = await context.params
-    await ensureAccess(id, user, false)
+    const user =
+      await getCurrentUser()
 
-    // Use actual schema columns: client_profile_id and feedback (text)
-    const res = await query(`SELECT id, client_profile_id, rating, feedback AS comments, created_at FROM training_feedback WHERE training_engagement_id = $1 ORDER BY created_at DESC`, [id])
-    return NextResponse.json({ success: true, feedback: res.rows })
-  } catch (err: any) {
-    return NextResponse.json({ error: String(err?.message || err) }, { status: 403 })
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
+      )
+    }
+
+    const { id } =
+      await context.params
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Engagement-level authorization.
+     */
+    const access =
+      await ensureAccess(
+        id,
+        user,
+        false,
+      )
+
+    const engagement =
+      await getTrainingEngagement(id)
+
+    /*
+     * Clients receive only their own feedback.
+     * Operational users may review feedback
+     * according to the existing training access model.
+     */
+    if (
+      user.role === "client"
+    ) {
+      const clientProfileId =
+        access.profileId ||
+        engagement.client_profile_id
+
+      if (!clientProfileId) {
+        return NextResponse.json(
+          {
+            error:
+              "Client profile could not be determined.",
+          },
+          {
+            status: 403,
+          },
+        )
+      }
+
+      const result =
+        await query<FeedbackRow>(
+          `
+            SELECT
+              id,
+              client_profile_id,
+              rating,
+              feedback AS comments,
+              created_at
+            FROM training_feedback
+            WHERE training_engagement_id = $1
+              AND client_profile_id = $2
+            ORDER BY created_at DESC
+          `,
+          [
+            id,
+            clientProfileId,
+          ],
+        )
+
+      return NextResponse.json(
+        {
+          success: true,
+          feedback:
+            result.rows,
+          progress: Number(
+            engagement.progress || 0,
+          ),
+          feedbackSubmitted:
+            result.rows.length > 0,
+          feedbackUnlocked:
+            Number(
+              engagement.progress || 0,
+            ) >= 100,
+        },
+        {
+          status: 200,
+        },
+      )
+    }
+
+    if (
+      isOperationalRole(
+        user.role,
+      )
+    ) {
+      const feedback =
+        await listFeedbackForEngagement(
+          id,
+        )
+
+      return NextResponse.json(
+        {
+          success: true,
+          feedback,
+          progress: Number(
+            engagement.progress || 0,
+          ),
+          feedbackUnlocked:
+            Number(
+              engagement.progress || 0,
+            ) >= 100,
+        },
+        {
+          status: 200,
+        },
+      )
+    }
+
+    return NextResponse.json(
+      {
+        error: "Forbidden",
+      },
+      {
+        status: 403,
+      },
+    )
+  } catch (error: unknown) {
+    console.error(
+      "TRAINING FEEDBACK GET ERROR:",
+      error,
+    )
+
+    const message =
+      errorMessage(error)
+
+    const normalized =
+      message.toLowerCase()
+
+    let status = 500
+
+    if (
+      normalized.includes(
+        "unauthorized",
+      )
+    ) {
+      status = 401
+    } else if (
+      normalized.includes(
+        "forbidden",
+      ) ||
+      normalized.includes(
+        "not authorized",
+      )
+    ) {
+      status = 403
+    } else if (
+      normalized.includes(
+        "not found",
+      )
+    ) {
+      status = 404
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: message,
+      },
+      {
+        status,
+      },
+    )
   }
 }
 
-export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser()
+/* ============================================================
+   POST
+   One-time client feedback submission
+   ============================================================ */
 
+export async function POST(
+  request: NextRequest,
+  context: RouteContext,
+) {
   try {
-    const { id } = await context.params
-    const access = await ensureAccess(id, user, false)
+    const user =
+      await getCurrentUser()
 
-    // Only clients can submit feedback (for now)
-    if (!user || user.role !== 'client') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
+      )
+    }
 
-    const body = await req.json()
-    if (!body.rating) return NextResponse.json({ error: 'rating is required' }, { status: 400 })
+    if (
+      user.role !== "client"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Only the client can submit training feedback.",
+        },
+        {
+          status: 403,
+        },
+      )
+    }
 
-    // Insert using existing schema: client_profile_id and feedback
-    const res = await query(`INSERT INTO training_feedback (training_engagement_id, client_profile_id, rating, feedback, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),NOW()) RETURNING id, client_profile_id, rating, feedback AS comments, created_at`, [id, access.profileId, body.rating, body.comments || null])
+    const { id } =
+      await context.params
 
-    return NextResponse.json({ success: true, feedback: res.rows[0] })
-  } catch (err: any) {
-    return NextResponse.json({ error: String(err?.message || err) }, { status: 400 })
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Client must own this engagement.
+     */
+    const access =
+      await ensureAccess(
+        id,
+        user,
+        false,
+      )
+
+    if (!access.profileId) {
+      return NextResponse.json(
+        {
+          error:
+            "Client profile could not be determined.",
+        },
+        {
+          status: 403,
+        },
+      )
+    }
+
+    const engagement =
+      await getTrainingEngagement(id)
+
+    /*
+     * --------------------------------------------------------
+     * COMPLETION GATE
+     * --------------------------------------------------------
+     *
+     * Feedback cannot be submitted until the
+     * authoritative training progress reaches 100%.
+     */
+    const progress =
+      Number(
+        engagement.progress || 0,
+      )
+
+    if (
+      !Number.isFinite(progress) ||
+      progress < 100
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Training feedback is locked until overall training progress reaches 100%.",
+          feedbackUnlocked: false,
+          progress,
+        },
+        {
+          status: 403,
+        },
+      )
+    }
+
+    /*
+     * The completion workflow should also have marked
+     * the engagement completed by this point.
+     *
+     * We do not require status === "completed" here
+     * because progress is the explicit unlock condition.
+     */
+    let body: Record<
+      string,
+      unknown
+    >
+
+    try {
+      body =
+        await request.json()
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Request body must contain valid JSON.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    const rating =
+      Number(body.rating)
+
+    if (
+      !Number.isFinite(rating) ||
+      !Number.isInteger(rating) ||
+      rating < 1 ||
+      rating > 5
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "rating must be an integer between 1 and 5.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    const comments =
+      typeof body.comments ===
+      "string"
+        ? body.comments.trim()
+        : null
+
+    /*
+     * --------------------------------------------------------
+     * ONE-TIME SUBMISSION
+     * --------------------------------------------------------
+     *
+     * A client can submit feedback only once for
+     * a particular training engagement.
+     */
+    const existing =
+      await query<{
+        id: string
+      }>(
+        `
+          SELECT id
+          FROM training_feedback
+          WHERE training_engagement_id = $1
+            AND client_profile_id = $2
+          LIMIT 1
+        `,
+        [
+          id,
+          access.profileId,
+        ],
+      )
+
+    if (existing.rows[0]) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Feedback has already been submitted for this training engagement.",
+          feedbackSubmitted: true,
+          feedbackId:
+            existing.rows[0].id,
+          feedbackUnlocked: true,
+        },
+        {
+          status: 409,
+        },
+      )
+    }
+
+    /*
+     * Insert feedback.
+     */
+    const result =
+      await query<FeedbackRow>(
+        `
+          INSERT INTO training_feedback (
+            training_engagement_id,
+            client_profile_id,
+            rating,
+            feedback,
+            created_at,
+            updated_at
+          )
+          SELECT
+            $1,
+            $2,
+            $3,
+            $4,
+            NOW(),
+            NOW()
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM training_feedback
+            WHERE training_engagement_id = $1
+              AND client_profile_id = $2
+          )
+          RETURNING
+            id,
+            client_profile_id,
+            rating,
+            feedback AS comments,
+            created_at
+        `,
+        [
+          id,
+          access.profileId,
+          rating,
+          comments || null,
+        ],
+      )
+
+    /*
+     * If another request inserted the feedback
+     * between our existence check and insert,
+     * RETURNING will be empty.
+     *
+     * That means the one-time rule still wins.
+     */
+    if (!result.rows[0]) {
+      const alreadySubmitted =
+        await query<{
+          id: string
+        }>(
+          `
+            SELECT id
+            FROM training_feedback
+            WHERE training_engagement_id = $1
+              AND client_profile_id = $2
+            LIMIT 1
+          `,
+          [
+            id,
+            access.profileId,
+          ],
+        )
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Feedback has already been submitted for this training engagement.",
+          feedbackSubmitted: true,
+          feedbackId:
+            alreadySubmitted.rows[0]
+              ?.id || null,
+          feedbackUnlocked: true,
+        },
+        {
+          status: 409,
+        },
+      )
+    }
+
+    const submitted =
+      result.rows[0]
+
+    /*
+     * Record the event in the existing training
+     * activity ledger.
+     */
+    try {
+      await query(
+        `
+          INSERT INTO training_updates (
+            training_engagement_id,
+            updated_by,
+            update_type,
+            title,
+            content
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5
+          )
+        `,
+        [
+          id,
+          access.profileId,
+          "feedback_submitted",
+          "Feedback Submitted",
+          "The client submitted training feedback after completing the training engagement.",
+        ],
+      )
+    } catch (updateError) {
+      /*
+       * Feedback submission itself must remain
+       * successful even if the activity ledger fails.
+       */
+      console.error(
+        "TRAINING FEEDBACK ACTIVITY ERROR:",
+        updateError,
+      )
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        feedback: submitted,
+        feedbackSubmitted: true,
+        feedbackUnlocked: true,
+        certificateUnlocked:
+          true,
+      },
+      {
+        status: 201,
+      },
+    )
+  } catch (error: unknown) {
+    console.error(
+      "TRAINING FEEDBACK POST ERROR:",
+      error,
+    )
+
+    const message =
+      errorMessage(error)
+
+    const normalized =
+      message.toLowerCase()
+
+    let status = 400
+
+    if (
+      normalized.includes(
+        "unauthorized",
+      )
+    ) {
+      status = 401
+    } else if (
+      normalized.includes(
+        "forbidden",
+      ) ||
+      normalized.includes(
+        "not authorized",
+      )
+    ) {
+      status = 403
+    } else if (
+      normalized.includes(
+        "not found",
+      )
+    ) {
+      status = 404
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: message,
+      },
+      {
+        status,
+      },
+    )
   }
 }

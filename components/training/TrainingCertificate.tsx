@@ -1,11 +1,74 @@
 "use client"
-import React, { useState } from "react"
+
+import {
+  useEffect,
+  useState,
+} from "react"
+import QRCode from "qrcode"
+
+type CertificateData = {
+  id: string
+  certificate_number: string
+  recipient_name: string | null
+  training_title?: string | null
+  training_type?: string | null
+  trainer_name?: string | null
+  completion_date?: string | null
+  issued_at?: string | null
+  verification_url?: string | null
+}
+
+type FeedbackData = {
+  rating: number
+  comments: string | null
+  certificate_recipient_name?: string | null
+  submitted_at?: string | null
+}
 
 type TrainingCertificateProps = {
-  certificate: any
+  certificate: CertificateData | null
   engagementId: string
   userRole: string
   canIssueCertificate: boolean
+
+  progress?: number
+  trainingStatus?: string | null
+  feedbackSubmitted?: boolean
+
+  trainingTitle?: string | null
+  trainerName?: string | null
+  completionDate?: string | null
+  duration?: string | null
+
+  feedbackRating?: number | null
+  feedbackComments?: string | null
+  certificateRecipientName?: string | null
+}
+
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "—"
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+}
+
+function clampProgress(value: number) {
+  return Math.min(100, Math.max(0, Math.round(value)))
+}
+
+function clampRating(value: number) {
+  return Math.min(5, Math.max(0, Math.round(value)))
 }
 
 export default function TrainingCertificate({
@@ -13,49 +76,1668 @@ export default function TrainingCertificate({
   engagementId,
   userRole,
   canIssueCertificate,
-}: TrainingCertificateProps){
-  const [cert, setCert] = useState(certificate || null)
-  const [loading, setLoading] = useState(false)
+  progress = 0,
+  trainingStatus = null,
+  feedbackSubmitted = false,
+  trainingTitle = null,
+  trainerName = null,
+  completionDate = null,
+  duration = null,
+  feedbackRating = null,
+  feedbackComments = null,
+  certificateRecipientName = null,
+}: TrainingCertificateProps) {
+  const [cert, setCert] =
+    useState<CertificateData | null>(
+      certificate,
+    )
 
-  async function issue() {
-    if (!confirm('Issue certificate of completion?')) return
+  const [loading, setLoading] =
+    useState(false)
+
+  const [feedback, setFeedback] =
+    useState<FeedbackData | null>(
+      feedbackRating ||
+        feedbackComments ||
+        certificateRecipientName
+        ? {
+            rating: clampRating(
+              feedbackRating || 0,
+            ),
+            comments:
+              feedbackComments || null,
+            certificate_recipient_name:
+              certificateRecipientName ||
+              null,
+          }
+        : null,
+    )
+
+  const [feedbackLoading, setFeedbackLoading] =
+    useState(false)
+
+  const safeProgress =
+    clampProgress(progress)
+
+  const isTrainingComplete =
+    safeProgress >= 100 ||
+    trainingStatus === "completed"
+
+  const hasFeedback =
+    feedbackSubmitted ||
+    !!feedback
+
+  const certificateUnlocked =
+    isTrainingComplete &&
+    hasFeedback
+
+  /*
+   * ============================================================
+   * LOAD EXISTING FEEDBACK
+   * ============================================================
+   */
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadFeedback() {
+      if (!engagementId) {
+        return
+      }
+
+      setFeedbackLoading(true)
+
+      try {
+        const response =
+          await fetch(
+            `/api/training/${engagementId}/feedback`,
+            {
+              method: "GET",
+              cache: "no-store",
+            },
+          )
+
+        if (!response.ok) {
+          return
+        }
+
+        const payload =
+          await response.json()
+
+        if (cancelled) {
+          return
+        }
+
+        const rawFeedback =
+          payload?.feedback ||
+          payload?.data ||
+          payload?.feedbackData ||
+          null
+
+        if (
+          rawFeedback &&
+          !Array.isArray(rawFeedback) &&
+          typeof rawFeedback === "object"
+        ) {
+          const ratingValue =
+            Number(
+              rawFeedback.rating ??
+                rawFeedback.rating_value ??
+                0,
+            )
+
+          setFeedback({
+            rating: clampRating(
+              Number.isFinite(
+                ratingValue,
+              )
+                ? ratingValue
+                : 0,
+            ),
+            comments:
+              rawFeedback.feedback ??
+              rawFeedback.comments ??
+              rawFeedback.comment ??
+              null,
+            certificate_recipient_name:
+              rawFeedback.certificate_recipient_name ??
+              rawFeedback.certificate_name ??
+              null,
+            submitted_at:
+              rawFeedback.submitted_at ??
+              rawFeedback.created_at ??
+              null,
+          })
+
+          return
+        }
+
+        if (
+          Array.isArray(rawFeedback)
+        ) {
+          const first =
+            rawFeedback[0]
+
+          if (!first) {
+            return
+          }
+
+          const ratingValue =
+            Number(
+              first.rating ??
+                first.rating_value ??
+                0,
+            )
+
+          setFeedback({
+            rating: clampRating(
+              Number.isFinite(
+                ratingValue,
+              )
+                ? ratingValue
+                : 0,
+            ),
+            comments:
+              first.feedback ??
+              first.comments ??
+              first.comment ??
+              null,
+            certificate_recipient_name:
+              first.certificate_recipient_name ??
+              first.certificate_name ??
+              null,
+            submitted_at:
+              first.submitted_at ??
+              first.created_at ??
+              null,
+          })
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load training feedback:",
+          error,
+        )
+      } finally {
+        if (!cancelled) {
+          setFeedbackLoading(false)
+        }
+      }
+    }
+
+    loadFeedback()
+
+    return () => {
+      cancelled = true
+    }
+  }, [engagementId])
+
+  /*
+   * ============================================================
+   * ISSUE CERTIFICATE
+   * ============================================================
+   */
+
+  async function issueCertificate() {
+    if (!certificateUnlocked) {
+      return
+    }
+
+    const confirmed =
+      window.confirm(
+        "Issue this Certificate of Completion?",
+      )
+
+    if (!confirmed) {
+      return
+    }
+
     setLoading(true)
-    const res = await fetch(`/api/training/${engagementId}/certificate`, { method: 'POST' })
-    const p = await res.json()
-    setLoading(false)
-    if (p?.certificate_id) {
-      setCert({ id: p.certificate_id, certificate_number: p.certificate_number, issued_at: new Date().toISOString() })
-      alert('Certificate issued')
-    } else {
-      alert(p.error || 'Failed to issue certificate')
+
+    try {
+      const response =
+        await fetch(
+          `/api/training/${engagementId}/certificate`,
+          {
+            method: "POST",
+          },
+        )
+
+      const payload =
+        await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ||
+            "Failed to issue certificate",
+        )
+      }
+
+      setCert({
+        id:
+          payload.certificate_id,
+
+        certificate_number:
+          payload.certificate_number,
+
+        recipient_name:
+          payload.recipient_name ||
+          feedback?.certificate_recipient_name ||
+          null,
+
+        training_title:
+          payload.training_title ||
+          trainingTitle ||
+          "Cybersecurity Awareness Training",
+
+        training_type:
+          payload.training_type ||
+          null,
+
+        trainer_name:
+          payload.trainer_name ||
+          trainerName ||
+          null,
+
+        completion_date:
+          payload.completion_date ||
+          completionDate ||
+          null,
+
+        issued_at:
+          payload.issued_at ||
+          new Date().toISOString(),
+
+        verification_url:
+          payload.verification_url ||
+          null,
+      })
+
+      window.alert(
+        "Certificate issued successfully.",
+      )
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to issue certificate",
+      )
+    } finally {
+      setLoading(false)
     }
   }
 
-  return (
-    <div>
-      <h3 className="text-lg font-semibold text-white">Certificate</h3>
+  function printCertificate() {
+    document.body.classList.add(
+      "printing-training-certificate",
+    )
 
-      <div className="mt-4">
-        {cert ? (
-          <div className="rounded-md border border-white/5 p-3 bg-black/20">
-            <div className="font-semibold text-white">Certificate of Completion</div>
-            <div className="text-xs text-white/50">Number: {cert.certificate_number}</div>
-            <div className="text-xs text-white/50">Issued: {cert.issued_at ? new Date(String(cert.issued_at)).toLocaleDateString() : ''}</div>
-            {cert.verification_url && (
-              <div className="mt-2"><a href={cert.verification_url} target="_blank" rel="noreferrer" className="underline">Verify Certificate</a></div>
-            )}
+    window.setTimeout(() => {
+      window.print()
+    }, 100)
+
+    window.setTimeout(() => {
+      document.body.classList.remove(
+        "printing-training-certificate",
+      )
+    }, 1500)
+  }
+
+  /*
+   * ============================================================
+   * CERTIFICATE VALUES
+   * ============================================================
+   */
+
+  const finalTrainingTitle =
+    cert?.training_title ||
+    trainingTitle ||
+    "Cybersecurity Awareness Training"
+
+  const finalTrainerName =
+    cert?.trainer_name ||
+    trainerName ||
+    "ShadowNode Training Team"
+
+  const finalCompletionDate =
+    cert?.completion_date ||
+    completionDate ||
+    null
+
+  const finalRecipientName =
+    cert?.recipient_name ||
+    feedback?.certificate_recipient_name ||
+    "Certificate Recipient"
+
+  const finalRating =
+    feedback?.rating
+      ? clampRating(feedback.rating)
+      : 0
+
+  const finalComments =
+    feedback?.comments?.trim() ||
+    ""
+
+  /*
+   * ============================================================
+   * PRINT STYLES
+   * ============================================================
+   */
+
+  const printStyles = `
+    @page {
+      size: A4 landscape;
+      margin: 0;
+    }
+
+    html,
+    body {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    @media print {
+      html,
+      body {
+        width: 297mm !important;
+        height: 210mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
+      }
+
+      body.printing-training-certificate
+        > * {
+        visibility: hidden !important;
+      }
+
+      body.printing-training-certificate
+        #training-certificate,
+      body.printing-training-certificate
+        #training-certificate * {
+        visibility: visible !important;
+      }
+
+      body.printing-training-certificate
+        #training-certificate {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 297mm !important;
+        height: 210mm !important;
+        max-width: none !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        box-shadow: none !important;
+        border: 0 !important;
+      }
+
+      body.printing-training-certificate
+        #training-certificate
+        > .certificate-page {
+        width: 297mm !important;
+        height: 210mm !important;
+        min-height: 0 !important;
+        max-height: 210mm !important;
+        aspect-ratio: auto !important;
+        overflow: hidden !important;
+      }
+
+      body.printing-training-certificate
+        #training-certificate
+        .certificate-content {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 0 !important;
+      }
+
+      body.printing-training-certificate
+        #training-certificate
+        .certificate-meta,
+      body.printing-training-certificate
+        #training-certificate
+        .certificate-footer-extra {
+        display: none !important;
+      }
+
+      body.printing-training-certificate
+        #training-certificate
+        * {
+        break-inside: avoid !important;
+      }
+    }
+  `
+
+  /*
+   * ============================================================
+   * ISSUED CERTIFICATE
+   * ============================================================
+   */
+
+  if (cert) {
+    return (
+      <>
+        <style jsx global>
+          {printStyles}
+        </style>
+
+        <div className="space-y-6">
+          {/* SCREEN HEADER */}
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between print:hidden">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a227]">
+                Certificate Registry
+              </p>
+
+              <h3 className="mt-2 text-2xl font-semibold text-white">
+                Certificate of Completion
+              </h3>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">
+                Official completion record for the
+                ShadowNode training engagement.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={printCertificate}
+              className="rounded-lg border border-[#c9a227]/40 bg-[#c9a227]/10 px-4 py-2 text-sm font-medium text-[#e8cf72] transition hover:bg-[#c9a227]/20"
+            >
+              Print / Save PDF
+            </button>
+          </div>
+
+          {/* ==================================================
+              CERTIFICATE
+             ================================================== */}
+
+          <div
+            id="training-certificate"
+            className="mx-auto w-full max-w-[1450px] overflow-hidden bg-[#f7f1e4] text-[#10203b] shadow-2xl print:max-w-none print:shadow-none"
+          >
+            <div className="certificate-page relative aspect-[297/210] w-full overflow-hidden bg-[#f7f1e4]">
+              {/* BACKGROUND */}
+
+              <div className="absolute inset-0 bg-[#f7f1e4]" />
+
+              {/* WATERMARK */}
+
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="font-serif text-[15rem] font-bold tracking-[0.08em] text-[#10203b]/[0.018]">
+                  SN
+                </div>
+              </div>
+
+              {/* TOP LEFT NAVY */}
+
+              <div
+                className="absolute left-0 top-0 h-[39%] w-[24%] bg-[#07162f]"
+                style={{
+                  clipPath:
+                    "polygon(0 0,100% 0,0 100%)",
+                }}
+              />
+
+              {/* TOP LEFT GOLD */}
+
+              <div
+                className="absolute left-[7.5%] top-0 h-[42%] w-[5.5%] bg-[#d6aa43]"
+                style={{
+                  clipPath:
+                    "polygon(0 0,100% 0,0 100%)",
+                }}
+              />
+
+              <div
+                className="absolute left-[12%] top-0 h-[36%] w-[3.3%] bg-[#f2d17a]"
+                style={{
+                  clipPath:
+                    "polygon(0 0,100% 0,0 100%)",
+                }}
+              />
+
+              {/* BOTTOM RIGHT NAVY */}
+
+              <div
+                className="absolute bottom-0 right-0 h-[41%] w-[25%] bg-[#07162f]"
+                style={{
+                  clipPath:
+                    "polygon(100% 0,100% 100%,0 100%)",
+                }}
+              />
+
+              {/* BOTTOM RIGHT GOLD */}
+
+              <div
+                className="absolute bottom-0 right-[7.5%] h-[43%] w-[5.5%] bg-[#d6aa43]"
+                style={{
+                  clipPath:
+                    "polygon(100% 0,100% 100%,0 100%)",
+                }}
+              />
+
+              <div
+                className="absolute bottom-0 right-[12%] h-[37%] w-[3.3%] bg-[#f2d17a]"
+                style={{
+                  clipPath:
+                    "polygon(100% 0,100% 100%,0 100%)",
+                }}
+              />
+
+              {/* GOLD FRAME */}
+
+              <div className="absolute inset-[3.7%] border-2 border-[#c79b31]" />
+
+              <div className="absolute inset-[5.9%] border border-[#d5ae52]/70" />
+
+              {/* CONTENT */}
+
+              <div className="certificate-content relative z-10 flex h-full flex-col px-[6.5%] py-[5.2%]">
+                {/* BRAND */}
+
+                <div className="flex items-start justify-center">
+                  <div className="flex items-center gap-3">
+                    <ShieldLogo />
+
+                    <div>
+                      <div className="font-sans text-2xl font-semibold tracking-[0.1em] text-[#10203b] sm:text-3xl">
+                        SHADOWNODE
+                      </div>
+
+                      <div className="mt-1 text-center text-[8px] font-medium uppercase tracking-[0.34em] text-[#ae7d18] sm:text-[9px]">
+                        Trusted. Secure. Unseen.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* EXCELLENCE RIBBON */}
+
+                <div className="absolute right-[6%] top-[1%] hidden h-[32%] w-[7.7%] sm:block">
+                  <div className="relative h-full">
+                    <div className="absolute inset-x-0 top-0 h-[78%] bg-[#0a1934] shadow-xl">
+                      <div className="absolute inset-[7px] border border-[#d7af4d]/60" />
+
+                      <div className="absolute left-1/2 top-[16%] flex h-[82px] w-[82px] -translate-x-1/2 flex-col items-center justify-center rounded-full border border-[#ddb94f]">
+                        <div className="text-[10px] text-[#f0d36d]">
+                          ★ ★ ★
+                        </div>
+
+                        <div className="mt-1 text-[7px] font-semibold uppercase tracking-[0.11em] text-white">
+                          Commitment to
+                        </div>
+
+                        <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#f0d36d]">
+                          Excellence
+                        </div>
+
+                        <div className="mt-1 text-[9px] text-[#f0d36d]">
+                          ★
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      className="absolute bottom-[8%] left-0 right-0 h-[30%] bg-[#0a1934]"
+                      style={{
+                        clipPath:
+                          "polygon(0 0,100% 0,50% 100%)",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* TITLE */}
+
+                <div className="mt-[3.8%] text-center">
+                  <div className="font-serif text-[clamp(3rem,6vw,5.6rem)] font-medium uppercase leading-none tracking-[0.11em] text-[#10203b]">
+                    Certificate
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-center gap-4">
+                    <div className="h-px w-20 bg-[#c79b31]" />
+
+                    <div className="font-serif text-[clamp(1rem,2vw,1.5rem)] uppercase tracking-[0.34em] text-[#a97918]">
+                      Of Completion
+                    </div>
+
+                    <div className="h-px w-20 bg-[#c79b31]" />
+                  </div>
+                </div>
+
+                {/* RECIPIENT */}
+
+                <div className="mt-[3.4%] text-center">
+                  <div className="flex items-center justify-center gap-5">
+                    <div className="h-px w-24 bg-[#a97918]" />
+
+                    <p className="text-[8px] font-semibold uppercase tracking-[0.26em] text-[#1a2940] sm:text-[10px]">
+                      This is to certify that
+                    </p>
+
+                    <div className="h-px w-24 bg-[#a97918]" />
+                  </div>
+
+                  <div className="mt-4 break-words px-6 font-serif text-[clamp(2rem,4.5vw,4.3rem)] italic leading-none text-[#10203b]">
+                    {finalRecipientName}
+                  </div>
+
+                  <div className="mx-auto mt-3 h-px w-72 bg-[#c79b31]/65" />
+                </div>
+
+                {/* TRAINING */}
+
+                <div className="mt-[2.6%] text-center">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.17em] text-[#3d4654] sm:text-sm">
+                    Has successfully completed the
+                  </p>
+
+                  <div className="mt-2 px-8 font-serif text-[clamp(1.1rem,2.4vw,2rem)] font-semibold text-[#10203b]">
+                    {finalTrainingTitle}
+                  </div>
+
+                  <p className="mx-auto mt-2 max-w-4xl text-[9px] leading-5 text-[#555d68] sm:text-xs">
+                    This training has equipped the participant
+                    with essential knowledge and practical
+                    skills to identify, prevent, and respond
+                    to modern cybersecurity threats.
+                  </p>
+                </div>
+
+                {/* DETAILS */}
+
+                <div className="mt-[2.6%] border-y border-[#c79b31]/55 py-[1.5%]">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                    <CertificateDetail
+                      icon="calendar"
+                      label="Completion Date"
+                      value={formatDate(
+                        finalCompletionDate,
+                      )}
+                    />
+
+                    <CertificateDetail
+                      icon="clock"
+                      label="Duration"
+                      value={
+                        duration ||
+                        "Training Program"
+                      }
+                    />
+
+                    <CertificateDetail
+                      icon="certificate"
+                      label="Certificate ID"
+                      value={
+                        cert.certificate_number
+                      }
+                    />
+
+                    <CertificateDetail
+                      icon="trainer"
+                      label="Trainer"
+                      value={
+                        finalTrainerName
+                      }
+                    />
+
+                    <CertificateDetail
+                      icon="issued"
+                      label="Issued On"
+                      value={formatDate(
+                        cert.issued_at,
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* LOWER SECTION */}
+
+                <div className="mt-[2.4%] grid grid-cols-1 gap-5 sm:grid-cols-[0.75fr_1.65fr_0.85fr] sm:items-start">
+                  {/* SEAL */}
+
+                  <div className="flex items-center justify-start">
+                    <CertificateSeal />
+                  </div>
+
+                  {/* FEEDBACK */}
+
+                  <div className="rounded-[17px] border border-[#c79b31] bg-[#fbf6eb]/90 px-5 py-3.5">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="h-px w-10 bg-[#c79b31]" />
+
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#a97918] sm:text-[10px]">
+                        Participant Feedback
+                      </p>
+
+                      <div className="h-px w-10 bg-[#c79b31]" />
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-[0.9fr_1.4fr]">
+                      {/* RATING */}
+
+                      <div className="text-center sm:border-r sm:border-[#c79b31]/35 sm:pr-4">
+                        <p className="text-[8px] font-medium text-[#2b3544] sm:text-[9px]">
+                          How would you rate this
+                          training?
+                        </p>
+
+                        <div className="mt-2 flex justify-center gap-0.5">
+                          {Array.from(
+                            { length: 5 },
+                            (_, index) => {
+                              const starNumber =
+                                index + 1
+
+                              return (
+                                <span
+                                  key={
+                                    starNumber
+                                  }
+                                  className={
+                                    finalRating >=
+                                    starNumber
+                                      ? "text-[21px] leading-none text-[#d3a13a]"
+                                      : "text-[21px] leading-none text-[#d3a13a]/25"
+                                  }
+                                  aria-hidden="true"
+                                >
+                                  ★
+                                </span>
+                              )
+                            },
+                          )}
+                        </div>
+
+                        <p className="mt-1 text-[7px] font-semibold uppercase tracking-[0.14em] text-[#8c6a1d]">
+                          {finalRating
+                            ? `${finalRating}/5`
+                            : "Submitted"}
+                        </p>
+                      </div>
+
+                      {/* COMMENTS */}
+
+                      <div className="min-w-0">
+                        <p className="text-[8px] font-medium text-[#2b3544] sm:text-[9px]">
+                          Your Feedback /
+                          Comments
+                        </p>
+
+                        <div className="mt-1.5">
+                          <div className="border-b border-[#8c8065]/35" />
+
+                          <div className="min-h-[40px] border-b border-[#8c8065]/35 py-1.5">
+                            <p className="max-h-[44px] overflow-hidden break-words text-[8px] leading-4 text-[#293242] sm:text-[9px]">
+                              {finalComments ||
+                                "Thank you for completing and participating in the training programme."}
+                            </p>
+                          </div>
+
+                          <div className="border-b border-[#8c8065]/35" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {feedbackLoading && (
+                      <p className="mt-1 text-center text-[6px] uppercase tracking-[0.08em] text-[#9b8a67]">
+                        Loading feedback...
+                      </p>
+                    )}
+                  </div>
+
+                  {/* SIGNATURE */}
+
+                  <div className="pt-1 text-center">
+                    <div className="font-serif text-2xl italic text-[#17243b] sm:text-3xl">
+                      Joy Ewatomi
+                    </div>
+
+                    <div className="mx-auto mt-1 h-px w-36 bg-[#17243b]/35" />
+
+                    <p className="mt-2 text-[8px] font-semibold uppercase tracking-[0.15em] text-[#17243b] sm:text-[9px]">
+                      Joy Ewatomi
+                    </p>
+
+                    <p className="mt-1 text-[7px] uppercase tracking-[0.19em] text-[#a97918] sm:text-[8px]">
+                      Founder & CEO
+                    </p>
+                  </div>
+                </div>
+
+                {/* VERIFICATION */}
+
+                <div className="mt-auto pt-[1.5%]">
+                  <div className="border-t border-[#c79b31]/40 pt-3">
+                    <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center">
+                          <ShieldCheckIcon />
+                        </div>
+
+                        <div>
+                          <p className="text-[7px] font-semibold uppercase tracking-[0.18em] text-[#17243b]">
+                            Verification
+                          </p>
+
+                          <p className="mt-0.5 text-[8px] text-[#5f6470]">
+                            Verify this certificate at:
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <p className="text-[9px] font-bold text-[#192840]">
+                          verify.shadownode.com
+                        </p>
+
+                        {cert.verification_url ? (
+                          <RealQrCode
+                            value={
+                              cert.verification_url
+                            }
+                          />
+                        ) : (
+                          <div className="flex h-[74px] w-[74px] items-center justify-center border border-[#17243b]/20 bg-white px-2 text-center text-[7px] uppercase leading-3 tracking-[0.05em] text-[#6b7079]">
+                            Verification
+                            <br />
+                            unavailable
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* META */}
+
+        <div className="certificate-meta grid gap-4 sm:grid-cols-3 print:hidden">
+          <MetaCard
+            label="Certificate ID"
+            value={
+              cert.certificate_number
+            }
+          />
+
+          <MetaCard
+            label="Status"
+            value="Issued"
+          />
+
+          <MetaCard
+            label="Verification"
+            value={
+              cert.verification_url
+                ? "Public verification available"
+                : "Verification URL unavailable"
+            }
+          />
+        </div>
+
+        {cert.verification_url && (
+          <div className="certificate-footer-extra rounded-xl border border-[#143b28] bg-[#04100b]/60 p-5 print:hidden">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+              Public Verification
+            </p>
+
+            <a
+              href={
+                cert.verification_url
+              }
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 block break-all text-sm text-[#20dc73] underline underline-offset-4"
+            >
+              {cert.verification_url}
+            </a>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  /*
+   * ============================================================
+   * TRAINING COMPLETE — FEEDBACK MISSING
+   * ============================================================
+   */
+
+  if (
+    isTrainingComplete &&
+    !hasFeedback
+  ) {
+    return (
+      <LockedState
+        eyebrow="Certificate Locked"
+        title="Feedback Required"
+        description="Training has reached 100% completion. The Certificate of Completion will unlock after the client submits the required training feedback."
+        progress={100}
+        detail="Training is complete. Client feedback is the remaining requirement."
+      />
+    )
+  }
+
+  /*
+   * ============================================================
+   * TRAINING COMPLETE — FEEDBACK SUBMITTED
+   * ============================================================
+   */
+
+  if (
+    isTrainingComplete &&
+    hasFeedback
+  ) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-[#20dc73]/20 bg-[#04100b]/70 p-6 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#20dc73]/70">
+                Certificate Unlocked
+              </p>
+
+              <h3 className="mt-2 text-2xl font-semibold text-white">
+                Training Completed
+              </h3>
+
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/45">
+                The training engagement has reached 100%
+                completion and the required participant
+                feedback has been submitted.
+              </p>
+            </div>
+
+            <div className="shrink-0 rounded-xl border border-[#20dc73]/20 bg-[#20dc73]/10 px-5 py-4 text-center">
+              <div className="font-mono text-3xl font-semibold text-[#20dc73]">
+                100%
+              </div>
+
+              <div className="mt-1 text-[9px] uppercase tracking-[0.16em] text-[#20dc73]/60">
+                Training Complete
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[#c9a227]/30 bg-[#c9a227]/[0.04] p-5">
+          <div className="flex items-start gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#c9a227]/30 bg-[#c9a227]/10 text-[#e0ba53]">
+              ✓
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-[#e0ba53]">
+                Participant feedback received
+              </p>
+
+              <p className="mt-1 text-xs leading-6 text-white/40">
+                The feedback requirement for this training
+                engagement has been satisfied.
+              </p>
+
+              {feedback?.certificate_recipient_name ? (
+                <p className="mt-3 text-xs text-white/55">
+                  Certificate name:{" "}
+                  <span className="font-semibold text-white">
+                    {
+                      feedback.certificate_recipient_name
+                    }
+                  </span>
+                </p>
+              ) : null}
+
+              {feedback?.rating ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex gap-0.5 text-[#d5a63b]">
+                    {Array.from(
+                      { length: 5 },
+                      (_, index) => (
+                        <span
+                          key={index}
+                          className="text-lg leading-none"
+                        >
+                          {feedback.rating >
+                          index
+                            ? "★"
+                            : "☆"}
+                        </span>
+                      ),
+                    )}
+                  </div>
+
+                  <span className="font-mono text-xs text-[#d5a63b]">
+                    {feedback.rating}/5
+                  </span>
+                </div>
+              ) : null}
+
+              {feedback?.comments ? (
+                <p className="mt-3 text-xs italic leading-6 text-white/45">
+                  “{feedback.comments}”
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {canIssueCertificate ? (
+          <div className="rounded-xl border border-[#143b28] bg-[#04100b]/70 p-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/25">
+              Certificate Registry
+            </p>
+
+            <h4 className="mt-2 text-lg font-semibold text-white">
+              Certificate of Completion Ready
+            </h4>
+
+            <p className="mt-2 text-sm leading-6 text-white/40">
+              All certificate requirements have been
+              satisfied. Issue the official Certificate of
+              Completion for this engagement.
+            </p>
+
+            <button
+              type="button"
+              onClick={issueCertificate}
+              disabled={loading}
+              className="mt-5 inline-flex items-center rounded-lg bg-[#20dc73] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#35e47f] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading
+                ? "Issuing Certificate..."
+                : "Issue Certificate"}
+            </button>
           </div>
         ) : (
-          <div className="rounded-md border border-white/5 p-3 bg-black/20">
-            <p className="text-white/50">No certificate has been issued yet.</p>
-            {canIssueCertificate && (
-              <div className="mt-3">
-                <button onClick={issue} disabled={loading} className="rounded-md bg-[#20dc73] px-3 py-1 text-black">{loading ? 'Processing...' : 'Issue Certificate'}</button>
-              </div>
-            )}
+          <div className="rounded-xl border border-[#143b28] bg-[#04100b]/70 p-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/25">
+              Certificate Registry
+            </p>
+
+            <h4 className="mt-2 text-lg font-semibold text-white">
+              Certificate Ready
+            </h4>
+
+            <p className="mt-2 text-sm leading-6 text-white/40">
+              Training completion and participant feedback
+              have both been recorded. Certificate issuance
+              is handled by an authorized training operator.
+            </p>
           </div>
         )}
       </div>
+    )
+  }
+
+  /*
+   * ============================================================
+   * TRAINING STILL IN PROGRESS
+   * ============================================================
+   */
+
+  return (
+    <div className="space-y-5">
+      <LockedState
+        eyebrow="Certificate Locked"
+        title="Training In Progress"
+        description="The Certificate of Completion becomes available after all training requirements have been completed and the engagement reaches 100% progress."
+        progress={safeProgress}
+        detail={`Current training progress: ${safeProgress}%`}
+      />
+
+      {canIssueCertificate && (
+        <div className="rounded-xl border border-[#143b28] bg-[#04100b]/60 p-5 text-sm text-white/45">
+          Certificate issuance will become available after
+          training completion and participant feedback.
+        </div>
+      )}
     </div>
+  )
+}
+
+/*
+ * ============================================================
+ * REAL QR CODE
+ * ============================================================
+ */
+
+function RealQrCode({
+  value,
+}: {
+  value: string
+}) {
+  const [qrDataUrl, setQrDataUrl] =
+    useState<string | null>(null)
+
+  const [error, setError] =
+    useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function generateQr() {
+      if (!value) {
+        setQrDataUrl(null)
+        return
+      }
+
+      try {
+        setError(false)
+
+        const dataUrl =
+          await QRCode.toDataURL(
+            value,
+            {
+              errorCorrectionLevel:
+                "H",
+              margin: 1,
+              width: 240,
+              color: {
+                dark: "#101b32",
+                light: "#ffffff",
+              },
+            },
+          )
+
+        if (!cancelled) {
+          setQrDataUrl(dataUrl)
+        }
+      } catch (error) {
+        console.error(
+          "Failed to generate certificate QR:",
+          error,
+        )
+
+        if (!cancelled) {
+          setError(true)
+          setQrDataUrl(null)
+        }
+      }
+    }
+
+    generateQr()
+
+    return () => {
+      cancelled = true
+    }
+  }, [value])
+
+  if (error) {
+    return (
+      <div className="flex h-[74px] w-[74px] items-center justify-center border border-[#101b32]/20 bg-white px-2 text-center text-[7px] uppercase leading-3 tracking-[0.05em] text-[#6b7079]">
+        QR
+        <br />
+        unavailable
+      </div>
+    )
+  }
+
+  if (!qrDataUrl) {
+    return (
+      <div
+        className="flex h-[74px] w-[74px] items-center justify-center border border-[#101b32]/20 bg-white"
+        aria-label="Generating verification QR code"
+      >
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#101b32]/15 border-t-[#101b32]" />
+      </div>
+    )
+  }
+
+  return (
+    <a
+      href={value}
+      target="_blank"
+      rel="noreferrer"
+      title="Open certificate verification"
+      className="block h-[74px] w-[74px] bg-white p-1 transition hover:opacity-90"
+    >
+      <img
+        src={qrDataUrl}
+        alt="Scan to verify this ShadowNode certificate"
+        width={66}
+        height={66}
+        className="block h-[66px] w-[66px]"
+      />
+    </a>
+  )
+}
+
+/*
+ * ============================================================
+ * CERTIFICATE SEAL
+ * ============================================================
+ */
+
+function CertificateSeal() {
+  return (
+    <div className="relative flex h-[96px] w-[96px] items-center justify-center rounded-full border-[3px] border-[#c69b35] bg-[#dfbd5d]/20 shadow-md">
+      <div className="absolute inset-[7px] rounded-full border border-[#c69b35]" />
+
+      <div className="absolute inset-[13px] rounded-full border border-[#c69b35]/70" />
+
+      <div className="flex h-[48px] w-[48px] items-center justify-center rounded-full border border-[#c69b35] bg-[#d6aa43]/10 font-serif text-xl font-bold text-[#8b6615]">
+        SN
+      </div>
+
+      <div className="pointer-events-none absolute inset-0">
+        <span className="absolute left-1/2 top-[5px] -translate-x-1/2 whitespace-nowrap text-[6px] font-bold uppercase tracking-[0.12em] text-[#8b6615]">
+          SHADOWNODE
+        </span>
+
+        <span className="absolute bottom-[7px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[5px] font-bold uppercase tracking-[0.08em] text-[#8b6615]">
+          CYBER INTELLIGENCE SOLUTIONS
+        </span>
+
+        <span className="absolute left-[8px] top-1/2 -translate-y-1/2 text-[7px] text-[#8b6615]">
+          ★
+        </span>
+
+        <span className="absolute right-[8px] top-1/2 -translate-y-1/2 text-[7px] text-[#8b6615]">
+          ★
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/*
+ * ============================================================
+ * CERTIFICATE DETAIL
+ * ============================================================
+ */
+
+function CertificateDetail({
+  icon,
+  label,
+  value,
+}: {
+  icon:
+    | "calendar"
+    | "clock"
+    | "certificate"
+    | "trainer"
+    | "issued"
+  label: string
+  value: string
+}) {
+  return (
+    <div className="px-2 text-center">
+      <div className="mx-auto mb-1.5 flex h-7 items-center justify-center text-[#b17d16]">
+        {icon === "calendar" && (
+          <CalendarIcon />
+        )}
+
+        {icon === "clock" && (
+          <ClockIcon />
+        )}
+
+        {icon === "certificate" && (
+          <CertificateIcon />
+        )}
+
+        {icon === "trainer" && (
+          <UserIcon />
+        )}
+
+        {icon === "issued" && (
+          <IssuedIcon />
+        )}
+      </div>
+
+      <p className="text-[7px] font-semibold uppercase tracking-[0.13em] text-[#777b84] sm:text-[8px]">
+        {label}
+      </p>
+
+      <p className="mx-auto mt-1 max-w-[170px] break-words text-[8px] font-semibold text-[#10203b] sm:text-[9px]">
+        {value}
+      </p>
+    </div>
+  )
+}
+
+/*
+ * ============================================================
+ * META CARD
+ * ============================================================
+ */
+
+function MetaCard({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl border border-[#143b28] bg-[#04100b]/60 p-4">
+      <p className="text-[9px] uppercase tracking-[0.16em] text-white/30">
+        {label}
+      </p>
+
+      <p className="mt-2 text-sm font-medium text-white">
+        {value}
+      </p>
+    </div>
+  )
+}
+
+/*
+ * ============================================================
+ * LOCKED STATE
+ * ============================================================
+ */
+
+function LockedState({
+  eyebrow,
+  title,
+  description,
+  progress,
+  detail,
+}: {
+  eyebrow: string
+  title: string
+  description: string
+  progress: number
+  detail: string
+}) {
+  return (
+    <div className="rounded-2xl border border-[#143b28] bg-[#04100b]/60 p-6 sm:p-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="max-w-2xl">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a227]/70">
+            {eyebrow}
+          </p>
+
+          <h3 className="mt-2 text-2xl font-semibold text-white">
+            {title}
+          </h3>
+
+          <p className="mt-3 text-sm leading-7 text-white/45">
+            {description}
+          </p>
+
+          <p className="mt-4 text-xs text-white/30">
+            {detail}
+          </p>
+        </div>
+
+        <div className="w-full max-w-xs">
+          <div className="flex items-end justify-between">
+            <span className="text-[10px] uppercase tracking-[0.15em] text-white/30">
+              Training Progress
+            </span>
+
+            <span className="font-mono text-xl text-[#20dc73]">
+              {progress}%
+            </span>
+          </div>
+
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+            <div
+              className="h-full rounded-full bg-[#20dc73] transition-all"
+              style={{
+                width: `${progress}%`,
+              }}
+            />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-white/20">
+            <span>Locked</span>
+
+            <span>
+              100% Required
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/*
+ * ============================================================
+ * SHIELD LOGO
+ * ============================================================
+ */
+
+function ShieldLogo() {
+  return (
+    <svg
+      width="42"
+      height="48"
+      viewBox="0 0 42 48"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M21 2L38 8V20.5C38 31.2 31.1 40.3 21 46C10.9 40.3 4 31.2 4 20.5V8L21 2Z"
+        fill="#D6AA43"
+        fillOpacity="0.16"
+        stroke="#C99B31"
+        strokeWidth="2"
+      />
+
+      <path
+        d="M21 8L32 12V20C32 27.4 27.8 34.1 21 38.2C14.2 34.1 10 27.4 10 20V12L21 8Z"
+        fill="#101B32"
+      />
+
+      <text
+        x="21"
+        y="27"
+        textAnchor="middle"
+        fill="#E1B84F"
+        fontSize="12"
+        fontFamily="Georgia, serif"
+        fontWeight="700"
+      >
+        SN
+      </text>
+    </svg>
+  )
+}
+
+/*
+ * ============================================================
+ * SHIELD CHECK
+ * ============================================================
+ */
+
+function ShieldCheckIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 3L19 6V11.5C19 16.2 16.1 20.2 12 22C7.9 20.2 5 16.2 5 11.5V6L12 3Z"
+        stroke="#14243C"
+        strokeWidth="1.7"
+      />
+
+      <path
+        d="M8.5 12L10.7 14.2L15.7 9.4"
+        stroke="#A97A19"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/*
+ * ============================================================
+ * ICONS
+ * ============================================================
+ */
+
+function CalendarIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect
+        x="4"
+        y="5"
+        width="16"
+        height="15"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+
+      <path
+        d="M8 3V7M16 3V7M4 9H20"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="M8 12H8.01M12 12H12.01M16 12H16.01M8 16H8.01M12 16H12.01"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="8"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+
+      <path
+        d="M12 7V12L15 14"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function CertificateIcon() {
+  return (
+    <svg
+      width="25"
+      height="25"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 4.5C6 3.67 6.67 3 7.5 3H16.5C17.33 3 18 3.67 18 4.5V15H6V4.5Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+
+      <path
+        d="M9 7H15M9 10H15"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="M9 15V21L12 19L15 21V15"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function UserIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="8"
+        r="3"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+
+      <path
+        d="M5 20C5.6 15.8 8 14 12 14C16 14 18.4 15.8 19 20"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function IssuedIcon() {
+  return (
+    <svg
+      width="25"
+      height="25"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="9"
+        r="6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+
+      <path
+        d="M9.5 15L8.5 21L12 19L15.5 21L14.5 15"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M10 9L11.5 10.5L14 8"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }

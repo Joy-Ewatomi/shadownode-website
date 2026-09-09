@@ -11,49 +11,181 @@ import {
   requireTrainingOperatorForEngagement,
 } from "@/lib/services/training-operations-service"
 
-function errorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : String(error)
+type RouteContext = {
+  params: Promise<{
+    id: string
+  }>
 }
 
-function isTrainerCapableRole(
+function errorMessage(
+  error: unknown,
+): string {
+  return error instanceof Error
+    ? error.message
+    : String(error || "Unknown error")
+}
+
+function isSuperAdministrator(
   role: string | null | undefined,
-) {
+): boolean {
   return (
-    role === "investigator" ||
-    role === "analyst" ||
-    role === "administrator" ||
     role === "super_administrator" ||
     role === "super-administrator"
   )
 }
 
-export async function GET(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
-) {
-  const user = await getCurrentUser()
+function isTrainerCapableRole(
+  role: string | null | undefined,
+): boolean {
+  return (
+    role === "investigator" ||
+    role === "analyst" ||
+    role === "administrator" ||
+    isSuperAdministrator(role)
+  )
+}
 
-  if (!user) {
-    return NextResponse.json(
-      {
-        error: "Unauthorized",
-      },
-      { status: 401 },
+function getErrorStatus(
+  error: unknown,
+): number {
+  const message =
+    errorMessage(error)
+
+  const normalized =
+    message.toLowerCase()
+
+  if (
+    normalized === "unauthorized" ||
+    normalized.includes(
+      "unauthorized",
     )
+  ) {
+    return 401
+  }
+
+  if (
+    normalized === "forbidden" ||
+    normalized.includes(
+      "forbidden",
+    ) ||
+    normalized.includes(
+      "not authorized",
+    ) ||
+    normalized.includes(
+      "not the approved trainer",
+    )
+  ) {
+    return 403
+  }
+
+  if (
+    normalized.includes(
+      "not found",
+    ) ||
+    normalized.includes(
+      "does not belong to this training engagement",
+    )
+  ) {
+    return 404
+  }
+
+  if (
+    normalized.includes(
+      "required",
+    ) ||
+    normalized.includes(
+      "invalid",
+    ) ||
+    normalized.includes(
+      "must be",
+    ) ||
+    normalized.includes(
+      "cannot be",
+    )
+  ) {
+    return 400
+  }
+
+  return 500
+}
+
+async function parseJsonBody(
+  request: NextRequest,
+): Promise<
+  Record<string, unknown> | null
+> {
+  const raw =
+    await request.text()
+
+  if (!raw.trim()) {
+    return null
   }
 
   try {
-    const { id } = await context.params
+    const parsed =
+      JSON.parse(raw)
+
+    if (
+      !parsed ||
+      typeof parsed !==
+        "object" ||
+      Array.isArray(parsed)
+    ) {
+      return null
+    }
+
+    return parsed as Record<
+      string,
+      unknown
+    >
+  } catch {
+    throw new Error(
+      "Request body must contain valid JSON.",
+    )
+  }
+}
+
+/* =======================================================
+   GET
+   ======================================================= */
+
+export async function GET(
+  _request: NextRequest,
+  context: RouteContext,
+) {
+  try {
+    const user =
+      await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
+      )
+    }
+
+    const { id } =
+      await context.params
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     /*
-     * Viewing materials is separate from managing materials.
-     *
-     * The engagement-level access check determines whether
-     * this user is allowed to see the training engagement.
+     * Material visibility is governed by
+     * engagement-level authorization.
      */
     await ensureAccess(
       id,
@@ -64,86 +196,108 @@ export async function GET(
     const materials =
       await listMaterials(id)
 
-    return NextResponse.json({
-      success: true,
-      materials,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        materials,
+      },
+      {
+        status: 200,
+      },
+    )
   } catch (error: unknown) {
     console.error(
       "TRAINING MATERIALS GET ERROR:",
       error,
     )
 
-    const message =
-      errorMessage(error)
+    const status =
+      getErrorStatus(error)
 
     return NextResponse.json(
       {
-        error: message,
+        success: false,
+        error: errorMessage(error),
       },
       {
-        status:
-          message === "Unauthorized"
-            ? 401
-            : 403,
+        status,
       },
     )
   }
 }
 
+/* =======================================================
+   POST
+   Create material
+   ======================================================= */
+
 export async function POST(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
+  request: NextRequest,
+  context: RouteContext,
 ) {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    return NextResponse.json(
-      {
-        error: "Unauthorized",
-      },
-      { status: 401 },
-    )
-  }
-
   try {
-    if (!isTrainerCapableRole(user.role)) {
+    const user =
+      await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
+      )
+    }
+
+    if (
+      !isTrainerCapableRole(
+        user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
             "You are not authorized to manage training materials.",
         },
-        { status: 403 },
+        {
+          status: 403,
+        },
       )
     }
 
-    const { id } = await context.params
+    const { id } =
+      await context.params
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
 
     /*
-     * ============================================================
-     * TRAINING OPERATOR AUTHORIZATION
-     * ============================================================
-     *
      * Super Administrator:
-     *   Always allowed.
+     *   Can manage all training engagements.
      *
-     * Approved assigned trainer:
-     *   Allowed.
+     * Approved trainer:
+     *   Can manage only engagements where they
+     *   are actually approved.
      *
-     * Normal Administrator:
-     *   NOT allowed merely because they are an administrator.
-     *
-     * Investigator / Analyst:
-     *   NOT allowed unless approved as the trainer for
-     *   this specific engagement.
+     * Administrator without trainer assignment:
+     *   Cannot manage materials simply because
+     *   they are an administrator.
      */
     const access =
       await ensureAccess(
         id,
         user,
-        false,
+        true,
       )
 
     await requireTrainingOperatorForEngagement(
@@ -153,25 +307,101 @@ export async function POST(
     )
 
     const body =
-      await req.json()
+      await parseJsonBody(
+        request,
+      )
+
+    if (!body) {
+      return NextResponse.json(
+        {
+          error:
+            "Request body must contain valid JSON.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Every material must belong to a curriculum
+     * module. This is now part of the training
+     * architecture because material completion
+     * contributes to module progress.
+     */
+    const moduleId =
+      typeof body.module_id ===
+      "string"
+        ? body.module_id.trim()
+        : ""
+
+    if (!moduleId) {
+      return NextResponse.json(
+        {
+          error:
+            "module_id is required. Every training material must belong to a curriculum module.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    const title =
+      typeof body.title ===
+      "string"
+        ? body.title.trim()
+        : ""
+
+    const externalUrl =
+      typeof body.external_url ===
+      "string"
+        ? body.external_url.trim()
+        : ""
+
+    const fileUrl =
+      typeof body.file_url ===
+      "string"
+        ? body.file_url.trim()
+        : ""
 
     if (
-      !body ||
-      typeof body !== "object"
+      !title &&
+      !externalUrl &&
+      !fileUrl
     ) {
       return NextResponse.json(
         {
           error:
-            "Invalid request body",
+            "Material title or resource URL is required.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
     const created =
       await createMaterial(
         id,
-        body,
+        {
+          ...body,
+
+          title:
+            title ||
+            "Training Resource",
+
+          module_id:
+            moduleId,
+
+          external_url:
+            externalUrl ||
+            null,
+
+          file_url:
+            fileUrl ||
+            null,
+        },
         access.profileId,
       )
 
@@ -180,7 +410,9 @@ export async function POST(
         success: true,
         material: created,
       },
-      { status: 201 },
+      {
+        status: 201,
+      },
     )
   } catch (error: unknown) {
     console.error(
@@ -188,69 +420,81 @@ export async function POST(
       error,
     )
 
-    const message =
-      errorMessage(error)
-
     return NextResponse.json(
       {
-        error: message,
+        success: false,
+        error: errorMessage(error),
       },
       {
         status:
-          message === "Unauthorized"
-            ? 401
-            : 403,
+          getErrorStatus(error),
       },
     )
   }
 }
 
+/* =======================================================
+   PUT
+   Update material
+   ======================================================= */
+
 export async function PUT(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
+  request: NextRequest,
+  context: RouteContext,
 ) {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    return NextResponse.json(
-      {
-        error: "Unauthorized",
-      },
-      { status: 401 },
-    )
-  }
-
   try {
-    if (!isTrainerCapableRole(user.role)) {
+    const user =
+      await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
+      )
+    }
+
+    if (
+      !isTrainerCapableRole(
+        user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
             "You are not authorized to manage training materials.",
         },
-        { status: 403 },
+        {
+          status: 403,
+        },
       )
     }
 
-    const { id } = await context.params
+    const { id } =
+      await context.params
 
-    /*
-     * The user must have access to this engagement.
-     */
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
     const access =
       await ensureAccess(
         id,
         user,
-        false,
+        true,
       )
 
-    /*
-     * Managing materials requires either:
-     *
-     * - Super Administrator
-     * - Approved trainer assigned to this engagement
-     */
     await requireTrainingOperatorForEngagement(
       id,
       user,
@@ -258,18 +502,19 @@ export async function PUT(
     )
 
     const body =
-      await req.json()
+      await parseJsonBody(
+        request,
+      )
 
-    if (
-      !body ||
-      typeof body !== "object"
-    ) {
+    if (!body) {
       return NextResponse.json(
         {
           error:
-            "Invalid request body",
+            "Request body must contain valid JSON.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
@@ -283,18 +528,101 @@ export async function PUT(
       return NextResponse.json(
         {
           error:
-            "materialId is required",
+            "materialId is required.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Verify the material belongs to the engagement
+     * represented by the URL.
+     */
+    const materials =
+      await listMaterials(id)
+
+    const materialExists =
+      materials.some(
+        (material) =>
+          String(
+            material.id,
+          ) === materialId,
+      )
+
+    if (!materialExists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Training material not found for this engagement.",
+        },
+        {
+          status: 404,
+        },
+      )
+    }
+
+    if (
+      !body.updates ||
+      typeof body.updates !==
+        "object" ||
+      Array.isArray(
+        body.updates,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "updates must be a valid object.",
+        },
+        {
+          status: 400,
+        },
       )
     }
 
     const updates =
-      body.updates &&
-      typeof body.updates ===
-        "object"
-        ? body.updates
-        : {}
+      body.updates as Record<
+        string,
+        unknown
+      >
+
+    /*
+     * If moving the material to another module,
+     * the module cannot be empty.
+     *
+     * The service performs the authoritative
+     * engagement ownership validation.
+     */
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "module_id",
+      )
+    ) {
+      const updatedModuleId =
+        typeof updates.module_id ===
+        "string"
+          ? updates.module_id.trim()
+          : ""
+
+      if (!updatedModuleId) {
+        return NextResponse.json(
+          {
+            error:
+              "module_id cannot be empty. Every training material must belong to a curriculum module.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
+
+      updates.module_id =
+        updatedModuleId
+    }
 
     const updated =
       await updateMaterial(
@@ -303,77 +631,95 @@ export async function PUT(
         access.profileId,
       )
 
-    return NextResponse.json({
-      success: true,
-      material: updated,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        material: updated,
+      },
+      {
+        status: 200,
+      },
+    )
   } catch (error: unknown) {
     console.error(
       "TRAINING MATERIAL UPDATE ERROR:",
       error,
     )
 
-    const message =
-      errorMessage(error)
-
     return NextResponse.json(
       {
-        error: message,
+        success: false,
+        error: errorMessage(error),
       },
       {
         status:
-          message === "Unauthorized"
-            ? 401
-            : 403,
+          getErrorStatus(error),
       },
     )
   }
 }
 
+/* =======================================================
+   DELETE
+   ======================================================= */
+
 export async function DELETE(
-  req: NextRequest,
-  context: {
-    params: Promise<{ id: string }>
-  },
+  request: NextRequest,
+  context: RouteContext,
 ) {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    return NextResponse.json(
-      {
-        error: "Unauthorized",
-      },
-      { status: 401 },
-    )
-  }
-
   try {
-    if (!isTrainerCapableRole(user.role)) {
+    const user =
+      await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        },
+      )
+    }
+
+    if (
+      !isTrainerCapableRole(
+        user.role,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
             "You are not authorized to manage training materials.",
         },
-        { status: 403 },
+        {
+          status: 403,
+        },
       )
     }
 
-    const { id } = await context.params
+    const { id } =
+      await context.params
 
-    /*
-     * The user must have access to this engagement.
-     */
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            "Training engagement ID is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
     const access =
       await ensureAccess(
         id,
         user,
-        false,
+        true,
       )
 
-    /*
-     * Only Super Administrator or the approved
-     * engagement trainer can delete materials.
-     */
     await requireTrainingOperatorForEngagement(
       id,
       user,
@@ -381,18 +727,19 @@ export async function DELETE(
     )
 
     const body =
-      await req.json()
+      await parseJsonBody(
+        request,
+      )
 
-    if (
-      !body ||
-      typeof body !== "object"
-    ) {
+    if (!body) {
       return NextResponse.json(
         {
           error:
-            "Invalid request body",
+            "Request body must contain valid JSON.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       )
     }
 
@@ -406,9 +753,39 @@ export async function DELETE(
       return NextResponse.json(
         {
           error:
-            "materialId is required",
+            "materialId is required.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Prevent deleting a material from another
+     * engagement by supplying its ID directly.
+     */
+    const materials =
+      await listMaterials(id)
+
+    const materialExists =
+      materials.some(
+        (material) =>
+          String(
+            material.id,
+          ) === materialId,
+      )
+
+    if (!materialExists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Training material not found for this engagement.",
+        },
+        {
+          status: 404,
+        },
       )
     }
 
@@ -418,28 +795,29 @@ export async function DELETE(
         access.profileId,
       )
 
-    return NextResponse.json({
-      success: true,
-      result,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        result,
+      },
+      {
+        status: 200,
+      },
+    )
   } catch (error: unknown) {
     console.error(
       "TRAINING MATERIAL DELETE ERROR:",
       error,
     )
 
-    const message =
-      errorMessage(error)
-
     return NextResponse.json(
       {
-        error: message,
+        success: false,
+        error: errorMessage(error),
       },
       {
         status:
-          message === "Unauthorized"
-            ? 401
-            : 403,
+          getErrorStatus(error),
       },
     )
   }

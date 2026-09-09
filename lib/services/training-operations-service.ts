@@ -21,19 +21,6 @@ const TRAINER_APPROVAL_APPROVED = "approved"
 const TRAINER_APPROVAL_PENDING =
   "pending_super_admin_approval"
 
-/*
- * Material progress notification milestones.
- *
- * We deliberately do not create a training update for every
- * video `timeupdate` event. Instead, meaningful milestones
- * are recorded:
- *
- * 1%   = started
- * 25%  = progress milestone
- * 50%  = progress milestone
- * 75%  = progress milestone
- * 100% = completed
- */
 const MATERIAL_PROGRESS_MILESTONES = [
   1,
   25,
@@ -61,6 +48,24 @@ function isTrainerCapableRole(
     "super_administrator",
     "super-administrator",
   ].includes(role || "")
+}
+
+function normalizePercentage(
+  value: unknown,
+): number {
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return 0
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(numeric),
+    ),
+  )
 }
 
 function getProgressMilestone(
@@ -95,14 +100,10 @@ function shouldCreateMaterialProgressUpdate(
     | "material_completed"
 } {
   const previous =
-    normalizePercentage(
-      previousPercentage,
-    )
+    normalizePercentage(previousPercentage)
 
   const next =
-    normalizePercentage(
-      nextPercentage,
-    )
+    normalizePercentage(nextPercentage)
 
   const previousMilestone =
     getProgressMilestone(previous)
@@ -116,8 +117,7 @@ function shouldCreateMaterialProgressUpdate(
   ) {
     return {
       shouldCreate: true,
-      updateType:
-        "material_completed",
+      updateType: "material_completed",
     }
   }
 
@@ -127,8 +127,7 @@ function shouldCreateMaterialProgressUpdate(
   ) {
     return {
       shouldCreate: true,
-      updateType:
-        "material_started",
+      updateType: "material_started",
     }
   }
 
@@ -137,15 +136,13 @@ function shouldCreateMaterialProgressUpdate(
   ) {
     return {
       shouldCreate: true,
-      updateType:
-        "material_progress_updated",
+      updateType: "material_progress_updated",
     }
   }
 
   return {
     shouldCreate: false,
-    updateType:
-      "material_progress_updated",
+    updateType: "material_progress_updated",
   }
 }
 
@@ -221,9 +218,7 @@ async function getEngagementTrainerState(
 
   return {
     ...engagementResult.rows[0],
-
-    trainers:
-      trainersResult.rows,
+    trainers: trainersResult.rows,
 
     approved_trainers:
       trainersResult.rows.filter(
@@ -256,16 +251,7 @@ export async function listEngagementTrainers(
         au.role,
 
         COALESCE(
-          NULLIF(
-            TRIM(
-              CONCAT(
-                COALESCE(up.first_name, ''),
-                ' ',
-                COALESCE(up.last_name, '')
-              )
-            ),
-            ''
-          ),
+          NULLIF(TRIM(up.full_name), ''),
           au.email
         ) AS trainer_name
 
@@ -282,8 +268,7 @@ export async function listEngagementTrainers(
 
       ORDER BY
         CASE
-          WHEN tet.assignment_status =
-            'approved'
+          WHEN tet.assignment_status = 'approved'
           THEN 0
 
           WHEN tet.assignment_status =
@@ -338,16 +323,7 @@ export async function listApprovedTrainers(
           au.role,
 
           COALESCE(
-            NULLIF(
-              TRIM(
-                CONCAT(
-                  COALESCE(up.first_name, ''),
-                  ' ',
-                  COALESCE(up.last_name, '')
-                )
-              ),
-              ''
-            ),
+            NULLIF(TRIM(up.full_name), ''),
             au.email
           ) AS trainer_name
 
@@ -440,9 +416,7 @@ export async function isApprovedTrainerForEngagement(
     return false
   }
 
-  if (
-    isSuperAdminRole(user.role)
-  ) {
+  if (isSuperAdminRole(user.role)) {
     return true
   }
 
@@ -527,11 +501,7 @@ export async function requireTrainingOperatorForEngagement(
     )
   }
 
-  if (
-    isSuperAdminRole(
-      actor.role,
-    )
-  ) {
+  if (isSuperAdminRole(actor.role)) {
     return
   }
 
@@ -562,9 +532,7 @@ async function requireTrainingOperatorByProfile(
     )
   }
 
-  if (
-    isSuperAdminRole(role)
-  ) {
+  if (isSuperAdminRole(role)) {
     return
   }
 
@@ -622,9 +590,7 @@ export async function assignTrainer(
   if (
     !target ||
     !target.role ||
-    !isTrainerCapableRole(
-      target.role,
-    ) ||
+    !isTrainerCapableRole(target.role) ||
     target.status !== "active"
   ) {
     throw new Error(
@@ -664,18 +630,12 @@ export async function assignTrainer(
       ],
     )
 
-  /*
-   * Super Administrator can directly approve
-   * a trainer without an approval step.
-   */
   if (
     isSuperAdminRole(
       normalizedActorRole,
     )
   ) {
-    if (
-      existingAssignment.rows[0]
-    ) {
+    if (existingAssignment.rows[0]) {
       await query(
         `
           UPDATE training_engagement_trainers
@@ -748,12 +708,6 @@ export async function assignTrainer(
       )
     }
 
-    /*
-     * Legacy columns are kept synchronized for
-     * compatibility only.
-     *
-     * They are NOT the authorization source of truth.
-     */
     await query(
       `
         UPDATE training_engagements
@@ -796,12 +750,6 @@ export async function assignTrainer(
     }
   }
 
-  /*
-   * Only administrators reach this branch.
-   *
-   * Administrator assignments are proposals.
-   * They do NOT activate trainer access.
-   */
   if (
     normalizedActorRole !==
     "administrator"
@@ -881,9 +829,6 @@ export async function assignTrainer(
     )
   }
 
-  /*
-   * Legacy pending columns are compatibility fields only.
-   */
   await query(
     `
       UPDATE training_engagements
@@ -1046,12 +991,6 @@ export async function ensureAccess(
     }
   }
 
-  /*
-   * Administrators may view training operations.
-   *
-   * They may only perform trainer operations
-   * when explicitly approved in the junction table.
-   */
   if (
     user.role ===
     "administrator"
@@ -1069,10 +1008,6 @@ export async function ensureAccess(
     }
   }
 
-  /*
-   * Investigator / Analyst access is strictly
-   * assignment based.
-   */
   if (
     user.role === "investigator" ||
     user.role === "analyst"
@@ -1088,12 +1023,9 @@ export async function ensureAccess(
     }
   }
 
-  /*
-   * Client access remains restricted to
-   * their own engagement.
-   */
   if (
-    user.role === "client"
+    user.role ===
+    "client"
   ) {
     if (
       profileId &&
@@ -1122,16 +1054,13 @@ export async function ensureAccess(
 
 export async function listModules(
   engagementId: string,
+  clientProfileId?: string | null,
 ) {
   const result =
     await query(
       `
         SELECT
           tm.*,
-
-          /* =================================================
-             MATERIAL COUNTS
-             ================================================= */
 
           COALESCE(
             (
@@ -1150,20 +1079,32 @@ export async function listModules(
             (
               SELECT COUNT(*)
               FROM training_materials mat
+
               WHERE
                 mat.training_engagement_id =
                   tm.training_engagement_id
+
                 AND mat.module_id =
                   tm.id
 
                 AND EXISTS (
                   SELECT 1
+
                   FROM training_material_progress mp
+
                   WHERE
                     mp.training_engagement_id =
                       mat.training_engagement_id
+
                     AND mp.material_id =
                       mat.id
+
+                    ${
+                      clientProfileId
+                        ? `AND mp.client_profile_id = $2`
+                        : ""
+                    }
+
                     AND mp.status =
                       'completed'
                 )
@@ -1171,57 +1112,60 @@ export async function listModules(
             0
           ) AS completed_material_count,
 
-          /* =================================================
-             SESSION COUNTS
-             ================================================= */
-
           COALESCE(
             (
               SELECT COUNT(*)
+
               FROM training_sessions ts
+
               WHERE
                 ts.training_engagement_id =
                   tm.training_engagement_id
+
                 AND ts.module_id =
                   tm.id
-                AND ts.status != 'cancelled'
+
+                AND ts.status !=
+                  'cancelled'
             ),
             0
           ) AS session_count,
 
-          /* =================================================
-             ATTENDED SESSIONS
-             ================================================= */
-
           COALESCE(
             (
               SELECT COUNT(*)
+
               FROM training_sessions ts
+
               WHERE
                 ts.training_engagement_id =
                   tm.training_engagement_id
+
                 AND ts.module_id =
                   tm.id
-                AND ts.status != 'cancelled'
+
+                AND ts.status !=
+                  'cancelled'
+
                 AND ts.attendance_status =
                   'attended'
             ),
             0
           ) AS attended_session_count,
 
-          /* =================================================
-             COMPLETED SESSIONS
-             ================================================= */
-
           COALESCE(
             (
               SELECT COUNT(*)
+
               FROM training_sessions ts
+
               WHERE
                 ts.training_engagement_id =
                   tm.training_engagement_id
+
                 AND ts.module_id =
                   tm.id
+
                 AND ts.status =
                   'completed'
             ),
@@ -1237,10 +1181,52 @@ export async function listModules(
           tm.module_order ASC,
           tm.created_at ASC
       `,
-      [engagementId],
+      clientProfileId
+        ? [
+            engagementId,
+            clientProfileId,
+          ]
+        : [engagementId],
     )
 
-  return result.rows
+  if (!clientProfileId) {
+    return result.rows
+  }
+
+  return Promise.all(
+    result.rows.map(
+      async (module: any) => {
+        const calculated =
+          await calculateModuleProgress(
+            engagementId,
+            module.id,
+            clientProfileId,
+          )
+
+        return {
+          ...module,
+
+          completion_percentage:
+            calculated.completion_percentage,
+
+          status:
+            calculated.status,
+
+          material_count:
+            calculated.material_count,
+
+          completed_material_count:
+            calculated.completed_material_count,
+
+          session_count:
+            calculated.session_count,
+
+          completed_session_count:
+            calculated.completed_session_count,
+        }
+      },
+    ),
+  )
 }
 
 export async function createModule(
@@ -1258,9 +1244,7 @@ export async function createModule(
     actorProfileId,
   )
 
-  if (
-    !payload.title?.trim()
-  ) {
+  if (!payload.title?.trim()) {
     throw new Error(
       "Module title is required",
     )
@@ -1323,20 +1307,22 @@ export async function createModule(
 
 export async function updateModule(
   moduleId: string,
-  updates: any,
+  updates: {
+    title?: string
+    description?: string | null
+    objectives?: string | null
+    module_order?: number
+  },
   actorProfileId: string | null,
 ) {
   const moduleRow =
     await query<{
-      training_engagement_id:
-        string
+      training_engagement_id: string
     }>(
       `
         SELECT
           training_engagement_id
-
         FROM training_modules
-
         WHERE id = $1
         LIMIT 1
       `,
@@ -1349,53 +1335,132 @@ export async function updateModule(
     )
   }
 
-  await requireTrainingOperatorByProfile(
+  const engagementId =
     moduleRow.rows[0]
-      .training_engagement_id,
+      .training_engagement_id
+
+  /*
+   * Only an approved training operator for this
+   * engagement may update the module.
+   */
+  await requireTrainingOperatorByProfile(
+    engagementId,
     actorProfileId,
   )
 
   const fields: string[] = []
-  const values: any[] = []
-  let ix = 1
+  const values: unknown[] = []
 
-  for (
-    const key of [
-      "title",
-      "description",
-      "objectives",
-      "module_order",
-      "status",
-      "completion_percentage",
-    ]
-  ) {
+  let ix = 0
+
+  /*
+   * Title
+   */
+  if (updates.title !== undefined) {
+    const title =
+      typeof updates.title === "string"
+        ? updates.title.trim()
+        : updates.title
+
     if (
-      Object.prototype.hasOwnProperty.call(
-        updates,
-        key,
-      )
+      typeof title === "string" &&
+      title.length === 0
     ) {
-      fields.push(
-        `${key} = $${ix}`,
+      throw new Error(
+        "Module title cannot be empty",
       )
-
-      values.push(
-        updates[key],
-      )
-
-      ix++
     }
+
+    fields.push(
+      `"title" = $${ix + 1}`,
+    )
+
+    values.push(title)
+
+    ix++
   }
 
+  /*
+   * Description
+   */
   if (
-    fields.length === 0
+    updates.description !== undefined
   ) {
+    fields.push(
+      `"description" = $${ix + 1}`,
+    )
+
+    values.push(
+      updates.description,
+    )
+
+    ix++
+  }
+
+  /*
+   * Objectives
+   */
+  if (
+    updates.objectives !== undefined
+  ) {
+    fields.push(
+      `"objectives" = $${ix + 1}`,
+    )
+
+    values.push(
+      updates.objectives,
+    )
+
+    ix++
+  }
+
+  /*
+   * Module order
+   */
+  if (
+    updates.module_order !== undefined
+  ) {
+    if (
+      !Number.isInteger(
+        updates.module_order,
+      ) ||
+      updates.module_order < 1
+    ) {
+      throw new Error(
+        "module_order must be a positive integer",
+      )
+    }
+
+    fields.push(
+      `"module_order" = $${ix + 1}`,
+    )
+
+    values.push(
+      updates.module_order,
+    )
+
+    ix++
+  }
+
+  if (fields.length === 0) {
     throw new Error(
       "No updates provided",
     )
   }
 
+  /*
+   * moduleId becomes the final query parameter.
+   *
+   * Example:
+   *
+   *   title         -> $1
+   *   description   -> $2
+   *   moduleId      -> $3
+   */
   values.push(moduleId)
+
+  const moduleIdPlaceholder =
+    `$${ix + 1}`
 
   const sql = `
     UPDATE training_modules
@@ -1404,17 +1469,13 @@ export async function updateModule(
       ${fields.join(", ")},
       updated_at = NOW()
 
-    WHERE id = $${ix}
+    WHERE id = ${moduleIdPlaceholder}
 
     RETURNING *
   `
 
   const res =
-    await query<{
-      training_engagement_id:
-        string
-      title: string
-    }>(
+    await query<any>(
       sql,
       values,
     )
@@ -1425,21 +1486,13 @@ export async function updateModule(
     )
   }
 
-  if (
-    updates.status !==
-      undefined ||
-    updates.completion_percentage !==
-      undefined
-  ) {
-    await createTrainingUpdate(
-      res.rows[0]
-        .training_engagement_id,
-      actorProfileId,
-      "module_updated",
-      `Module Updated: ${res.rows[0].title}`,
-      `Module '${res.rows[0].title}' was updated.`,
-    )
-  }
+  await createTrainingUpdate(
+    engagementId,
+    actorProfileId,
+    "module_updated",
+    `Module Updated: ${res.rows[0].title}`,
+    `Module '${res.rows[0].title}' was updated.`,
+  )
 
   return res.rows[0]
 }
@@ -1473,9 +1526,12 @@ export async function deleteModule(
     )
   }
 
-  await requireTrainingOperatorByProfile(
+  const engagementId =
     mod.rows[0]
-      .training_engagement_id,
+      .training_engagement_id
+
+  await requireTrainingOperatorByProfile(
+    engagementId,
     actorProfileId,
   )
 
@@ -1488,13 +1544,25 @@ export async function deleteModule(
   )
 
   await createTrainingUpdate(
-    mod.rows[0]
-      .training_engagement_id,
+    engagementId,
     actorProfileId,
     "module_deleted",
     `Module Deleted: ${mod.rows[0].title}`,
     "Module deleted by trainer or training administrator.",
   )
+
+  const actorRole =
+    await getUserRoleByProfileId(
+      actorProfileId,
+    )
+
+  if (actorRole) {
+    await recomputeEngagementProgress(
+      engagementId,
+      actorProfileId,
+      actorRole,
+    )
+  }
 
   return {
     success: true,
@@ -1670,9 +1738,43 @@ export async function createSession(
   )
 
   /*
-   * Session trainers must themselves be
-   * approved for this engagement.
+   * Every training session must belong to
+   * a training module.
    */
+  const moduleId =
+    payload.module_id
+
+  if (!moduleId) {
+    throw new Error(
+      "A training session must be assigned to a training module",
+    )
+  }
+
+  const moduleCheck =
+    await query<{ id: string }>(
+      `
+        SELECT id
+
+        FROM training_modules
+
+        WHERE
+          id = $1
+          AND training_engagement_id = $2
+
+        LIMIT 1
+      `,
+      [
+        moduleId,
+        engagementId,
+      ],
+    )
+
+  if (!moduleCheck.rows[0]) {
+    throw new Error(
+      "Selected module does not belong to this training engagement",
+    )
+  }
+
   let sessionTrainerId =
     payload.trainer_id ||
     null
@@ -1706,10 +1808,6 @@ export async function createSession(
       )
     }
   } else {
-    /*
-     * If no trainer is explicitly selected,
-     * use the first approved trainer.
-     */
     const trainers =
       await listApprovedTrainers(
         engagementId,
@@ -1760,8 +1858,7 @@ export async function createSession(
       `,
       [
         engagementId,
-        payload.module_id ||
-          null,
+        moduleId,
         sessionTrainerId,
         payload.scheduled_at ||
           null,
@@ -1790,7 +1887,7 @@ export async function createSession(
     profileId,
     "session_scheduled",
     "Session Scheduled",
-    "A training session has been scheduled.",
+    "A training session has been scheduled and connected to a training module.",
   )
 
   try {
@@ -1801,6 +1898,19 @@ export async function createSession(
     console.error(
       "GOOGLE CALENDAR CREATE SYNC ERROR:",
       calendarError,
+    )
+  }
+
+  const role =
+    await getUserRoleByProfileId(
+      profileId,
+    )
+
+  if (role) {
+    await recomputeEngagementProgress(
+      engagementId,
+      profileId,
+      role,
     )
   }
 
@@ -1818,15 +1928,17 @@ export async function updateSession(
     await query<{
       training_engagement_id:
         string
+      module_id:
+        string | null
     }>(
       `
         SELECT
-          training_engagement_id
+          training_engagement_id,
+          module_id
 
         FROM training_sessions
 
         WHERE id = $1
-
         LIMIT 1
       `,
       [sessionId],
@@ -1848,18 +1960,53 @@ export async function updateSession(
   )
 
   /*
-   * If the trainer is changed, the new trainer
-   * must already be approved for this engagement.
+   * A session must always belong to a module.
    */
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updates,
+      "module_id",
+    )
+  ) {
+    if (!updates.module_id) {
+      throw new Error(
+        "A training session must be assigned to a training module",
+      )
+    }
+
+    const moduleCheck =
+      await query<{ id: string }>(
+        `
+          SELECT id
+
+          FROM training_modules
+
+          WHERE
+            id = $1
+            AND training_engagement_id = $2
+
+          LIMIT 1
+        `,
+        [
+          updates.module_id,
+          engagementId,
+        ],
+      )
+
+    if (!moduleCheck.rows[0]) {
+      throw new Error(
+        "Selected module does not belong to this training engagement",
+      )
+    }
+  }
+
   if (
     Object.prototype.hasOwnProperty.call(
       updates,
       "trainer_id",
     )
   ) {
-    if (
-      updates.trainer_id
-    ) {
+    if (updates.trainer_id) {
       const trainerCheck =
         await query<{
           id: string
@@ -1931,9 +2078,7 @@ export async function updateSession(
     }
   }
 
-  if (
-    fields.length === 0
-  ) {
+  if (fields.length === 0) {
     throw new Error(
       "No updates provided",
     )
@@ -1986,6 +2131,19 @@ export async function updateSession(
     console.error(
       "GOOGLE CALENDAR UPDATE SYNC ERROR:",
       calendarError,
+    )
+  }
+
+  const role =
+    await getUserRoleByProfileId(
+      actorProfileId,
+    )
+
+  if (role) {
+    await recomputeEngagementProgress(
+      engagementId,
+      actorProfileId,
+      role,
     )
   }
 
@@ -2049,6 +2207,19 @@ export async function deleteSession(
     "Session Cancelled",
     "Session deleted by trainer or training administrator.",
   )
+
+  const role =
+    await getUserRoleByProfileId(
+      actorProfileId,
+    )
+
+  if (role) {
+    await recomputeEngagementProgress(
+      session.training_engagement_id,
+      actorProfileId,
+      role,
+    )
+  }
 
   return {
     success: true,
@@ -2126,17 +2297,13 @@ export async function createMaterial(
     actorProfileId,
   )
 
-  if (
-    !payload.title?.trim()
-  ) {
+  if (!payload.title?.trim()) {
     throw new Error(
       "Material title is required",
     )
   }
 
-  if (
-    payload.module_id
-  ) {
+  if (payload.module_id) {
     const moduleCheck =
       await query<{ id: string }>(
         `
@@ -2161,6 +2328,12 @@ export async function createMaterial(
         "Selected module does not belong to this training engagement",
       )
     }
+  }
+
+  if (!payload.module_id) {
+    throw new Error(
+      "Training materials must be assigned to a training module",
+    )
   }
 
   const res =
@@ -2198,8 +2371,7 @@ export async function createMaterial(
       `,
       [
         engagementId,
-        payload.module_id ||
-          null,
+        payload.module_id,
         payload.title.trim(),
         payload.description ||
           null,
@@ -2220,10 +2392,21 @@ export async function createMaterial(
     actorProfileId,
     "material_uploaded",
     `Material Uploaded: ${payload.title}`,
-    payload.module_id
-      ? `Material '${payload.title}' was added to a training module.`
-      : `Material '${payload.title}' was uploaded to the training engagement.`,
+    `Material '${payload.title}' was added to a training module.`,
   )
+
+  const role =
+    await getUserRoleByProfileId(
+      actorProfileId,
+    )
+
+  if (role) {
+    await recomputeEngagementProgress(
+      engagementId,
+      actorProfileId,
+      role,
+    )
+  }
 
   return res.rows[0]
 }
@@ -2270,9 +2453,14 @@ export async function updateMaterial(
     Object.prototype.hasOwnProperty.call(
       updates,
       "module_id",
-    ) &&
-    updates.module_id
+    )
   ) {
+    if (!updates.module_id) {
+      throw new Error(
+        "Training materials must be assigned to a training module",
+      )
+    }
+
     const moduleCheck =
       await query<{ id: string }>(
         `
@@ -2337,9 +2525,7 @@ export async function updateMaterial(
     }
   }
 
-  if (
-    fields.length === 0
-  ) {
+  if (fields.length === 0) {
     throw new Error(
       "No updates provided",
     )
@@ -2380,6 +2566,20 @@ export async function updateMaterial(
     "Training material updated by trainer or training administrator.",
   )
 
+  const role =
+    await getUserRoleByProfileId(
+      actorProfileId,
+    )
+
+  if (role) {
+    await recomputeEngagementProgress(
+      res.rows[0]
+        .training_engagement_id,
+      actorProfileId,
+      role,
+    )
+  }
+
   return res.rows[0]
 }
 
@@ -2413,9 +2613,12 @@ export async function deleteMaterial(
     )
   }
 
-  await requireTrainingOperatorByProfile(
+  const engagementId =
     m.rows[0]
-      .training_engagement_id,
+      .training_engagement_id
+
+  await requireTrainingOperatorByProfile(
+    engagementId,
     actorProfileId,
   )
 
@@ -2428,13 +2631,25 @@ export async function deleteMaterial(
   )
 
   await createTrainingUpdate(
-    m.rows[0]
-      .training_engagement_id,
+    engagementId,
     actorProfileId,
     "material_deleted",
     `Material Deleted: ${m.rows[0].title}`,
     "Training material deleted by trainer or training administrator.",
   )
+
+  const role =
+    await getUserRoleByProfileId(
+      actorProfileId,
+    )
+
+  if (role) {
+    await recomputeEngagementProgress(
+      engagementId,
+      actorProfileId,
+      role,
+    )
+  }
 
   return {
     success: true,
@@ -2488,29 +2703,6 @@ function normalizeMaterialStatus(
   }
 
   return "not_started"
-}
-
-function normalizePercentage(
-  value: unknown,
-): number {
-  const numeric =
-    Number(value)
-
-  if (
-    !Number.isFinite(
-      numeric,
-    )
-  ) {
-    return 0
-  }
-
-  return Math.min(
-    100,
-    Math.max(
-      0,
-      Math.round(numeric),
-    ),
-  )
 }
 
 export async function listMaterialProgress(
@@ -2726,6 +2918,12 @@ export async function updateMaterialProgress(
     )
   }
 
+  if (!material.module_id) {
+    throw new Error(
+      "Training material must belong to a module before progress can be calculated",
+    )
+  }
+
   const existing =
     await query<{
       id: string
@@ -2808,9 +3006,11 @@ export async function updateMaterialProgress(
       status,
     )
 
-  if (
-    existing.rows[0]
-  ) {
+  let resultRow:
+    | TrainingMaterialProgress
+    | null = null
+
+  if (existing.rows[0]) {
     const fields: string[] = []
     const values: any[] = []
 
@@ -2975,170 +3175,174 @@ export async function updateMaterialProgress(
         values,
       )
 
-    if (
-      activityDecision.shouldCreate
-    ) {
-      if (
-        activityDecision.updateType ===
-        "material_completed"
-      ) {
-        await createTrainingUpdate(
-          engagementId,
-          clientProfileId,
-          "material_completed",
-          `Material Completed: ${material.title}`,
-          `Client completed the training material '${material.title}'.`,
-        )
-      } else if (
-        activityDecision.updateType ===
-        "material_started"
-      ) {
-        await createTrainingUpdate(
-          engagementId,
-          clientProfileId,
-          "material_started",
-          `Material Started: ${material.title}`,
-          `Client started accessing the training material '${material.title}'.`,
-        )
-      } else {
-        const milestone =
-          getProgressMilestone(
-            progress,
+    resultRow =
+      result.rows[0]
+  } else {
+    const result =
+      await query<TrainingMaterialProgress>(
+        `
+          INSERT INTO training_material_progress (
+            training_engagement_id,
+            material_id,
+            client_profile_id,
+            status,
+            progress_percentage,
+            watched_seconds,
+            duration_seconds,
+            pages_viewed,
+            total_pages,
+            started_at,
+            completed_at,
+            last_accessed_at,
+            created_at,
+            updated_at
           )
 
-        await createTrainingUpdate(
-          engagementId,
-          clientProfileId,
-          "material_progress_updated",
-          `Material Progress: ${material.title}`,
-          `Client reached ${milestone}% progress on training material '${material.title}'.`,
-        )
-      }
-    }
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            NOW(),
+            $10,
+            NOW(),
+            NOW(),
+            NOW()
+          )
 
-    return result.rows[0]
+          RETURNING *
+        `,
+        [
+          engagementId,
+          materialId,
+          clientProfileId,
+          status,
+          progress,
+
+          updates.watched_seconds !==
+          undefined
+            ? Math.max(
+                0,
+                Number(
+                  updates.watched_seconds,
+                ) || 0,
+              )
+            : null,
+
+          updates.duration_seconds !==
+          undefined
+            ? Math.max(
+                0,
+                Number(
+                  updates.duration_seconds,
+                ) || 0,
+              )
+            : null,
+
+          updates.pages_viewed !==
+          undefined
+            ? Math.max(
+                0,
+                Math.floor(
+                  Number(
+                    updates.pages_viewed,
+                  ) || 0,
+                ),
+              )
+            : null,
+
+          updates.total_pages !==
+          undefined
+            ? Math.max(
+                0,
+                Math.floor(
+                  Number(
+                    updates.total_pages,
+                  ) || 0,
+                ),
+              )
+            : null,
+
+          completedAt
+            ? new Date()
+            : null,
+        ],
+      )
+
+    resultRow =
+      result.rows[0]
   }
 
-  const result =
-    await query<TrainingMaterialProgress>(
-      `
-        INSERT INTO training_material_progress (
-          training_engagement_id,
-          material_id,
-          client_profile_id,
-          status,
-          progress_percentage,
-          watched_seconds,
-          duration_seconds,
-          pages_viewed,
-          total_pages,
-          started_at,
-          completed_at,
-          last_accessed_at,
-          created_at,
-          updated_at
-        )
-
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          $8,
-          $9,
-          NOW(),
-          $10,
-          NOW(),
-          NOW(),
-          NOW()
-        )
-
-        RETURNING *
-      `,
-      [
-        engagementId,
-        materialId,
-        clientProfileId,
-        status,
-        progress,
-
-        updates.watched_seconds !==
-        undefined
-          ? Math.max(
-              0,
-              Number(
-                updates.watched_seconds,
-              ) || 0,
-            )
-          : null,
-
-        updates.duration_seconds !==
-        undefined
-          ? Math.max(
-              0,
-              Number(
-                updates.duration_seconds,
-              ) || 0,
-            )
-          : null,
-
-        updates.pages_viewed !==
-        undefined
-          ? Math.max(
-              0,
-              Math.floor(
-                Number(
-                  updates.pages_viewed,
-                ) || 0,
-              ),
-            )
-          : null,
-
-        updates.total_pages !==
-        undefined
-          ? Math.max(
-              0,
-              Math.floor(
-                Number(
-                  updates.total_pages,
-                ) || 0,
-              ),
-            )
-          : null,
-
-        completedAt
-          ? new Date()
-          : null,
-      ],
+  if (!resultRow) {
+    throw new Error(
+      "Unable to save material progress",
     )
+  }
 
   if (
-    status === "completed" ||
-    progress >= 100
+    activityDecision.shouldCreate
   ) {
-    await createTrainingUpdate(
-      engagementId,
+    if (
+      activityDecision.updateType ===
+      "material_completed"
+    ) {
+      await createTrainingUpdate(
+        engagementId,
+        clientProfileId,
+        "material_completed",
+        `Material Completed: ${material.title}`,
+        `Client completed the training material '${material.title}'.`,
+      )
+    } else if (
+      activityDecision.updateType ===
+      "material_started"
+    ) {
+      await createTrainingUpdate(
+        engagementId,
+        clientProfileId,
+        "material_started",
+        `Material Started: ${material.title}`,
+        `Client started accessing the training material '${material.title}'.`,
+      )
+    } else {
+      const milestone =
+        getProgressMilestone(
+          progress,
+        )
+
+      await createTrainingUpdate(
+        engagementId,
+        clientProfileId,
+        "material_progress_updated",
+        `Material Progress: ${material.title}`,
+        `Client reached ${milestone}% progress on training material '${material.title}'.`,
+      )
+    }
+  }
+
+  /*
+   * Material progress is an input to the
+   * module progress engine.
+   */
+  const clientRole =
+    await getUserRoleByProfileId(
       clientProfileId,
-      "material_completed",
-      `Material Completed: ${material.title}`,
-      `Client completed the training material '${material.title}'.`,
     )
-  } else if (
-    progress > 0
-  ) {
-    await createTrainingUpdate(
+
+  if (clientRole) {
+    await recomputeEngagementProgress(
       engagementId,
       clientProfileId,
-      "material_started",
-      `Material Started: ${material.title}`,
-      `Client started accessing the training material '${material.title}'.`,
+      clientRole,
     )
   }
 
-  return result.rows[0]
+  return resultRow
 }
 
 /* =======================================================
@@ -3341,9 +3545,7 @@ export async function getModuleMaterialReadiness(
     `
   }
 
-  if (
-    clientProfileId
-  ) {
+  if (clientProfileId) {
     values.push(
       clientProfileId,
     )
@@ -3466,6 +3668,368 @@ export async function getModuleMaterialReadiness(
 }
 
 /* =======================================================
+   SYSTEM-CALCULATED MODULE PROGRESS
+   ======================================================= */
+
+export type CalculatedModuleProgress = {
+  module_id: string
+  module_title: string
+  module_order: number
+  material_count: number
+  completed_material_count: number
+  session_count: number
+  completed_session_count: number
+  material_progress: number
+  session_progress: number
+  completion_percentage: number
+  status:
+    | "not_started"
+    | "in_progress"
+    | "completed"
+}
+
+export async function calculateModuleProgress(
+  engagementId: string,
+  moduleId: string,
+  clientProfileId: string,
+): Promise<CalculatedModuleProgress> {
+  const moduleResult =
+    await query<{
+      id: string
+      title: string
+      module_order: number
+    }>(
+      `
+        SELECT
+          id,
+          title,
+          module_order
+
+        FROM training_modules
+
+        WHERE
+          id = $1
+          AND training_engagement_id = $2
+
+        LIMIT 1
+      `,
+      [
+        moduleId,
+        engagementId,
+      ],
+    )
+
+  const module =
+    moduleResult.rows[0]
+
+  if (!module) {
+    throw new Error(
+      "Module not found",
+    )
+  }
+
+  const materialResult =
+    await query<{
+      material_count: number
+      completed_material_count:
+        number
+    }>(
+      `
+        SELECT
+          COUNT(*) AS material_count,
+
+          COUNT(
+            CASE
+              WHEN mp.status =
+                'completed'
+              THEN 1
+            END
+          ) AS completed_material_count
+
+        FROM training_materials mat
+
+        LEFT JOIN training_material_progress mp
+          ON mp.training_engagement_id =
+            mat.training_engagement_id
+
+          AND mp.material_id =
+            mat.id
+
+          AND mp.client_profile_id =
+            $3
+
+        WHERE
+          mat.training_engagement_id = $1
+          AND mat.module_id = $2
+      `,
+      [
+        engagementId,
+        moduleId,
+        clientProfileId,
+      ],
+    )
+
+  const sessionResult =
+    await query<{
+      session_count: number
+      completed_session_count:
+        number
+    }>(
+      `
+        SELECT
+          COUNT(*) AS session_count,
+
+          COUNT(
+            CASE
+              WHEN status =
+                'completed'
+              THEN 1
+            END
+          ) AS completed_session_count
+
+        FROM training_sessions
+
+        WHERE
+          training_engagement_id = $1
+          AND module_id = $2
+          AND status != 'cancelled'
+      `,
+      [
+        engagementId,
+        moduleId,
+      ],
+    )
+
+  const materialCount =
+    Number(
+      materialResult.rows[0]
+        ?.material_count || 0,
+    )
+
+  const completedMaterialCount =
+    Number(
+      materialResult.rows[0]
+        ?.completed_material_count || 0,
+    )
+
+  const sessionCount =
+    Number(
+      sessionResult.rows[0]
+        ?.session_count || 0,
+    )
+
+  const completedSessionCount =
+    Number(
+      sessionResult.rows[0]
+        ?.completed_session_count ||
+        0,
+    )
+
+  const materialProgress =
+    materialCount > 0
+      ? Math.round(
+          (completedMaterialCount /
+            materialCount) *
+            100,
+        )
+      : 0
+
+  const sessionProgress =
+    sessionCount > 0
+      ? Math.round(
+          (completedSessionCount /
+            sessionCount) *
+            100,
+        )
+      : 0
+
+  const components: number[] = []
+
+  if (materialCount > 0) {
+    components.push(
+      materialProgress,
+    )
+  }
+
+  if (sessionCount > 0) {
+    components.push(
+      sessionProgress,
+    )
+  }
+
+  /*
+   * A module with no activities is never
+   * considered complete.
+   */
+  const completionPercentage =
+    components.length === 0
+      ? 0
+      : Math.round(
+          components.reduce(
+            (sum, value) =>
+              sum + value,
+            0,
+          ) /
+            components.length,
+        )
+
+  const status =
+    completionPercentage >= 100
+      ? "completed"
+      : completionPercentage > 0
+        ? "in_progress"
+        : "not_started"
+
+  return {
+    module_id:
+      module.id,
+
+    module_title:
+      module.title,
+
+    module_order:
+      Number(
+        module.module_order || 0,
+      ),
+
+    material_count:
+      materialCount,
+
+    completed_material_count:
+      completedMaterialCount,
+
+    session_count:
+      sessionCount,
+
+    completed_session_count:
+      completedSessionCount,
+
+    material_progress:
+      materialProgress,
+
+    session_progress:
+      sessionProgress,
+
+    completion_percentage:
+      completionPercentage,
+
+    status,
+  }
+}
+
+async function persistCalculatedModuleProgress(
+  engagementId: string,
+  moduleId: string,
+  clientProfileId: string,
+) {
+  const calculated =
+    await calculateModuleProgress(
+      engagementId,
+      moduleId,
+      clientProfileId,
+    )
+
+  const existing =
+    await query<{
+      id: string
+      trainer_notes: string | null
+    }>(
+      `
+        SELECT
+          id,
+          trainer_notes
+
+        FROM training_module_progress
+
+        WHERE
+          training_engagement_id = $1
+          AND module_id = $2
+          AND client_profile_id = $3
+
+        LIMIT 1
+      `,
+      [
+        engagementId,
+        moduleId,
+        clientProfileId,
+      ],
+    )
+
+  if (existing.rows[0]) {
+    const result =
+      await query(
+        `
+          UPDATE training_module_progress
+
+          SET
+            status = $1,
+            completion_percentage = $2,
+            updated_at = NOW()
+
+          WHERE id = $3
+
+          RETURNING *
+        `,
+        [
+          calculated.status,
+          calculated.completion_percentage,
+          existing.rows[0].id,
+        ],
+      )
+
+    return {
+      ...calculated,
+      progress_row:
+        result.rows[0],
+    }
+  }
+
+  const result =
+    await query(
+      `
+        INSERT INTO training_module_progress (
+          training_engagement_id,
+          module_id,
+          client_profile_id,
+          status,
+          completion_percentage,
+          trainer_notes,
+          updated_by,
+          created_at,
+          updated_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          NULL,
+          NULL,
+          NOW(),
+          NOW()
+        )
+
+        RETURNING *
+      `,
+      [
+        engagementId,
+        moduleId,
+        clientProfileId,
+        calculated.status,
+        calculated.completion_percentage,
+      ],
+    )
+
+  return {
+    ...calculated,
+    progress_row:
+      result.rows[0],
+  }
+}
+
+/* =======================================================
    Module Progress
    ======================================================= */
 
@@ -3473,216 +4037,141 @@ export async function listModuleProgress(
   engagementId: string,
   clientProfileId?: string,
 ) {
-  if (
-    clientProfileId
-  ) {
-    const res =
-      await query(
+  let resolvedClientProfileId =
+    clientProfileId || null
+
+  if (!resolvedClientProfileId) {
+    const engagement =
+      await query<{
+        client_profile_id:
+          string | null
+      }>(
         `
           SELECT
-            tmp.*,
+            client_profile_id
 
-            m.title AS module_title,
-            m.module_order,
+          FROM training_engagements
 
-            COALESCE(
-              (
-                SELECT COUNT(*)
+          WHERE id = $1
 
-                FROM training_materials mat
-
-                WHERE
-                  mat.training_engagement_id =
-                    tmp.training_engagement_id
-
-                  AND mat.module_id =
-                    tmp.module_id
-              ),
-              0
-            ) AS material_count,
-
-            COALESCE(
-              (
-                SELECT COUNT(*)
-
-                FROM training_material_progress mp
-
-                JOIN training_materials mat
-                  ON mat.id =
-                    mp.material_id
-
-                WHERE
-                  mp.training_engagement_id =
-                    tmp.training_engagement_id
-
-                  AND mat.module_id =
-                    tmp.module_id
-
-                  AND mp.client_profile_id =
-                    tmp.client_profile_id
-
-                  AND mp.status =
-                    'completed'
-              ),
-              0
-            ) AS completed_material_count
-
-          FROM training_module_progress tmp
-
-          LEFT JOIN training_modules m
-            ON m.id = tmp.module_id
-
-          WHERE
-            tmp.training_engagement_id = $1
-            AND tmp.client_profile_id = $2
-
-          ORDER BY
-            COALESCE(
-              m.module_order,
-              999999
-            ) ASC,
-
-            tmp.created_at ASC
+          LIMIT 1
         `,
-        [
-          engagementId,
-          clientProfileId,
-        ],
+        [engagementId],
       )
 
-    return res.rows.map(
-      (row: any) => {
-        const materialCount =
-          Number(
-            row.material_count,
-          ) || 0
-
-        const completedMaterialCount =
-          Number(
-            row.completed_material_count,
-          ) || 0
-
-        return {
-          ...row,
-
-          material_readiness_percentage:
-            materialCount === 0
-              ? 100
-              : Math.round(
-                  (completedMaterialCount /
-                    materialCount) *
-                    100,
-                ),
-
-          all_materials_completed:
-            materialCount === 0 ||
-            completedMaterialCount >=
-              materialCount,
-        }
-      },
-    )
+    resolvedClientProfileId =
+      engagement.rows[0]
+        ?.client_profile_id ||
+      null
   }
 
-  const res =
-    await query(
+  if (!resolvedClientProfileId) {
+    return []
+  }
+
+  const modules =
+    await query<{
+      id: string
+      title: string
+      module_order: number
+    }>(
       `
         SELECT
-          tmp.*,
+          id,
+          title,
+          module_order
 
-          m.title AS module_title,
-          m.module_order,
-
-          COALESCE(
-            (
-              SELECT COUNT(*)
-
-              FROM training_materials mat
-
-              WHERE
-                mat.training_engagement_id =
-                  tmp.training_engagement_id
-
-                AND mat.module_id =
-                  tmp.module_id
-            ),
-            0
-          ) AS material_count,
-
-          COALESCE(
-            (
-              SELECT COUNT(*)
-
-              FROM training_material_progress mp
-
-              JOIN training_materials mat
-                ON mat.id =
-                  mp.material_id
-
-              WHERE
-                mp.training_engagement_id =
-                  tmp.training_engagement_id
-
-                AND mat.module_id =
-                  tmp.module_id
-
-                AND mp.status =
-                  'completed'
-            ),
-            0
-          ) AS completed_material_count
-
-        FROM training_module_progress tmp
-
-        LEFT JOIN training_modules m
-          ON m.id = tmp.module_id
+        FROM training_modules
 
         WHERE
-          tmp.training_engagement_id = $1
+          training_engagement_id =
+            $1
 
         ORDER BY
-          COALESCE(
-            m.module_order,
-            999999
-          ) ASC,
-
-          tmp.created_at ASC
+          module_order ASC,
+          created_at ASC
       `,
       [engagementId],
     )
 
-  return res.rows.map(
-    (row: any) => {
-      const materialCount =
-        Number(
-          row.material_count,
-        ) || 0
+  const calculated =
+    await Promise.all(
+      modules.rows.map(
+        async (module) => {
+          const progress =
+            await calculateModuleProgress(
+              engagementId,
+              module.id,
+              resolvedClientProfileId!,
+            )
 
-      const completedMaterialCount =
-        Number(
-          row.completed_material_count,
-        ) || 0
+          const persisted =
+            await persistCalculatedModuleProgress(
+              engagementId,
+              module.id,
+              resolvedClientProfileId!,
+            )
 
-      return {
-        ...row,
+          return {
+            ...persisted.progress_row,
 
-        material_readiness_percentage:
-          materialCount === 0
-            ? 100
-            : Math.round(
-                (completedMaterialCount /
-                  materialCount) *
-                  100,
-              ),
+            module_title:
+              progress.module_title,
 
-        all_materials_completed:
-          materialCount === 0 ||
-          completedMaterialCount >=
-            materialCount,
-      }
-    },
-  )
+            module_order:
+              progress.module_order,
+
+            material_count:
+              progress.material_count,
+
+            completed_material_count:
+              progress.completed_material_count,
+
+            session_count:
+              progress.session_count,
+
+            completed_session_count:
+              progress.completed_session_count,
+
+            material_progress:
+              progress.material_progress,
+
+            session_progress:
+              progress.session_progress,
+
+            material_readiness_percentage:
+              progress.material_count === 0
+                ? 100
+                : progress.material_progress,
+
+            all_materials_completed:
+              progress.material_count === 0 ||
+              progress.completed_material_count >=
+                progress.material_count,
+
+            completion_percentage:
+              progress.completion_percentage,
+
+            status:
+              progress.status,
+          }
+        },
+      ),
+    )
+
+  return calculated
 }
 
+/*
+ * Compatibility wrapper.
+ *
+ * IMPORTANT:
+ * This function no longer accepts trainer-controlled
+ * progress values.
+ *
+ * It recalculates the module from actual training
+ * activities. Trainer notes remain editable.
+ */
 export async function upsertModuleProgress(
   engagementId: string,
   moduleId: string,
@@ -3699,14 +4188,18 @@ export async function upsertModuleProgress(
     actorProfileId,
   )
 
-  const actorRole =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
-
-  if (!actorRole) {
+  /*
+   * Manual percentage/status changes are no longer
+   * allowed. Progress is calculated by the system.
+   */
+  if (
+    updates.completion_percentage !==
+      undefined ||
+    updates.status !==
+      undefined
+  ) {
     throw new Error(
-      "User role could not be determined",
+      "Module progress and status are system-calculated and cannot be manually changed",
     )
   }
 
@@ -3736,222 +4229,124 @@ export async function upsertModuleProgress(
   }
 
   if (
-    updates.completion_percentage !==
-      undefined &&
-    (
-      Number.isNaN(
-        Number(
-          updates.completion_percentage,
-        ),
-      ) ||
-      Number(
-        updates.completion_percentage,
-      ) < 0 ||
-      Number(
-        updates.completion_percentage,
-      ) > 100
-    )
+    updates.trainer_notes !==
+    undefined
   ) {
-    throw new Error(
-      "Completion percentage must be between 0 and 100",
-    )
+    const existing =
+      await query<{ id: string }>(
+        `
+          SELECT id
+
+          FROM training_module_progress
+
+          WHERE
+            training_engagement_id = $1
+            AND module_id = $2
+            AND client_profile_id = $3
+
+          LIMIT 1
+        `,
+        [
+          engagementId,
+          moduleId,
+          clientProfileId,
+        ],
+      )
+
+    if (existing.rows[0]) {
+      await query(
+        `
+          UPDATE training_module_progress
+
+          SET
+            trainer_notes = $1,
+            updated_by = $2,
+            updated_at = NOW()
+
+          WHERE id = $3
+        `,
+        [
+          updates.trainer_notes,
+          actorProfileId,
+          existing.rows[0].id,
+        ],
+      )
+    } else {
+      const calculated =
+        await calculateModuleProgress(
+          engagementId,
+          moduleId,
+          clientProfileId,
+        )
+
+      await query(
+        `
+          INSERT INTO training_module_progress (
+            training_engagement_id,
+            module_id,
+            client_profile_id,
+            status,
+            completion_percentage,
+            trainer_notes,
+            updated_by,
+            created_at,
+            updated_at
+          )
+
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            NOW(),
+            NOW()
+          )
+        `,
+        [
+          engagementId,
+          moduleId,
+          clientProfileId,
+          calculated.status,
+          calculated.completion_percentage,
+          updates.trainer_notes,
+          actorProfileId,
+        ],
+      )
+    }
   }
 
-  const existing =
-    await query<{ id: string }>(
-      `
-        SELECT id
-
-        FROM training_module_progress
-
-        WHERE
-          training_engagement_id = $1
-          AND module_id = $2
-          AND client_profile_id = $3
-
-        LIMIT 1
-      `,
-      [
-        engagementId,
-        moduleId,
-        clientProfileId,
-      ],
+  const calculated =
+    await persistCalculatedModuleProgress(
+      engagementId,
+      moduleId,
+      clientProfileId,
     )
 
-  if (
-    existing.rows[0]
-  ) {
-    const fields: string[] = []
-    const values: any[] = []
-
-    let ix = 1
-
-    if (
-      updates.status !==
-      undefined
-    ) {
-      fields.push(
-        `status = $${ix}`,
-      )
-
-      values.push(
-        updates.status,
-      )
-
-      ix++
-    }
-
-    if (
-      updates.completion_percentage !==
-      undefined
-    ) {
-      fields.push(
-        `completion_percentage = $${ix}`,
-      )
-
-      values.push(
-        updates.completion_percentage,
-      )
-
-      ix++
-    }
-
-    if (
-      updates.trainer_notes !==
-      undefined
-    ) {
-      fields.push(
-        `trainer_notes = $${ix}`,
-      )
-
-      values.push(
-        updates.trainer_notes,
-      )
-
-      ix++
-    }
-
-    if (
-      fields.length === 0
-    ) {
-      throw new Error(
-        "No progress updates provided",
-      )
-    }
-
-    values.push(
+  const actorRole =
+    await getUserRoleByProfileId(
       actorProfileId,
     )
 
-    const updatedByIndex =
-      ix
-
-    values.push(
-      existing.rows[0].id,
-    )
-
-    const idIndex =
-      updatedByIndex + 1
-
-    const sql = `
-      UPDATE training_module_progress
-
-      SET
-        ${fields.join(", ")},
-        updated_by =
-          $${updatedByIndex},
-        updated_at = NOW()
-
-      WHERE id = $${idIndex}
-
-      RETURNING *
-    `
-
-    const res =
-      await query(
-        sql,
-        values,
-      )
-
+  if (actorRole) {
     await recomputeEngagementProgress(
       engagementId,
       actorProfileId,
       actorRole,
     )
-
-    await createTrainingUpdate(
-      engagementId,
-      actorProfileId,
-      "progress_updated",
-      "Module Progress Updated",
-      "Progress updated for module.",
-    )
-
-    return res.rows[0]
   }
-
-  const res =
-    await query(
-      `
-        INSERT INTO training_module_progress (
-          training_engagement_id,
-          module_id,
-          client_profile_id,
-          status,
-          completion_percentage,
-          trainer_notes,
-          updated_by,
-          created_at,
-          updated_at
-        )
-
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          NOW(),
-          NOW()
-        )
-
-        RETURNING *
-      `,
-      [
-        engagementId,
-        moduleId,
-        clientProfileId,
-
-        updates.status ||
-          "not_started",
-
-        updates.completion_percentage ??
-          0,
-
-        updates.trainer_notes ||
-          null,
-
-        actorProfileId,
-      ],
-    )
-
-  await recomputeEngagementProgress(
-    engagementId,
-    actorProfileId,
-    actorRole,
-  )
 
   await createTrainingUpdate(
     engagementId,
     actorProfileId,
-    "progress_created",
-    "Module Progress Recorded",
-    "Initial progress recorded for module.",
+    "progress_updated",
+    "Module Progress Recalculated",
+    `Module progress was recalculated automatically from its training sessions and materials.`,
   )
 
-  return res.rows[0]
+  return calculated.progress_row
 }
 
 /* =======================================================
@@ -3963,77 +4358,87 @@ async function recomputeEngagementProgress(
   actorProfileId: string | null,
   actorRole: string,
 ) {
-  /*
-   * =====================================================
-   * OVERALL TRAINING PROGRESS
-   * =====================================================
-   *
-   * Every curriculum module counts.
-   *
-   * If a module does not yet have a
-   * training_module_progress row, it is treated as 0%.
-   *
-   * Example:
-   *
-   * Module 1 = 100%
-   * Module 2 = 75%
-   * Module 3 = no progress row
-   *
-   * Overall =
-   * (100 + 75 + 0) / 3
-   * = 58%
-   *
-   * Material consumption and session attendance
-   * do NOT directly change trainer-controlled
-   * module progress.
-   */
-
-  const res =
+  const engagement =
     await query<{
-      module_count: number
-      avg_completion: number | null
+      client_profile_id:
+        string | null
+      progress:
+        number | null
     }>(
       `
         SELECT
-          COUNT(tm.id) AS module_count,
+          client_profile_id,
+          progress
 
-          AVG(
-            COALESCE(
-              tmp.completion_percentage,
-              0
-            )
-          ) AS avg_completion
+        FROM training_engagements
 
-        FROM training_modules tm
+        WHERE id = $1
 
-        LEFT JOIN training_module_progress tmp
-          ON tmp.module_id = tm.id
-          AND tmp.training_engagement_id =
-            tm.training_engagement_id
-
-        WHERE
-          tm.training_engagement_id = $1
+        LIMIT 1
       `,
       [engagementId],
     )
 
-  const moduleCount =
-    Number(
-      res.rows[0]?.module_count || 0,
+  const clientProfileId =
+    engagement.rows[0]
+      ?.client_profile_id ||
+    null
+
+  if (!clientProfileId) {
+    return
+  }
+
+  const modules =
+    await query<{
+      id: string
+    }>(
+      `
+        SELECT id
+
+        FROM training_modules
+
+        WHERE training_engagement_id =
+          $1
+
+        ORDER BY
+          module_order ASC,
+          created_at ASC
+      `,
+      [engagementId],
     )
 
-  /*
-   * No curriculum modules means
-   * there is no measurable module progress yet.
-   */
-  const avg =
+  const calculatedModules =
+    await Promise.all(
+      modules.rows.map(
+        async (module) =>
+          persistCalculatedModuleProgress(
+            engagementId,
+            module.id,
+            clientProfileId,
+          ),
+      ),
+    )
+
+  const moduleCount =
+    calculatedModules.length
+
+  const overallProgress =
     moduleCount === 0
       ? 0
       : Math.round(
-          Number(
-            res.rows[0]
-              ?.avg_completion || 0,
-          ),
+          calculatedModules.reduce(
+            (
+              total,
+              module,
+            ) =>
+              total +
+              Number(
+                module.completion_percentage ||
+                  0,
+              ),
+            0,
+          ) /
+            moduleCount,
         )
 
   await query(
@@ -4047,26 +4452,20 @@ async function recomputeEngagementProgress(
       WHERE id = $2
     `,
     [
-      avg,
+      overallProgress,
       engagementId,
     ],
   )
 
   /*
-   * =====================================================
-   * COMPLETION GUARD
-   * =====================================================
+   * 100% requires an actual curriculum.
    */
-
-  if (avg < 100) {
+  if (
+    moduleCount === 0 ||
+    overallProgress < 100
+  ) {
     return
   }
-
-  /*
-   * =====================================================
-   * APPROVED TRAINER CHECK
-   * =====================================================
-   */
 
   const approvedTrainers =
     await listApprovedTrainers(
@@ -4081,17 +4480,11 @@ async function recomputeEngagementProgress(
       actorProfileId,
       "progress_complete",
       "Progress Reached 100%",
-      "Overall progress reached 100%, but no approved trainer is assigned. At least one approved trainer must confirm completion.",
+      "Overall calculated training progress reached 100%, but no approved trainer is assigned. At least one approved trainer must confirm completion.",
     )
 
     return
   }
-
-  /*
-   * =====================================================
-   * ACTOR AUTHORIZATION
-   * =====================================================
-   */
 
   const actorIsApprovedTrainer =
     Boolean(
@@ -4109,14 +4502,9 @@ async function recomputeEngagementProgress(
     )
 
   /*
-   * =====================================================
-   * EXISTING COMPLETION SERVICE
-   * =====================================================
-   *
-   * Do not replace the existing completion
-   * workflow.
+   * Existing completion service remains
+   * authoritative.
    */
-
   if (
     actorIsApprovedTrainer ||
     actorIsSuperAdmin
@@ -4138,8 +4526,8 @@ async function recomputeEngagementProgress(
         "auto_completion",
         "Training Completed",
         actorIsSuperAdmin
-          ? "Training was marked completed by the Super Administrator after overall module progress reached 100%."
-          : "Training was marked completed after overall module progress reached 100% and an approved trainer confirmed completion.",
+          ? "Training was marked completed by the Super Administrator after calculated module progress reached 100%."
+          : "Training was marked completed after calculated module progress reached 100% and an approved trainer confirmed completion.",
       )
     } catch (err: any) {
       console.error(
@@ -4161,12 +4549,6 @@ async function recomputeEngagementProgress(
     return
   }
 
-  /*
-   * =====================================================
-   * WAITING FOR TRAINER CONFIRMATION
-   * =====================================================
-   */
-
   for (
     const trainer of approvedTrainers
   ) {
@@ -4185,7 +4567,7 @@ async function recomputeEngagementProgress(
             "Training progress reached 100%",
 
           message:
-            "Overall training progress has reached 100%. Please confirm completion of the training engagement.",
+            "Calculated training progress has reached 100%. Please confirm completion of the training engagement.",
 
           metadata: {
             training_engagement_id:
@@ -4214,6 +4596,6 @@ async function recomputeEngagementProgress(
     actorProfileId,
     "progress_complete_pending",
     "Progress Reached 100%",
-    "Overall progress reached 100%. Awaiting confirmation from an approved trainer to complete the training engagement.",
+    "Calculated training progress reached 100%. Awaiting confirmation from an approved trainer to complete the training engagement.",
   )
 }

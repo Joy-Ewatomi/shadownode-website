@@ -7,6 +7,7 @@ import {
 
 type TrainingModule = {
   id: string
+
   title?: string | null
   description?: string | null
   objectives?: unknown
@@ -48,6 +49,21 @@ type TrainingModuleProgress = {
 
   material_count?: number | string | null
   completed_material_count?: number | string | null
+
+  session_count?: number | string | null
+  completed_session_count?: number | string | null
+
+  material_progress?: number | string | null
+  session_progress?: number | string | null
+
+  material_readiness_percentage?:
+    | number
+    | string
+    | null
+
+  all_materials_completed?:
+    | boolean
+    | null
 
   created_at?: string | null
   updated_at?: string | null
@@ -106,6 +122,19 @@ type TrainingMaterialProgress = {
   [key: string]: unknown
 }
 
+type TrainingSession = {
+  id: string
+
+  module_id?: string | null
+
+  status?: string | null
+  attendance_status?: string | null
+
+  scheduled_at?: string | null
+
+  [key: string]: unknown
+}
+
 type ProgressManagerProps = {
   engagementId: string
   engagementNumber?: string | null
@@ -117,11 +146,17 @@ type ProgressManagerProps = {
   initialMaterials?: TrainingMaterial[]
   initialMaterialProgress?: TrainingMaterialProgress[]
 
+  initialSessions?: TrainingSession[]
+
   canManageProgress?: boolean
 }
 
 function numberValue(
-  value: number | string | null | undefined,
+  value:
+    | number
+    | string
+    | null
+    | undefined,
 ): number {
   const parsed = Number(value)
 
@@ -133,11 +168,18 @@ function numberValue(
 }
 
 function clampProgress(
-  value: number | string | null | undefined,
+  value:
+    | number
+    | string
+    | null
+    | undefined,
 ): number {
   return Math.min(
     100,
-    Math.max(0, numberValue(value)),
+    Math.max(
+      0,
+      numberValue(value),
+    ),
   )
 }
 
@@ -148,7 +190,10 @@ function formatPercentage(
 }
 
 function normalizeStatus(
-  value: string | null | undefined,
+  value:
+    | string
+    | null
+    | undefined,
 ): string {
   return (
     value
@@ -207,8 +252,9 @@ function materialProgressCompleted(
   progress: TrainingMaterialProgress,
 ): boolean {
   if (
-    normalizeStatus(progress.status) ===
-    "completed"
+    normalizeStatus(
+      progress.status,
+    ) === "completed"
   ) {
     return true
   }
@@ -220,6 +266,16 @@ function materialProgressCompleted(
   )
 }
 
+function sessionCompleted(
+  session: TrainingSession,
+): boolean {
+  return (
+    normalizeStatus(
+      session.status,
+    ) === "completed"
+  )
+}
+
 export default function ProgressManager({
   engagementId,
   engagementNumber,
@@ -228,6 +284,7 @@ export default function ProgressManager({
   initialProgress = [],
   initialMaterials = [],
   initialMaterialProgress = [],
+  initialSessions = [],
   canManageProgress = false,
 }: ProgressManagerProps) {
   const [
@@ -238,9 +295,9 @@ export default function ProgressManager({
   >(initialProgress)
 
   const [
-    savingModuleId,
-    setSavingModuleId,
-  ] = useState<string | null>(null)
+    isRefreshing,
+    setIsRefreshing,
+  ] = useState(false)
 
   const [
     error,
@@ -248,12 +305,8 @@ export default function ProgressManager({
   ] = useState<string | null>(null)
 
   /*
-   * Build a progress map from existing
-   * training_module_progress rows.
-   *
-   * A newly-created module may not have a
-   * progress row yet. It must still appear
-   * on the dashboard at 0%.
+   * The backend is the source of truth for
+   * calculated module progress.
    */
   const progressMap = useMemo(() => {
     const map = new Map<
@@ -276,14 +329,7 @@ export default function ProgressManager({
   }, [progress])
 
   /*
-   * Material completion is client-specific.
-   *
-   * We intentionally do NOT trust
-   * completed_material_count from listModules()
-   * for the client dashboard because that value
-   * can represent engagement-level material
-   * completion rather than this client's own
-   * completion.
+   * Client-specific material activity.
    */
   const materialProgressByModule =
     useMemo(() => {
@@ -296,7 +342,8 @@ export default function ProgressManager({
       >()
 
       for (
-        const material of initialMaterials
+        const material of
+          initialMaterials
       ) {
         const moduleId =
           material.module_id
@@ -342,55 +389,143 @@ export default function ProgressManager({
     ])
 
   /*
-   * Merge curriculum + progress.
-   *
-   * The curriculum is authoritative for
-   * which modules exist.
+   * Session activity.
    */
+  const sessionStatsByModule =
+    useMemo(() => {
+      const map = new Map<
+        string,
+        {
+          total: number
+          completed: number
+          attended: number
+        }
+      >()
+
+      for (
+        const session of initialSessions
+      ) {
+        const moduleId =
+          session.module_id
+
+        if (!moduleId) {
+          continue
+        }
+
+        const current =
+          map.get(moduleId) || {
+            total: 0,
+            completed: 0,
+            attended: 0,
+          }
+
+        current.total += 1
+
+        if (
+          sessionCompleted(
+            session,
+          )
+        ) {
+          current.completed += 1
+        }
+
+        if (
+          normalizeStatus(
+            session.attendance_status,
+          ) === "attended"
+        ) {
+          current.attended += 1
+        }
+
+        map.set(
+          moduleId,
+          current,
+        )
+      }
+
+      return map
+    }, [initialSessions])
+
   const modules = useMemo(() => {
     return [...initialModules]
       .sort(
         (a, b) =>
-          numberValue(a.module_order) -
-          numberValue(b.module_order),
+          numberValue(
+            a.module_order,
+          ) -
+          numberValue(
+            b.module_order,
+          ),
       )
       .map((module) => {
         const savedProgress =
-          progressMap.get(module.id)
+          progressMap.get(
+            module.id,
+          )
 
         const moduleProgress =
           clampProgress(
             savedProgress
               ?.completion_percentage ??
-              module.completion_percentage ??
               0,
           )
 
         const moduleStatus =
-          savedProgress?.status ||
-          module.status ||
-          (
-            moduleProgress >= 100
-              ? "completed"
-              : moduleProgress > 0
-                ? "in_progress"
-                : "not_started"
+          normalizeStatus(
+            savedProgress?.status ??
+              "not_started",
           )
 
         const materialStats =
           materialProgressByModule.get(
             module.id,
           ) || {
-            total: 0,
-            completed: 0,
+            total:
+              numberValue(
+                savedProgress?.material_count ??
+                  module.material_count,
+              ),
+
+            completed:
+              numberValue(
+                savedProgress?.completed_material_count ??
+                  module.completed_material_count,
+              ),
           }
+
+        const sessionStats =
+          sessionStatsByModule.get(
+            module.id,
+          )
+
+        const sessionTotal =
+          sessionStats?.total ??
+          numberValue(
+            savedProgress?.session_count ??
+              module.session_count,
+          )
+
+        const sessionsCompleted =
+          sessionStats?.completed ??
+          numberValue(
+            savedProgress?.completed_session_count ??
+              module.completed_session_count,
+          )
+
+        const sessionsAttended =
+          sessionStats?.attended ??
+          numberValue(
+            module.attended_session_count,
+          )
 
         return {
           module,
 
-          progress: moduleProgress,
+          progress:
+            moduleProgress,
 
-          status: moduleStatus,
+          status:
+            moduleStatus,
 
           materialTotal:
             materialStats.total,
@@ -398,30 +533,58 @@ export default function ProgressManager({
           materialCompleted:
             materialStats.completed,
 
-          /*
-           * Session counts come directly from
-           * listModules().
-           */
-          sessionTotal:
-            numberValue(
-              module.session_count,
+          materialProgress:
+            clampProgress(
+              savedProgress
+                ?.material_progress ??
+                (
+                  materialStats.total >
+                    0
+                    ? (
+                        materialStats.completed /
+                        materialStats.total
+                      ) *
+                      100
+                    : 0
+                ),
             ),
 
-          sessionsAttended:
-            numberValue(
-              module.attended_session_count,
+          sessionTotal,
+
+          sessionsAttended,
+
+          sessionsCompleted,
+
+          sessionProgress:
+            clampProgress(
+              savedProgress
+                ?.session_progress ??
+                (
+                  sessionTotal >
+                    0
+                    ? (
+                        sessionsCompleted /
+                        sessionTotal
+                      ) *
+                      100
+                    : 0
+                ),
             ),
 
-          sessionsCompleted:
-            numberValue(
-              module.completed_session_count,
-            ),
+          trainerNotes:
+            savedProgress?.trainer_notes ||
+            null,
+
+          completedAt:
+            savedProgress?.completed_at ||
+            null,
         }
       })
   }, [
     initialModules,
     progressMap,
     materialProgressByModule,
+    sessionStatsByModule,
   ])
 
   const overallProgress =
@@ -430,13 +593,13 @@ export default function ProgressManager({
         return 0
       }
 
-      const total = modules.reduce(
-        (sum, item) =>
-          sum + item.progress,
-        0,
+      return (
+        modules.reduce(
+          (sum, item) =>
+            sum + item.progress,
+          0,
+        ) / modules.length
       )
-
-      return total / modules.length
     }, [modules])
 
   const completedModules =
@@ -493,16 +656,72 @@ export default function ProgressManager({
       0,
     )
 
-  async function updateModuleProgress(
+  /*
+   * Pull the latest authoritative calculation
+   * from the backend.
+   */
+  async function refreshProgress() {
+    setError(null)
+    setIsRefreshing(true)
+
+    try {
+      const response =
+        await fetch(
+          `/api/training/${engagementId}/progress`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        )
+
+      const data =
+        await response.json().catch(
+          () => null,
+        )
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            "Failed to refresh training progress.",
+        )
+      }
+
+      if (
+        Array.isArray(
+          data?.progress,
+        )
+      ) {
+        setProgress(
+          data.progress,
+        )
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to refresh training progress.",
+      )
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  /*
+   * Ask the server to recalculate one module.
+   *
+   * IMPORTANT:
+   * clientProfileId is deliberately NOT sent.
+   * The API derives it from the engagement.
+   */
+  async function recalculateModule(
     moduleId: string,
-    completionPercentage: number,
   ) {
     if (!canManageProgress) {
       return
     }
 
     setError(null)
-    setSavingModuleId(moduleId)
+    setIsRefreshing(true)
 
     try {
       const response =
@@ -515,9 +734,7 @@ export default function ProgressManager({
                 "application/json",
             },
             body: JSON.stringify({
-              module_id: moduleId,
-              completion_percentage:
-                completionPercentage,
+              moduleId,
             }),
           },
         )
@@ -530,14 +747,11 @@ export default function ProgressManager({
       if (!response.ok) {
         throw new Error(
           data?.error ||
-            "Failed to update module progress.",
+            "Failed to recalculate module progress.",
         )
       }
 
-      const updated =
-        data?.progress
-
-      if (updated) {
+      if (data?.progress) {
         setProgress(
           (current) => {
             const existingIndex =
@@ -552,7 +766,7 @@ export default function ProgressManager({
             ) {
               return [
                 ...current,
-                updated,
+                data.progress,
               ]
             }
 
@@ -565,82 +779,29 @@ export default function ProgressManager({
                 existingIndex
                   ? {
                       ...item,
-                      ...updated,
-                    }
-                  : item,
-            )
-          },
-        )
-      } else {
-        /*
-         * Keep the UI responsive even if the API
-         * returns a different response shape.
-         */
-        setProgress(
-          (current) => {
-            const status =
-              completionPercentage >=
-              100
-                ? "completed"
-                : completionPercentage >
-                    0
-                  ? "in_progress"
-                  : "not_started"
-
-            const existingIndex =
-              current.findIndex(
-                (item) =>
-                  item.module_id ===
-                  moduleId,
-              )
-
-            const next = {
-              id:
-                current[
-                  existingIndex
-                ]?.id || "",
-              module_id:
-                moduleId,
-              training_engagement_id:
-                engagementId,
-              status,
-              completion_percentage:
-                completionPercentage,
-            }
-
-            if (
-              existingIndex === -1
-            ) {
-              return [
-                ...current,
-                next,
-              ]
-            }
-
-            return current.map(
-              (
-                item,
-                index,
-              ) =>
-                index ===
-                existingIndex
-                  ? {
-                      ...item,
-                      ...next,
+                      ...data.progress,
                     }
                   : item,
             )
           },
         )
       }
+
+      /*
+       * The module calculation may also change
+       * overall engagement progress, so refresh
+       * the complete authoritative result after
+       * successful recalculation.
+       */
+      await refreshProgress()
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to update progress.",
+          : "Failed to recalculate module progress.",
       )
     } finally {
-      setSavingModuleId(null)
+      setIsRefreshing(false)
     }
   }
 
@@ -687,16 +848,33 @@ export default function ProgressManager({
             </div>
           </div>
 
-          <div className="text-left lg:text-right">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/40">
-              Overall Progress
-            </p>
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <div className="text-left lg:text-right">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/40">
+                Overall Progress
+              </p>
 
-            <p className="mt-1 text-4xl font-semibold text-white">
-              {formatPercentage(
-                overallProgress,
-              )}
-            </p>
+              <p className="mt-1 text-4xl font-semibold text-white">
+                {formatPercentage(
+                  overallProgress,
+                )}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                refreshProgress
+              }
+              disabled={
+                isRefreshing
+              }
+              className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRefreshing
+                ? "Refreshing..."
+                : "Refresh Progress"}
+            </button>
           </div>
         </div>
 
@@ -754,12 +932,12 @@ export default function ProgressManager({
           value={formatPercentage(
             overallProgress,
           )}
-          detail="Across all modules"
+          detail="Calculated across modules"
         />
       </section>
 
-      {/* Progress explanation */}
-      <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+      {/* Calculation explanation */}
+      <section className="rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.03] p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
             %
@@ -767,18 +945,48 @@ export default function ProgressManager({
 
           <div>
             <h2 className="font-semibold text-white">
-              How progress is calculated
+              Progress is calculated automatically
             </h2>
 
             <p className="mt-1 text-sm leading-6 text-white/50">
-              Overall training progress is based
-              on the completion percentage of the
-              curriculum modules. Materials and
-              session attendance are tracked
-              separately as supporting training
-              activity and do not automatically
-              increase module progress.
+              A module's progress is calculated
+              from the training activity attached
+              to that module. Completed materials
+              and completed sessions contribute to
+              the module's completion percentage.
+              Trainers and administrators cannot
+              manually set a percentage.
             </p>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/50">
+                Materials
+              </span>
+
+              <span className="text-white/20">
+                +
+              </span>
+
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/50">
+                Sessions
+              </span>
+
+              <span className="text-white/20">
+                →
+              </span>
+
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-300">
+                Module Progress
+              </span>
+
+              <span className="text-white/20">
+                →
+              </span>
+
+              <span className="rounded-full border border-blue-400/20 bg-blue-400/10 px-3 py-1.5 text-xs text-blue-300">
+                Overall Progress
+              </span>
+            </div>
           </div>
         </div>
       </section>
@@ -843,6 +1051,9 @@ export default function ProgressManager({
                   materialCompleted={
                     item.materialCompleted
                   }
+                  materialProgress={
+                    item.materialProgress
+                  }
                   sessionTotal={
                     item.sessionTotal
                   }
@@ -852,15 +1063,23 @@ export default function ProgressManager({
                   sessionsCompleted={
                     item.sessionsCompleted
                   }
+                  sessionProgress={
+                    item.sessionProgress
+                  }
+                  trainerNotes={
+                    item.trainerNotes
+                  }
+                  completedAt={
+                    item.completedAt
+                  }
                   canManage={
                     canManageProgress
                   }
-                  saving={
-                    savingModuleId ===
-                    item.module.id
+                  refreshing={
+                    isRefreshing
                   }
-                  onUpdate={
-                    updateModuleProgress
+                  onRecalculate={
+                    recalculateModule
                   }
                 />
               ),
@@ -869,7 +1088,7 @@ export default function ProgressManager({
         )}
       </section>
 
-      {/* Material readiness */}
+      {/* Material activity */}
       <section className="rounded-2xl border border-white/10 bg-[#07130f] p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
@@ -878,7 +1097,7 @@ export default function ProgressManager({
             </p>
 
             <h2 className="mt-1 text-xl font-semibold text-white">
-              Material Readiness
+              Material Activity
             </h2>
           </div>
 
@@ -895,8 +1114,10 @@ export default function ProgressManager({
               width:
                 totalMaterials > 0
                   ? `${
-                      (completedMaterials /
-                        totalMaterials) *
+                      (
+                        completedMaterials /
+                        totalMaterials
+                      ) *
                       100
                     }%`
                   : "0%",
@@ -919,18 +1140,16 @@ export default function ProgressManager({
 
           <ActivityStat
             label="Remaining"
-            value={
-              Math.max(
-                0,
-                totalMaterials -
-                  completedMaterials,
-              )
-            }
+            value={Math.max(
+              0,
+              totalMaterials -
+                completedMaterials,
+            )}
           />
         </div>
       </section>
 
-      {/* Session readiness */}
+      {/* Session activity */}
       <section className="rounded-2xl border border-white/10 bg-[#07130f] p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
@@ -939,7 +1158,7 @@ export default function ProgressManager({
             </p>
 
             <h2 className="mt-1 text-xl font-semibold text-white">
-              Session Attendance
+              Session Activity
             </h2>
           </div>
 
@@ -956,8 +1175,10 @@ export default function ProgressManager({
               width:
                 totalSessions > 0
                   ? `${
-                      (attendedSessions /
-                        totalSessions) *
+                      (
+                        attendedSessions /
+                        totalSessions
+                      ) *
                       100
                     }%`
                   : "0%",
@@ -1043,100 +1264,65 @@ function ModuleProgressCard({
   status,
   materialTotal,
   materialCompleted,
+  materialProgress,
   sessionTotal,
   sessionsAttended,
   sessionsCompleted,
+  sessionProgress,
+  trainerNotes,
+  completedAt,
   canManage,
-  saving,
-  onUpdate,
+  refreshing,
+  onRecalculate,
 }: {
   index: number
   module: TrainingModule
+
   progress: number
   status: string
 
   materialTotal: number
   materialCompleted: number
+  materialProgress: number
 
   sessionTotal: number
   sessionsAttended: number
   sessionsCompleted: number
+  sessionProgress: number
+
+  trainerNotes: string | null
+  completedAt: string | null
 
   canManage: boolean
-  saving: boolean
+  refreshing: boolean
 
-  onUpdate: (
+  onRecalculate: (
     moduleId: string,
-    progress: number,
   ) => void
 }) {
-  const [
-    editing,
-    setEditing,
-  ] = useState(false)
-
-  const [
-    draftProgress,
-    setDraftProgress,
-  ] = useState(
-    Math.round(progress),
-  )
-
   const normalizedStatus =
     normalizeStatus(status)
-
-  function beginEditing() {
-    setDraftProgress(
-      Math.round(progress),
-    )
-
-    setEditing(true)
-  }
-
-  function cancelEditing() {
-    setDraftProgress(
-      Math.round(progress),
-    )
-
-    setEditing(false)
-  }
-
-  async function save() {
-    await onUpdate(
-      module.id,
-      Math.min(
-        100,
-        Math.max(
-          0,
-          Number(draftProgress),
-        ),
-      ),
-    )
-
-    setEditing(false)
-  }
 
   return (
     <article className="relative px-6 py-6">
       <div className="flex gap-5">
-        {/* Module number */}
         <div className="hidden shrink-0 sm:flex">
           <div className="flex h-11 w-11 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-400/10 text-sm font-semibold text-emerald-300">
-            {String(index + 1).padStart(
-              2,
-              "0",
-            )}
+            {String(
+              index + 1,
+            ).padStart(2, "0")}
           </div>
         </div>
 
         <div className="min-w-0 flex-1">
-          {/* Title */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-400 sm:hidden">
                   Module{" "}
-                  {String(index + 1).padStart(
+                  {String(
+                    index + 1,
+                  ).padStart(
                     2,
                     "0",
                   )}
@@ -1144,7 +1330,9 @@ function ModuleProgressCard({
 
                 <h3 className="truncate text-lg font-semibold text-white">
                   {module.title ||
-                    `Module ${index + 1}`}
+                    `Module ${
+                      index + 1
+                    }`}
                 </h3>
               </div>
 
@@ -1166,11 +1354,10 @@ function ModuleProgressCard({
             </span>
           </div>
 
-          {/* Progress */}
           <div className="mt-5">
             <div className="flex items-center justify-between text-xs">
               <span className="text-white/40">
-                Module progress
+                Calculated module progress
               </span>
 
               <span className="font-semibold text-white">
@@ -1182,7 +1369,12 @@ function ModuleProgressCard({
 
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.06]">
               <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                className={`h-full rounded-full transition-all duration-500 ${
+                  progress >=
+                  100
+                    ? "bg-emerald-400"
+                    : "bg-blue-400"
+                }`}
                 style={{
                   width: `${progress}%`,
                 }}
@@ -1190,212 +1382,160 @@ function ModuleProgressCard({
             </div>
           </div>
 
-          {/* Activity grid */}
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            {/* Materials */}
-            <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-[0.12em] text-white/35">
-                  Materials
-                </span>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <ActivityBreakdown
+              label="Materials"
+              completed={
+                materialCompleted
+              }
+              total={
+                materialTotal
+              }
+              percentage={
+                materialProgress
+              }
+              description="Completed materials"
+              tone="emerald"
+            />
 
-                <span className="text-sm font-semibold text-white">
-                  {materialCompleted}/
-                  {materialTotal}
-                </span>
-              </div>
-
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{
-                    width:
-                      materialTotal >
-                      0
-                        ? `${
-                            (materialCompleted /
-                              materialTotal) *
-                            100
-                          }%`
-                        : "0%",
-                  }}
-                />
-              </div>
-
-              <p className="mt-2 text-xs text-white/35">
-                Completed materials
-              </p>
-            </div>
-
-            {/* Sessions */}
-            <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-[0.12em] text-white/35">
-                  Sessions
-                </span>
-
-                <span className="text-sm font-semibold text-white">
-                  {sessionTotal}
-                </span>
-              </div>
-
-              <div className="mt-3 flex items-center gap-2">
-                <span className="text-xs text-blue-300">
-                  {sessionsAttended} attended
-                </span>
-
-                <span className="text-white/20">
-                  •
-                </span>
-
-                <span className="text-xs text-white/40">
-                  {sessionsCompleted}{" "}
-                  completed
-                </span>
-              </div>
-
-              <p className="mt-2 text-xs text-white/35">
-                Session activity
-              </p>
-            </div>
-
-            {/* Module status */}
-            <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
-              <span className="text-xs uppercase tracking-[0.12em] text-white/35">
-                Status
-              </span>
-
-              <p className="mt-2 text-sm font-medium text-white">
-                {statusLabel(
-                  normalizedStatus,
-                )}
-              </p>
-
-              <p className="mt-1 text-xs text-white/35">
-                Curriculum progress
-              </p>
-            </div>
+            <ActivityBreakdown
+              label="Sessions"
+              completed={
+                sessionsCompleted
+              }
+              total={
+                sessionTotal
+              }
+              percentage={
+                sessionProgress
+              }
+              description={`${sessionsAttended} attended`}
+              tone="blue"
+            />
           </div>
 
-          {/* Trainer controls */}
+          {trainerNotes && (
+            <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.025] p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-white/35">
+                Trainer Notes
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-white/55">
+                {trainerNotes}
+              </p>
+            </div>
+          )}
+
+          {completedAt && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-emerald-300/80">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/10">
+                ✓
+              </span>
+
+              Module completed
+            </div>
+          )}
+
           {canManage && (
             <div className="mt-5 rounded-xl border border-emerald-400/10 bg-emerald-400/[0.03] p-4">
-              {!editing ? (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-emerald-300/70">
-                      Trainer Controls
-                    </p>
-
-                    <p className="mt-1 text-xs text-white/35">
-                      Update the authoritative
-                      module completion percentage.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={
-                      beginEditing
-                    }
-                    className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.08]"
-                  >
-                    Update Progress
-                  </button>
-                </div>
-              ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-[0.12em] text-emerald-300/70">
-                        Update Module Progress
-                      </p>
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-emerald-300/70">
+                    Trainer Controls
+                  </p>
 
-                      <p className="mt-1 text-xs text-white/35">
-                        Set completion from 0 to
-                        100%.
-                      </p>
-                    </div>
-
-                    <span className="text-lg font-semibold text-white">
-                      {draftProgress}%
-                    </span>
-                  </div>
-
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={
-                      draftProgress
-                    }
-                    onChange={(event) =>
-                      setDraftProgress(
-                        Number(
-                          event.target
-                            .value,
-                        ),
-                      )
-                    }
-                    className="mt-5 w-full accent-emerald-500"
-                  />
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {[0, 25, 50, 75, 100].map(
-                      (value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() =>
-                            setDraftProgress(
-                              value,
-                            )
-                          }
-                          className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-                            draftProgress ===
-                            value
-                              ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-300"
-                              : "border-white/10 bg-white/[0.03] text-white/50 hover:bg-white/[0.06]"
-                          }`}
-                        >
-                          {value}%
-                        </button>
-                      ),
-                    )}
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={
-                        save
-                      }
-                      disabled={saving}
-                      className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {saving
-                        ? "Saving..."
-                        : "Save Progress"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={
-                        cancelEditing
-                      }
-                      disabled={saving}
-                      className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-medium text-white/60 transition hover:bg-white/[0.07] disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  <p className="mt-1 text-xs leading-5 text-white/35">
+                    Progress is calculated from
+                    this module's sessions and
+                    materials. Recalculation refreshes
+                    the authoritative server result.
+                  </p>
                 </div>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    onRecalculate(
+                      module.id,
+                    )
+                  }
+                  disabled={
+                    refreshing
+                  }
+                  className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {refreshing
+                    ? "Recalculating..."
+                    : "Recalculate"}
+                </button>
+              </div>
             </div>
           )}
         </div>
       </div>
     </article>
+  )
+}
+
+function ActivityBreakdown({
+  label,
+  completed,
+  total,
+  percentage,
+  description,
+  tone,
+}: {
+  label: string
+  completed: number
+  total: number
+  percentage: number
+  description: string
+  tone: "emerald" | "blue"
+}) {
+  const barClass =
+    tone === "emerald"
+      ? "bg-emerald-500"
+      : "bg-blue-500"
+
+  const percentageClass =
+    tone === "emerald"
+      ? "text-emerald-300"
+      : "text-blue-300"
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-[0.12em] text-white/35">
+          {label}
+        </span>
+
+        <span
+          className={`text-sm font-semibold ${percentageClass}`}
+        >
+          {formatPercentage(
+            percentage,
+          )}
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between text-xs">
+        <span className="text-white/45">
+          {completed} / {total}
+        </span>
+
+        <span className="text-white/30">
+          {description}
+        </span>
+      </div>
+
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className={`h-full rounded-full transition-all ${barClass}`}
+          style={{
+            width: `${percentage}%`,
+          }}
+        />
+      </div>
+    </div>
   )
 }

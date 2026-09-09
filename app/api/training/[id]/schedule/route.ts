@@ -36,7 +36,9 @@ function isTrainerCapableRole(
   )
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(
+  error: unknown,
+): string {
   return error instanceof Error
     ? error.message
     : String(error || "Unknown error")
@@ -48,10 +50,12 @@ function getErrorStatus(
   const message =
     errorMessage(error)
 
+  const normalized =
+    message.toLowerCase()
+
   if (
-    message ===
-      "Unauthorized" ||
-    message.toLowerCase().includes(
+    normalized === "unauthorized" ||
+    normalized.includes(
       "unauthorized",
     )
   ) {
@@ -59,14 +63,14 @@ function getErrorStatus(
   }
 
   if (
-    message === "Forbidden" ||
-    message.toLowerCase().includes(
+    normalized === "forbidden" ||
+    normalized.includes(
       "forbidden",
     ) ||
-    message.toLowerCase().includes(
+    normalized.includes(
       "not the approved trainer",
     ) ||
-    message.toLowerCase().includes(
+    normalized.includes(
       "not authorized",
     )
   ) {
@@ -74,28 +78,34 @@ function getErrorStatus(
   }
 
   if (
-    message ===
-      "Training engagement not found" ||
-    message ===
-      "Session not found" ||
-    message ===
-      "Training session not found" ||
-    message.toLowerCase().includes(
+    normalized ===
+      "training engagement not found" ||
+    normalized ===
+      "session not found" ||
+    normalized ===
+      "training session not found" ||
+    normalized.includes(
       "does not belong to this training engagement",
+    ) ||
+    normalized.includes(
+      "not found for this engagement",
     )
   ) {
     return 404
   }
 
   if (
-    message.toLowerCase().includes(
+    normalized.includes(
       "required",
     ) ||
-    message.toLowerCase().includes(
+    normalized.includes(
       "invalid",
     ) ||
-    message.toLowerCase().includes(
+    normalized.includes(
       "must be",
+    ) ||
+    normalized.includes(
+      "cannot be empty",
     )
   ) {
     return 400
@@ -106,8 +116,11 @@ function getErrorStatus(
 
 async function parseJsonBody(
   request: NextRequest,
-): Promise<Record<string, unknown> | null> {
-  const raw = await request.text()
+): Promise<
+  Record<string, unknown> | null
+> {
+  const raw =
+    await request.text()
 
   if (!raw.trim()) {
     return null
@@ -119,7 +132,8 @@ async function parseJsonBody(
 
     if (
       !parsed ||
-      typeof parsed !== "object" ||
+      typeof parsed !==
+        "object" ||
       Array.isArray(parsed)
     ) {
       return null
@@ -176,10 +190,12 @@ export async function GET(
     }
 
     /*
-     * Viewing sessions is not trainer-only.
+     * Session viewing is engagement-specific.
      *
-     * Access is still enforced against the
-     * engagement relationship.
+     * Clients may view their own engagement.
+     * Administrators may oversee engagements.
+     * Approved trainers may view assigned engagements.
+     * Super Administrators may view all engagements.
      */
     await ensureAccess(
       id,
@@ -214,7 +230,8 @@ export async function GET(
         error: errorMessage(error),
       },
       {
-        status: getErrorStatus(error),
+        status:
+          getErrorStatus(error),
       },
     )
   }
@@ -244,6 +261,13 @@ export async function POST(
       )
     }
 
+    /*
+     * Only trainer-capable roles may create sessions.
+     *
+     * Actual engagement-level trainer authorization
+     * is enforced again by ensureAccess() and the
+     * training operations service.
+     */
     if (
       !isTrainerCapableRole(
         user.role,
@@ -276,11 +300,11 @@ export async function POST(
     }
 
     /*
-     * Super Administrator can operate across
-     * training engagements.
+     * Non-Super-Administrators must be an approved
+     * trainer for this specific engagement.
      *
-     * Other trainer-capable users must be
-     * approved for this specific engagement.
+     * Super Administrator has system-wide training
+     * authority and does not need engagement assignment.
      */
     const access =
       await ensureAccess(
@@ -311,10 +335,42 @@ export async function POST(
       )
     }
 
+    /*
+     * Every session must now belong to a
+     * curriculum module.
+     */
+    const moduleId =
+      typeof body.module_id ===
+      "string"
+        ? body.module_id.trim()
+        : ""
+
+    if (!moduleId) {
+      return NextResponse.json(
+        {
+          error:
+            "module_id is required. Every training session must belong to a curriculum module.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * Pass the authenticated actor profile into
+     * the service.
+     *
+     * The service performs the authoritative module
+     * ownership and trainer validation.
+     */
     const created =
       await createSession(
         id,
-        body,
+        {
+          ...body,
+          module_id: moduleId,
+        },
         access.profileId,
       )
 
@@ -339,7 +395,8 @@ export async function POST(
         error: errorMessage(error),
       },
       {
-        status: getErrorStatus(error),
+        status:
+          getErrorStatus(error),
       },
     )
   }
@@ -400,14 +457,6 @@ export async function PUT(
       )
     }
 
-    /*
-     * For normal trainer-capable users this
-     * requires approved trainer access.
-     *
-     * Super Administrator remains able to
-     * manage the engagement without being
-     * assigned as its trainer.
-     */
     const access =
       await ensureAccess(
         id,
@@ -481,29 +530,30 @@ export async function PUT(
       >
 
     /*
-     * IMPORTANT:
+     * Verify that the target session belongs
+     * to the engagement represented by the URL.
      *
-     * Verify that the session being modified
-     * actually belongs to this engagement.
+     * This prevents:
      *
-     * The service should also enforce this,
-     * but the route should never trust a
-     * session ID supplied by the browser.
+     * /api/training/ENGAGEMENT-A/schedule
+     *
+     * from modifying a session belonging to
+     * ENGAGEMENT-B by supplying its session ID.
      */
     const sessions =
       await listSessions(id)
 
-    const sessionExists =
-      sessions.some(
-        (session) =>
-          String(
-            session.id,
-          ) === sessionId,
+    const session =
+      sessions.find(
+        (item) =>
+          String(item.id) ===
+          sessionId,
       )
 
-    if (!sessionExists) {
+    if (!session) {
       return NextResponse.json(
         {
+          success: false,
           error:
             "Training session not found for this engagement.",
         },
@@ -513,6 +563,45 @@ export async function PUT(
       )
     }
 
+    /*
+     * When changing a session's module,
+     * explicitly require a non-empty module ID.
+     *
+     * The service then verifies that the module
+     * belongs to the same engagement.
+     */
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "module_id",
+      )
+    ) {
+      const updatedModuleId =
+        typeof updates.module_id ===
+        "string"
+          ? updates.module_id.trim()
+          : ""
+
+      if (!updatedModuleId) {
+        return NextResponse.json(
+          {
+            error:
+              "module_id cannot be empty. Every training session must belong to a curriculum module.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
+
+      updates.module_id =
+        updatedModuleId
+    }
+
+    /*
+     * Session management remains server-side
+     * and engagement-specific.
+     */
     const updated =
       await updateSession(
         sessionId,
@@ -553,7 +642,8 @@ export async function PUT(
         error: errorMessage(error),
       },
       {
-        status: getErrorStatus(error),
+        status:
+          getErrorStatus(error),
       },
     )
   }
@@ -561,7 +651,7 @@ export async function PUT(
 
 /* =======================================================
    DELETE
-   Cancel training session
+   Delete/cancel training session
    ======================================================= */
 
 export async function DELETE(
@@ -661,6 +751,34 @@ export async function DELETE(
       )
     }
 
+    /*
+     * Verify the session belongs to the
+     * engagement in the URL before deletion.
+     */
+    const sessions =
+      await listSessions(id)
+
+    const sessionExists =
+      sessions.some(
+        (session) =>
+          String(
+            session.id,
+          ) === sessionId,
+      )
+
+    if (!sessionExists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Training session not found for this engagement.",
+        },
+        {
+          status: 404,
+        },
+      )
+    }
+
     const result =
       await deleteSession(
         sessionId,
@@ -688,7 +806,8 @@ export async function DELETE(
         error: errorMessage(error),
       },
       {
-        status: getErrorStatus(error),
+        status:
+          getErrorStatus(error),
       },
     )
   }

@@ -18,7 +18,6 @@ type TrainingEngagementRow = {
   client_profile_id: string
   assigned_trainer: string | null
 
-  // Trainer assignment approval workflow
   pending_trainer_id: string | null
   trainer_approval_status: string | null
   trainer_approval_requested_by: string | null
@@ -53,20 +52,37 @@ type CertificateRow = {
   certificate_number: string
 }
 
+/* ============================================================
+   ROLE HELPERS
+   ============================================================ */
+
+function isSuperAdminRole(
+  role: string | null | undefined,
+) {
+  return (
+    role === "super_administrator" ||
+    role === "super-administrator"
+  )
+}
+
+/* ============================================================
+   COMPLETE TRAINING ENGAGEMENT
+   ============================================================ */
+
 /**
- * ============================================================
- * COMPLETE TRAINING ENGAGEMENT
- * ============================================================
+ * Completing training is deliberately separate from
+ * certificate issuance.
  *
- * This function intentionally does NOT issue a certificate.
+ * Completion requires:
  *
- * Completing training means:
+ *   progress >= 100%
+ *   approved trainer OR Super Administrator
  *
- *     progress = 100
- *     status   = completed
+ * After completion:
  *
- * Certificate issuance happens only after mandatory feedback
- * has been submitted.
+ *   feedback_required = true
+ *
+ * Certificate issuance happens later.
  */
 export async function completeTrainingEngagement(
   engagementId: string,
@@ -88,36 +104,41 @@ export async function completeTrainingEngagement(
   await query("BEGIN")
 
   try {
-    // ========================================================
-    // 1. LOCK TRAINING ENGAGEMENT
-    // ========================================================
+    /* ========================================================
+       1. LOCK ENGAGEMENT
+       ======================================================== */
 
     const engagementResult =
       await query<TrainingEngagementRow>(
         `
-   SELECT
-  id,
-  request_id,
-  organization_id,
-  client_profile_id,
-  assigned_trainer,
+        SELECT
+          id,
+          request_id,
+          organization_id,
+          client_profile_id,
 
-  pending_trainer_id,
-  trainer_approval_status,
-  trainer_approval_requested_by,
-  trainer_approval_approved_by,
+          assigned_trainer,
 
-  progress,
-  status,
-  training_organization_name,
-  training_client_type,
-  skill_level,
-  training_goal,
-  training_topics
-FROM training_engagements
-WHERE id = $1
-FOR UPDATE
-LIMIT 1
+          pending_trainer_id,
+          trainer_approval_status,
+          trainer_approval_requested_by,
+          trainer_approval_approved_by,
+
+          progress,
+          status,
+
+          training_organization_name,
+          training_client_type,
+          skill_level,
+          training_goal,
+          training_topics
+
+        FROM training_engagements
+
+        WHERE id = $1
+
+        FOR UPDATE
+        LIMIT 1
         `,
         [engagementId],
       )
@@ -131,41 +152,44 @@ LIMIT 1
       )
     }
 
-  // ========================================================
-// 2. VERIFY ACTOR
-// ========================================================
-//
-// Super Administrator has system-level authority and can
-// complete the engagement regardless of trainer assignment.
-//
-// Everyone else must be the approved assigned trainer.
-// ========================================================
+    /* ========================================================
+       2. VERIFY AUTHORITY
+       ======================================================== */
 
-const isSuperAdmin =
-  actorRole === "super_administrator" ||
-  actorRole === "super-administrator"
+    const isSuperAdmin =
+      isSuperAdminRole(actorRole)
 
-if (
-  !engagement.assigned_trainer ||
-  engagement.trainer_approval_status !== "approved"
-) {
-  throw new Error(
-    "Training engagement has no approved trainer assigned",
-  )
-}
+    /*
+     * Super Administrator can complete any training
+     * engagement.
+     *
+     * Everyone else must be the currently approved
+     * assigned trainer.
+     */
+    if (!isSuperAdmin) {
+      if (
+        !engagement.assigned_trainer ||
+        engagement.trainer_approval_status !==
+          "approved"
+      ) {
+        throw new Error(
+          "Training engagement has no approved trainer assigned",
+        )
+      }
 
-if (
-  !isSuperAdmin &&
-  engagement.assigned_trainer !== actorProfileId
-) {
-  throw new Error(
-    "Only the approved assigned trainer or Super Administrator can complete this training",
-  )
-}
+      if (
+        engagement.assigned_trainer !==
+        actorProfileId
+      ) {
+        throw new Error(
+          "Only the approved assigned trainer or Super Administrator can complete this training",
+        )
+      }
+    }
 
-    // ========================================================
-    // 3. VERIFY PROGRESS
-    // ========================================================
+    /* ========================================================
+       3. VERIFY PROGRESS
+       ======================================================== */
 
     const progress =
       Number(
@@ -181,13 +205,12 @@ if (
       )
     }
 
-    // ========================================================
-    // 4. IDEMPOTENCY
-    // ========================================================
+    /* ========================================================
+       4. IDEMPOTENCY
+       ======================================================== */
 
     if (
-      engagement.status ===
-      "completed"
+      engagement.status === "completed"
     ) {
       await query("COMMIT")
 
@@ -200,29 +223,34 @@ if (
       }
     }
 
-    // ========================================================
-    // 5. MARK TRAINING COMPLETED
-    // ========================================================
+    /* ========================================================
+       5. COMPLETE ENGAGEMENT
+       ======================================================== */
 
     await query(
       `
       UPDATE training_engagements
+
       SET
         status = 'completed',
         progress = 100,
-        completed_at = COALESCE(
-          completed_at,
-          NOW()
-        ),
+
+        completed_at =
+          COALESCE(
+            completed_at,
+            NOW()
+          ),
+
         updated_at = NOW()
+
       WHERE id = $1
       `,
       [engagement.id],
     )
 
-    // ========================================================
-    // 6. CREATE TRAINING TIMELINE EVENT
-    // ========================================================
+    /* ========================================================
+       6. ACTIVITY
+       ======================================================== */
 
     await query(
       `
@@ -233,6 +261,7 @@ if (
         title,
         content
       )
+
       VALUES (
         $1,
         $2,
@@ -247,9 +276,9 @@ if (
       ],
     )
 
-    // ========================================================
-    // 7. COMMIT
-    // ========================================================
+    /* ========================================================
+       7. COMMIT
+       ======================================================== */
 
     await query("COMMIT")
 
@@ -266,21 +295,24 @@ if (
   }
 }
 
+/* ============================================================
+   ISSUE TRAINING CERTIFICATE
+   ============================================================ */
+
 /**
- * ============================================================
- * ISSUE TRAINING CERTIFICATE
- * ============================================================
- *
- * Certificate issuance is deliberately separated from
- * training completion.
+ * Certificate issuance is intentionally kept here.
  *
  * REQUIREMENTS:
  *
  * 1. Training must be completed.
  * 2. Mandatory client feedback must exist.
- * 3. Only one certificate may exist per engagement.
+ * 3. Only one certificate can exist for an engagement.
  *
- * This makes feedback genuinely compulsory.
+ * This function creates the certificate record and
+ * verification identity.
+ *
+ * Rendering/downloading the visual certificate belongs
+ * to the frontend layer.
  */
 export async function issueTrainingCertificate(
   engagementId: string,
@@ -297,9 +329,9 @@ export async function issueTrainingCertificate(
   await query("BEGIN")
 
   try {
-    // ========================================================
-    // 1. LOCK ENGAGEMENT
-    // ========================================================
+    /* ========================================================
+       1. LOCK ENGAGEMENT
+       ======================================================== */
 
     const engagementResult =
       await query<TrainingEngagementRow>(
@@ -309,16 +341,26 @@ export async function issueTrainingCertificate(
           request_id,
           organization_id,
           client_profile_id,
+
           assigned_trainer,
+          pending_trainer_id,
+          trainer_approval_status,
+          trainer_approval_requested_by,
+          trainer_approval_approved_by,
+
           progress,
           status,
+
           training_organization_name,
           training_client_type,
           skill_level,
           training_goal,
           training_topics
+
         FROM training_engagements
+
         WHERE id = $1
+
         FOR UPDATE
         LIMIT 1
         `,
@@ -334,9 +376,9 @@ export async function issueTrainingCertificate(
       )
     }
 
-    // ========================================================
-    // 2. MUST BE COMPLETED
-    // ========================================================
+    /* ========================================================
+       2. MUST BE COMPLETED
+       ======================================================== */
 
     if (
       engagement.status !==
@@ -347,20 +389,37 @@ export async function issueTrainingCertificate(
       )
     }
 
-    // ========================================================
-    // 3. VERIFY MANDATORY FEEDBACK
-    // ========================================================
+    if (
+      Number(
+        engagement.progress ?? 0,
+      ) < 100
+    ) {
+      throw new Error(
+        "Training progress must be 100% before a certificate can be issued",
+      )
+    }
+
+    /* ========================================================
+       3. VERIFY FEEDBACK
+       ======================================================== */
 
     const feedbackResult =
       await query<FeedbackRow>(
         `
         SELECT
           id
+
         FROM training_feedback
+
         WHERE training_engagement_id = $1
+          AND client_profile_id = $2
+
         LIMIT 1
         `,
-        [engagement.id],
+        [
+          engagement.id,
+          engagement.client_profile_id,
+        ],
       )
 
     const feedback =
@@ -372,9 +431,9 @@ export async function issueTrainingCertificate(
       )
     }
 
-    // ========================================================
-    // 4. PREVENT DUPLICATE CERTIFICATE
-    // ========================================================
+    /* ========================================================
+       4. DUPLICATE PROTECTION
+       ======================================================== */
 
     const existingCertificate =
       await query<CertificateRow>(
@@ -382,8 +441,11 @@ export async function issueTrainingCertificate(
         SELECT
           id,
           certificate_number
+
         FROM training_certificates
+
         WHERE training_engagement_id = $1
+
         LIMIT 1
         `,
         [engagement.id],
@@ -397,7 +459,9 @@ export async function issueTrainingCertificate(
       return {
         certificate_id:
           existingCertificate
-            .rows[0].id,
+            .rows[0]
+            .id,
+
         certificate_number:
           existingCertificate
             .rows[0]
@@ -405,9 +469,9 @@ export async function issueTrainingCertificate(
       }
     }
 
-    // ========================================================
-    // 5. LOAD CLIENT PROFILE
-    // ========================================================
+    /* ========================================================
+       5. CLIENT
+       ======================================================== */
 
     const clientProfileResult =
       await query<ProfileRow>(
@@ -415,8 +479,11 @@ export async function issueTrainingCertificate(
         SELECT
           id,
           full_name
+
         FROM user_profiles
+
         WHERE id = $1
+
         LIMIT 1
         `,
         [
@@ -442,9 +509,9 @@ export async function issueTrainingCertificate(
       )
     }
 
-    // ========================================================
-    // 6. LOAD TRAINER
-    // ========================================================
+    /* ========================================================
+       6. TRAINER
+       ======================================================== */
 
     let trainerName:
       | string
@@ -459,8 +526,11 @@ export async function issueTrainingCertificate(
           SELECT
             id,
             full_name
+
           FROM user_profiles
+
           WHERE id = $1
+
           LIMIT 1
           `,
           [
@@ -474,13 +544,13 @@ export async function issueTrainingCertificate(
         null
     }
 
-    // ========================================================
-    // 7. LOAD ORIGINAL REQUEST
-    // ========================================================
+    /* ========================================================
+       7. ORIGINAL REQUEST
+       ======================================================== */
 
     let trainingTitle =
       engagement.training_goal?.trim() ||
-      "Professional Training"
+      "Cybersecurity Training"
 
     let trainingType:
       | string
@@ -495,8 +565,11 @@ export async function issueTrainingCertificate(
           SELECT
             title,
             service_type
+
           FROM requests
+
           WHERE id = $1
+
           LIMIT 1
           `,
           [
@@ -519,9 +592,9 @@ export async function issueTrainingCertificate(
         null
     }
 
-    // ========================================================
-    // 8. CERTIFICATE NUMBER
-    // ========================================================
+    /* ========================================================
+       8. CERTIFICATE NUMBER
+       ======================================================== */
 
     const year =
       new Date().getFullYear()
@@ -529,9 +602,9 @@ export async function issueTrainingCertificate(
     const certificateNumber =
       `SOB-CERT-${year}-${Date.now()}`
 
-    // ========================================================
-    // 9. VERIFICATION TOKEN
-    // ========================================================
+    /* ========================================================
+       9. VERIFICATION IDENTITY
+       ======================================================== */
 
     const verificationToken =
       randomUUID()
@@ -548,9 +621,9 @@ export async function issueTrainingCertificate(
         ? `${baseUrl}/verify/certificate/${verificationToken}`
         : null
 
-    // ========================================================
-    // 10. CREATE CERTIFICATE
-    // ========================================================
+    /* ========================================================
+       10. CREATE CERTIFICATE RECORD
+       ======================================================== */
 
     const certificateResult =
       await query<CertificateRow>(
@@ -558,35 +631,49 @@ export async function issueTrainingCertificate(
         INSERT INTO training_certificates (
           training_engagement_id,
           client_profile_id,
+
           certificate_number,
           recipient_name,
+
           training_title,
           training_type,
           trainer_name,
+
           completion_date,
           issued_at,
+
           verification_token,
           verification_url,
+
           status,
+
           created_at,
           updated_at
         )
+
         VALUES (
           $1,
           $2,
+
           $3,
           $4,
+
           $5,
           $6,
           $7,
+
           CURRENT_DATE,
           NOW(),
+
           $8,
           $9,
+
           'issued',
+
           NOW(),
           NOW()
         )
+
         RETURNING
           id,
           certificate_number
@@ -594,11 +681,14 @@ export async function issueTrainingCertificate(
         [
           engagement.id,
           engagement.client_profile_id,
+
           certificateNumber,
           recipientName,
+
           trainingTitle,
           trainingType,
           trainerName,
+
           verificationToken,
           verificationUrl,
         ],
@@ -613,9 +703,9 @@ export async function issueTrainingCertificate(
       )
     }
 
-    // ========================================================
-    // 11. TRAINING TIMELINE
-    // ========================================================
+    /* ========================================================
+       11. ACTIVITY
+       ======================================================== */
 
     await query(
       `
@@ -626,29 +716,32 @@ export async function issueTrainingCertificate(
         title,
         content
       )
+
       VALUES (
         $1,
-        NULL,
+        $2,
         'certificate_issued',
         'Certificate Issued',
-        $2
+        $3
       )
       `,
       [
         engagement.id,
+        null,
         `Certificate of Completion ${certificate.certificate_number} has been issued.`,
       ],
     )
 
-    // ========================================================
-    // 12. COMMIT
-    // ========================================================
+    /* ========================================================
+       12. COMMIT
+       ======================================================== */
 
     await query("COMMIT")
 
     return {
       certificate_id:
         certificate.id,
+
       certificate_number:
         certificate.certificate_number,
     }

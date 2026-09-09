@@ -441,6 +441,9 @@ export default function SessionsManager({
   const [editDurationMinutes, setEditDurationMinutes] =
     useState("0")
 
+  const [editModuleId, setEditModuleId] =
+    useState("")
+
   const [editMeetingUrl, setEditMeetingUrl] =
     useState("")
 
@@ -543,6 +546,31 @@ export default function SessionsManager({
       ).length
     }, [sessions])
 
+  const sessionsByModule =
+    useMemo(() => {
+      const moduleMap = new Map<
+        string,
+        TrainingSession[]
+      >()
+
+      for (const session of sortedSessions) {
+        const moduleKey =
+          session.module_id ||
+          "__unassigned__"
+
+        const current =
+          moduleMap.get(moduleKey) || []
+
+        current.push(session)
+        moduleMap.set(
+          moduleKey,
+          current,
+        )
+      }
+
+      return moduleMap
+    }, [sortedSessions])
+
   /*
    * ================================================================
    * FORM RESET
@@ -595,6 +623,10 @@ export default function SessionsManager({
       String(duration.minutes),
     )
 
+    setEditModuleId(
+      session.module_id || "",
+    )
+
     setEditMeetingUrl(
       session.meeting_url ||
         "",
@@ -620,6 +652,7 @@ export default function SessionsManager({
     setEditScheduledAt("")
     setEditDurationHours("1")
     setEditDurationMinutes("0")
+    setEditModuleId("")
     setEditMeetingUrl("")
     setEditLocation("")
   }
@@ -682,6 +715,13 @@ export default function SessionsManager({
       return
     }
 
+    if (!moduleId) {
+      setError(
+        "Please select the curriculum module this session belongs to.",
+      )
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -708,7 +748,7 @@ export default function SessionsManager({
                 sessionType,
 
               module_id:
-                moduleId || null,
+                moduleId,
 
               meeting_url:
                 trimmedMeetingUrl ||
@@ -850,6 +890,13 @@ export default function SessionsManager({
       return
     }
 
+    if (!editModuleId) {
+      setError(
+        "Please select the curriculum module this session belongs to.",
+      )
+      return
+    }
+
     setActionSessionId(
       editingSession.id,
     )
@@ -859,6 +906,9 @@ export default function SessionsManager({
         string,
         unknown
       > = {
+        module_id:
+          editModuleId,
+
         session_notes:
           trimmedTitle,
 
@@ -1801,13 +1851,13 @@ export default function SessionsManager({
                   </p>
                 </div>
 
-                {modules.length > 0 && (
-                  <div>
+                <div>
                     <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
                       Curriculum module
                     </label>
 
                     <select
+                      required
                       value={
                         moduleId
                       }
@@ -1817,14 +1867,11 @@ export default function SessionsManager({
                         )
                       }
                       disabled={
-                        loading
+                        loading ||
+                        modules.length === 0
                       }
                       className={selectClass}
                     >
-                      <option value="">
-                        General training session
-                      </option>
-
                       {[
                         ...modules,
                       ]
@@ -1861,7 +1908,6 @@ export default function SessionsManager({
                         )}
                     </select>
                   </div>
-                )}
 
                 <div>
                   <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
@@ -1972,8 +2018,41 @@ export default function SessionsManager({
           </div>
         )}
 
-        {sortedSessions.map(
-          (session, index) => {
+        {Array.from(sessionsByModule.entries()).map(
+          ([moduleKey, moduleSessions]) => {
+            const module =
+              moduleKey === "__unassigned__"
+                ? null
+                : modules.find(
+                    (item) => item.id === moduleKey,
+                  )
+
+            return (
+              <section
+                key={moduleKey}
+                className="space-y-3"
+              >
+                <div className="flex items-center gap-3 px-1">
+                  <div className="h-px flex-1 bg-[#143b28]" />
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-[#20dc73]/70">
+                    {module
+                      ? `Module ${
+                          String(
+                            Number(
+                              module.module_order || 0,
+                            ) || 0,
+                          ).padStart(2, "0")
+                        } / ${
+                          module.title || "Untitled Module"
+                        }`
+                      : "Module Unassigned"}
+                  </div>
+                  <div className="h-px flex-1 bg-[#143b28]" />
+                </div>
+
+                <div className="space-y-4">
+                  {moduleSessions.map(
+                    (session, index) => {
             const attendee =
               isClient &&
               (currentUserId ||
@@ -2039,7 +2118,7 @@ export default function SessionsManager({
               ).toLowerCase() ===
               "completed"
 
-            const module =
+            const sessionModule =
               session.module_id
                 ? modules.find(
                     (item) =>
@@ -2066,14 +2145,14 @@ export default function SessionsManager({
                         )}
                       </span>
 
-                      {module && (
+                      {sessionModule && (
                         <>
                           <span className="text-white/20">
                             /
                           </span>
 
                           <span className="text-[10px] uppercase tracking-wider text-white/35">
-                            {module.title}
+                            {sessionModule.title}
                           </span>
                         </>
                       )}
@@ -2394,6 +2473,11 @@ export default function SessionsManager({
                 </div>
               </article>
             )
+                    },
+                  )}
+                </div>
+              </section>
+            )
           },
         )}
       </div>
@@ -2475,6 +2559,54 @@ export default function SessionsManager({
                   className={inputClass}
                   autoFocus
                 />
+              </div>
+
+              {/* Curriculum module */}
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-white/40">
+                  Curriculum module
+                </label>
+
+                <select
+                  required
+                  value={editModuleId}
+                  onChange={(event) =>
+                    setEditModuleId(
+                      event.target.value,
+                    )
+                  }
+                  disabled={
+                    actionSessionId ===
+                    editingSession.id
+                  }
+                  className={selectClass}
+                >
+                  <option value="">
+                    Select a module
+                  </option>
+
+                  {[...modules]
+                    .sort(
+                      (a, b) =>
+                        Number(
+                          a.module_order ||
+                            0,
+                        ) -
+                        Number(
+                          b.module_order ||
+                            0,
+                        ),
+                    )
+                    .map((module) => (
+                      <option
+                        key={module.id}
+                        value={module.id}
+                      >
+                        {module.title ||
+                          "Untitled Module"}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               {/* Date and time */}
