@@ -339,70 +339,90 @@ export default async function CertificatePage({
    * ============================================================
    */
 
-  return (
-    <TrainingShell
-      user={user}
-      engagementId={id}
-      engagementNumber={
-        engagement.engagement_number
-      }
-      title="Certificate"
-      status={engagement.status}
-    >
+return (
+  <TrainingShell
+    user={user}
+    engagementId={id}
+    engagementNumber={engagement.engagement_number}
+    title="Certificate"
+    status={engagement.status}
+  >
+    {/* Scrollable wrapper – works on every screen size */}
+    <div className="certificate-scroll-wrapper">
       <div className="certificate-page-container">
         <TrainingCertificate
           certificate={certificate}
           engagementId={id}
           userRole={user.role}
-          canIssueCertificate={
-            canIssueCertificate
-          }
+          canIssueCertificate={canIssueCertificate}
           progress={engagement.progress}
-          trainingStatus={
-            engagement.status
-          }
-          feedbackSubmitted={
-            feedbackSubmitted
-          }
-          trainingTitle={
-            engagement.training_goal
-          }
+          trainingStatus={engagement.status}
+          feedbackSubmitted={feedbackSubmitted}
+          trainingTitle={engagement.training_goal}
           trainerName={
-            certificate?.trainer_name ||
-            "ShadowNode Training Facilitator"
+            certificate?.trainer_name || "ShadowNode Training Facilitator"
           }
-          completionDate={
-            certificate?.completion_date ||
-            null
-          }
-          feedbackRating={
-            feedbackRating
-          }
-          feedbackComments={
-            feedbackComments
-          }
-          certificateRecipientName={
-            certificateRecipientName
-          }
+          completionDate={certificate?.completion_date || null}
+          feedbackRating={feedbackRating}
+          feedbackComments={feedbackComments}
+          certificateRecipientName={certificateRecipientName}
         />
       </div>
+    </div>
 
-      <style>{`
+    <style>{`
+      /* ========== SCREEN VIEW ========== */
+      .certificate-scroll-wrapper {
+        width: 100%;
+        max-height: calc(100vh - 180px);   /* adjust if your header is taller/shorter */
+        overflow: auto;                    /* scroll left/right + up/down */
+        border-radius: 12px;
+        background: #0a0f0d;
+        padding: 1.5rem;
+      }
+
+      .certificate-page-container {
+        min-width: 1100px;                 /* keeps the certificate from shrinking too much */
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+
+      .certificate-page-container #training-certificate {
+        width: 100%;
+        max-width: 1400px;
+      }
+
+      /* ========== PRINT / PDF ========== */
+      @media print {
+        .certificate-scroll-wrapper {
+          max-height: none !important;
+          overflow: visible !important;
+          padding: 0 !important;
+          background: transparent !important;
+          border-radius: 0 !important;
+        }
+
         .certificate-page-container {
-          width: 100%;
+          min-width: 0 !important;
+          width: 297mm !important;
+          height: 210mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
         }
 
-        @media print {
-          .certificate-page-container {
-            width: 297mm !important;
-            height: 210mm !important;
-            max-width: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-          }
+        .certificate-page-container #training-certificate,
+        .certificate-page-container .certificate-page {
+          width: 297mm !important;
+          height: 210mm !important;
+          max-width: none !important;
+          max-height: 210mm !important;
+          min-height: 0 !important;
+          aspect-ratio: auto !important;
+          overflow: hidden !important;
         }
-      `}</style>
-    </TrainingShell>
-  )
+      }
+    `}</style>
+  </TrainingShell>
+)
 }

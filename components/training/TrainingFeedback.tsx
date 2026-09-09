@@ -1,52 +1,460 @@
 "use client"
+
 import React, { useState } from "react"
 
-export default function TrainingFeedback({ initialFeedback, engagementId, userRole, currentUserId }: any) {
-  const [feedback, setFeedback] = useState(initialFeedback || [])
-  const [rating, setRating] = useState(5)
-  const [comments, setComments] = useState("")
-  const [submitting, setSubmitting] = useState(false)
+type FeedbackItem = {
+  id: string
+  client_profile_id: string
+  rating: number | string
+  comments: string | null
+  certificate_recipient_name: string | null
+  created_at: string | null
+}
 
-  async function submitFeedback(e: React.FormEvent) {
+type TrainingFeedbackProps = {
+  initialFeedback?: FeedbackItem[]
+  engagementId: string
+  userRole: string
+  currentUserId: string
+}
+
+export default function TrainingFeedback({
+  initialFeedback = [],
+  engagementId,
+  userRole,
+  currentUserId,
+}: TrainingFeedbackProps) {
+  const [feedback, setFeedback] =
+    useState<FeedbackItem[]>(initialFeedback)
+
+  const [rating, setRating] =
+    useState(5)
+
+  const [comments, setComments] =
+    useState("")
+
+  const [certificateRecipientName, setCertificateRecipientName] =
+    useState("")
+
+  const [publicTestimonialAllowed, setPublicTestimonialAllowed] =
+    useState(false)
+
+  const [submitting, setSubmitting] =
+    useState(false)
+
+  async function submitFeedback(
+    e: React.FormEvent<HTMLFormElement>,
+  ) {
     e.preventDefault()
+
+    const trimmedName =
+      certificateRecipientName.trim()
+
+    const trimmedComments =
+      comments.trim()
+
+    if (!trimmedName) {
+      alert(
+        "Please enter the full name you want printed on your Certificate of Completion.",
+      )
+      return
+    }
+
+    if (trimmedName.length > 160) {
+      alert(
+        "Certificate name must be 160 characters or fewer.",
+      )
+      return
+    }
+
+    if (
+      !Number.isFinite(rating) ||
+      rating < 1 ||
+      rating > 5
+    ) {
+      alert("Rating must be between 1 and 5.")
+      return
+    }
+
+    if (!trimmedComments) {
+      alert("Please enter your feedback.")
+      return
+    }
+
     setSubmitting(true)
-    const res = await fetch(`/api/training/${engagementId}/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating, comments }) })
-    const p = await res.json()
-    setSubmitting(false)
-    if (p?.feedback) {
-      setFeedback([p.feedback, ...feedback])
-      setComments("")
-    } else {
-      alert(p.error || 'Failed to submit feedback')
+
+    try {
+      const res = await fetch(
+        `/api/training/${engagementId}/feedback`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            rating,
+            feedback: trimmedComments,
+            comments: trimmedComments,
+            certificate_recipient_name:
+              trimmedName,
+            public_testimonial_allowed:
+              publicTestimonialAllowed,
+          }),
+        },
+      )
+
+      const payload = await res.json()
+
+      if (!res.ok) {
+        throw new Error(
+          payload?.error ||
+            "Failed to submit feedback",
+        )
+      }
+
+      if (payload?.feedback) {
+        const submittedFeedback =
+          payload.feedback as FeedbackItem
+
+        setFeedback((current) => [
+          submittedFeedback,
+          ...current,
+        ])
+
+        setComments("")
+
+        setCertificateRecipientName("")
+
+        setPublicTestimonialAllowed(false)
+
+        alert(
+          "Feedback submitted successfully.",
+        )
+
+        return
+      }
+
+      alert(
+        "Feedback submitted successfully.",
+      )
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit feedback",
+      )
+    } finally {
+      setSubmitting(false)
     }
   }
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-white">Feedback</h3>
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-400/70">
+          Training Feedback
+        </p>
 
-      <div className="mt-4 space-y-4">
-        {feedback.length === 0 && <p className="text-white/50">No feedback yet.</p>}
+        <h3 className="mt-2 text-lg font-semibold text-white">
+          Feedback
+        </h3>
 
-        {feedback.map((f: any) => (
-          <div key={f.id} className="rounded-md border border-white/5 p-3 bg-black/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-semibold text-white">Rating: {f.rating}</div>
-                <div className="text-xs text-white/50">{f.comments}</div>
-              </div>
-              <div className="text-xs text-white/40">{f.created_at ? new Date(String(f.created_at)).toLocaleString() : ''}</div>
-            </div>
+        <p className="mt-2 text-sm leading-6 text-white/45">
+          Your feedback helps ShadowNode improve future
+          training engagements.
+        </p>
+      </div>
+
+      {/* ======================================================
+          EXISTING FEEDBACK
+         ====================================================== */}
+
+      <div className="mt-6 space-y-4">
+        {feedback.length === 0 && (
+          <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+            <p className="text-sm text-white/40">
+              No feedback has been submitted yet.
+            </p>
           </div>
+        )}
+
+        {feedback.map((item) => (
+          <article
+            key={item.id}
+            className="rounded-xl border border-white/10 bg-black/20 p-5"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
+                  Rating
+                </p>
+
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-lg tracking-wide text-amber-300">
+                    {Array.from(
+                      { length: 5 },
+                      (_, index) =>
+                        index <
+                        Number(item.rating)
+                          ? "★"
+                          : "☆",
+                    ).join("")}
+                  </span>
+
+                  <span className="text-sm text-white/60">
+                    {Number(item.rating)}/5
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-white/30">
+                {item.created_at
+                  ? new Date(
+                      String(
+                        item.created_at,
+                      ),
+                    ).toLocaleString()
+                  : ""}
+              </p>
+            </div>
+
+            {item.certificate_recipient_name && (
+              <div className="mt-5 border-t border-white/10 pt-5">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
+                  Certificate Name
+                </p>
+
+                <p className="mt-2 text-sm font-medium text-white">
+                  {
+                    item.certificate_recipient_name
+                  }
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-white/35">
+                  This is the name provided for your
+                  Certificate of Completion.
+                </p>
+              </div>
+            )}
+
+            {item.comments && (
+              <div className="mt-5 border-t border-white/10 pt-5">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
+                  Comments
+                </p>
+
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-white/60">
+                  {item.comments}
+                </p>
+              </div>
+            )}
+          </article>
         ))}
       </div>
 
-      {userRole === 'client' && (
-        <form onSubmit={submitFeedback} className="mt-4 flex flex-col gap-2">
-          <label className="text-sm text-white/60">Rating (1-5)</label>
-          <input type="number" min={1} max={5} value={rating} onChange={(e) => setRating(Number(e.target.value))} className="rounded-md px-3 py-1 text-black w-20" />
-          <textarea value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Comments" className="rounded-md px-3 py-1 text-black" />
-          <button disabled={submitting} className="rounded-md bg-[#20dc73] px-3 py-1 text-black w-36">{submitting ? 'Submitting...' : 'Submit Feedback'}</button>
+      {/* ======================================================
+          CLIENT FORM
+         ====================================================== */}
+
+      {userRole === "client" && (
+        <form
+          onSubmit={submitFeedback}
+          className="mt-8 space-y-6"
+        >
+          {/* CERTIFICATE NAME */}
+
+          <div>
+            <label
+              htmlFor="certificate_recipient_name"
+              className="text-sm font-medium text-white"
+            >
+              Full Name for Certificate *
+            </label>
+
+            <p className="mt-1 text-xs leading-5 text-white/40">
+              Enter your full name exactly as you want
+              it to appear on your Certificate of
+              Completion.
+            </p>
+
+            <input
+              id="certificate_recipient_name"
+              name="certificate_recipient_name"
+              type="text"
+              value={
+                certificateRecipientName
+              }
+              onChange={(event) =>
+                setCertificateRecipientName(
+                  event.target.value,
+                )
+              }
+              maxLength={160}
+              required
+              autoComplete="name"
+              placeholder="Enter your full name"
+              className="mt-3 w-full rounded-lg border border-[#143b28] bg-[#020806] px-4 py-3 text-sm text-white outline-none placeholder:text-white/20 transition focus:border-[#20dc73]/50 focus:ring-1 focus:ring-[#20dc73]/20"
+            />
+
+            <div className="mt-1.5 flex justify-end">
+              <span className="text-[10px] text-white/25">
+                {certificateRecipientName.length}/160
+              </span>
+            </div>
+          </div>
+
+          {/* RATING */}
+
+          <div>
+            <label
+              htmlFor="training-feedback-rating"
+              className="text-sm font-medium text-white"
+            >
+              Training Rating *
+            </label>
+
+            <p className="mt-1 text-xs text-white/40">
+              Rate your overall training experience from
+              1 to 5.
+            </p>
+
+            <div className="mt-3 flex items-center gap-3">
+              <input
+                id="training-feedback-rating"
+                type="number"
+                min={1}
+                max={5}
+                step={1}
+                value={rating}
+                onChange={(event) => {
+                  const next = Number(
+                    event.target.value,
+                  )
+
+                  if (
+                    Number.isFinite(next)
+                  ) {
+                    setRating(
+                      Math.max(
+                        1,
+                        Math.min(5, next),
+                      ),
+                    )
+                  }
+                }}
+                className="w-20 rounded-lg border border-[#143b28] bg-[#020806] px-3 py-2.5 text-center text-sm text-white outline-none focus:border-[#20dc73]/50"
+              />
+
+              <div className="flex gap-0.5">
+                {Array.from(
+                  { length: 5 },
+                  (_, index) => {
+                    const starNumber =
+                      index + 1
+
+                    return (
+                      <button
+                        key={
+                          starNumber
+                        }
+                        type="button"
+                        onClick={() =>
+                          setRating(
+                            starNumber,
+                          )
+                        }
+                        className={`text-2xl leading-none transition ${
+                          rating >=
+                          starNumber
+                            ? "text-amber-300"
+                            : "text-white/15 hover:text-amber-300/60"
+                        }`}
+                        aria-label={`Rate ${starNumber} out of 5`}
+                      >
+                        ★
+                      </button>
+                    )
+                  },
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* COMMENTS */}
+
+          <div>
+            <label
+              htmlFor="training-feedback-comments"
+              className="text-sm font-medium text-white"
+            >
+              Your Feedback *
+            </label>
+
+            <textarea
+              id="training-feedback-comments"
+              value={comments}
+              onChange={(event) =>
+                setComments(
+                  event.target.value,
+                )
+              }
+              required
+              rows={6}
+              placeholder="Tell us about your training experience..."
+              className="mt-3 w-full resize-y rounded-lg border border-[#143b28] bg-[#020806] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/20 transition focus:border-[#20dc73]/50 focus:ring-1 focus:ring-[#20dc73]/20"
+            />
+          </div>
+
+          {/* TESTIMONIAL PERMISSION */}
+
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={
+                  publicTestimonialAllowed
+                }
+                onChange={(event) =>
+                  setPublicTestimonialAllowed(
+                    event.target.checked,
+                  )
+                }
+                className="mt-1 h-4 w-4 accent-[#20dc73]"
+              />
+
+              <span>
+                <span className="block text-sm font-medium text-white/80">
+                  Allow ShadowNode to use my feedback
+                  as a public testimonial
+                </span>
+
+                <span className="mt-1 block text-xs leading-5 text-white/35">
+                  This is optional. Your feedback will
+                  not be used publicly unless you permit
+                  it.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {/* SUBMIT */}
+
+          <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-5 text-white/30">
+              Feedback is a one-time submission for this
+              training engagement.
+            </p>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center justify-center rounded-lg bg-[#20dc73] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#35e47f] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting
+                ? "Submitting..."
+                : "Submit Feedback"}
+            </button>
+          </div>
         </form>
       )}
     </div>

@@ -4,9 +4,7 @@ import TrainingShell from "@/components/training/TrainingShell"
 import TrainingFeedback from "@/components/training/TrainingFeedback"
 
 import { getCurrentUser } from "@/lib/auth"
-import {
-  ensureAccess,
-} from "@/lib/services/training-operations-service"
+import { ensureAccess } from "@/lib/services/training-operations-service"
 import { query } from "@/lib/db"
 
 type FeedbackRow = {
@@ -14,6 +12,7 @@ type FeedbackRow = {
   client_profile_id: string
   rating: number | string
   comments: string | null
+  certificate_recipient_name: string | null
   created_at: string | null
 }
 
@@ -51,14 +50,9 @@ function formatDate(
     return "Unknown date"
   }
 
-  const date =
-    new Date(value)
+  const date = new Date(value)
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "Unknown date"
   }
 
@@ -72,17 +66,19 @@ export default async function FeedbackPage({
     id: string
   }>
 }) {
-  const { id } =
-    await params
+  const { id } = await params
 
-  const user =
-    await getCurrentUser()
+  const user = await getCurrentUser()
 
   if (!user) {
-    return redirect(
-      "/login",
-    )
+    return redirect("/login")
   }
+
+  /*
+   * ============================================================
+   * TRAINING ACCESS
+   * ============================================================
+   */
 
   let access:
     | {
@@ -92,15 +88,20 @@ export default async function FeedbackPage({
     | undefined
 
   try {
-    access =
-      await ensureAccess(
-        id,
-        user,
-        false,
-      )
+    access = await ensureAccess(
+      id,
+      user,
+      false,
+    )
   } catch {
     return notFound()
   }
+
+  /*
+   * ============================================================
+   * LOAD ENGAGEMENT
+   * ============================================================
+   */
 
   const engagementResult =
     await query<EngagementRow>(
@@ -126,39 +127,43 @@ export default async function FeedbackPage({
     return notFound()
   }
 
-  const progress =
-    Number(
-      engagement.progress || 0,
-    )
+  const progress = Number(
+    engagement.progress || 0,
+  )
 
   const feedbackUnlocked =
     Number.isFinite(progress) &&
     progress >= 100
 
   /*
-   * Clients see only their own feedback.
+   * ============================================================
+   * LOAD FEEDBACK
+   * ============================================================
    *
-   * Operational users may review feedback
-   * for the engagement.
+   * The certificate recipient name is now loaded from the same
+   * feedback record.
+   * ============================================================
    */
+
   let feedbackQuery = `
     SELECT
       id,
       client_profile_id,
       rating,
       feedback AS comments,
+      certificate_recipient_name,
       created_at
     FROM training_feedback
     WHERE training_engagement_id = $1
   `
 
-  const feedbackValues: string[] = [
-    id,
-  ]
+  const feedbackValues: string[] = [id]
 
-  if (
-    user.role === "client"
-  ) {
+  /*
+   * Clients only see their own feedback.
+   */
+
+  if (user.role === "client") {
     const clientProfileId =
       access?.profileId ||
       engagement.client_profile_id
@@ -190,11 +195,20 @@ export default async function FeedbackPage({
     feedbackResult.rows.map(
       (feedback) => ({
         ...feedback,
+        rating: Number(
+          feedback.rating,
+        ),
         created_at:
           feedback.created_at
             ? String(
                 feedback.created_at,
               )
+            : null,
+        certificate_recipient_name:
+          feedback.certificate_recipient_name
+            ? String(
+                feedback.certificate_recipient_name,
+              ).trim() || null
             : null,
       }),
     )
@@ -203,32 +217,57 @@ export default async function FeedbackPage({
     feedbacks.length > 0
 
   /*
-   * Only clients are allowed to submit.
-   * Administrators/trainers see review information.
+   * ============================================================
+   * CLIENT / OPERATIONAL ROLE
+   * ============================================================
    */
+
   const isClient =
     user.role === "client"
+
+  /*
+   * ============================================================
+   * INITIAL FEEDBACK FOR FORM
+   * ============================================================
+   *
+   * TrainingFeedback should receive the existing submitted
+   * response when available, including the certificate name.
+   * ============================================================
+   */
+
+  const initialFeedback =
+    feedbacks.map(
+      (feedback) => ({
+        id: feedback.id,
+        client_profile_id:
+          feedback.client_profile_id,
+        rating: feedback.rating,
+        comments: feedback.comments,
+        certificate_recipient_name:
+          feedback.certificate_recipient_name,
+        created_at:
+          feedback.created_at,
+      }),
+    )
 
   return (
     <TrainingShell
       user={user}
       engagementId={id}
-      engagementNumber={
-        String(
-          engagement.engagement_number ||
-            id,
-        )
-      }
+      engagementNumber={String(
+        engagement.engagement_number ||
+          id,
+      )}
       title="Feedback"
-      status={String(
-        engagement.status ||
-          "unknown",
+      status={normalizeStatus(
+        engagement.status,
       )}
     >
       <div className="space-y-6">
         {/* =====================================================
             HEADER
         ===================================================== */}
+
         <section className="rounded-2xl border border-white/10 bg-[#07130f] p-6 shadow-xl">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
@@ -252,9 +291,7 @@ export default async function FeedbackPage({
               </p>
 
               <p className="mt-1 text-3xl font-semibold text-white">
-                {Number.isFinite(
-                  progress,
-                )
+                {Number.isFinite(progress)
                   ? `${Math.round(
                       Math.max(
                         0,
@@ -273,6 +310,7 @@ export default async function FeedbackPage({
         {/* =====================================================
             CLIENT LOCK
         ===================================================== */}
+
         {isClient &&
           !feedbackUnlocked && (
             <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-6">
@@ -306,7 +344,9 @@ export default async function FeedbackPage({
                       )}
                       %
                     </span>
+
                     {" "}·{" "}
+
                     Required:{" "}
                     <span className="font-semibold text-emerald-300">
                       100%
@@ -320,6 +360,7 @@ export default async function FeedbackPage({
         {/* =====================================================
             CLIENT ALREADY SUBMITTED
         ===================================================== */}
+
         {isClient &&
           feedbackUnlocked &&
           feedbackSubmitted && (
@@ -352,13 +393,14 @@ export default async function FeedbackPage({
         {/* =====================================================
             CLIENT SUBMISSION FORM
         ===================================================== */}
+
         {isClient &&
           feedbackUnlocked &&
           !feedbackSubmitted && (
             <section className="rounded-2xl border border-[#143b28] bg-[#04100b]/60 p-6">
               <TrainingFeedback
                 initialFeedback={
-                  feedbacks
+                  initialFeedback
                 }
                 engagementId={id}
                 userRole={user.role}
@@ -372,6 +414,7 @@ export default async function FeedbackPage({
         {/* =====================================================
             CLIENT SUBMITTED FEEDBACK
         ===================================================== */}
+
         {isClient &&
           feedbackUnlocked &&
           feedbackSubmitted && (
@@ -389,9 +432,7 @@ export default async function FeedbackPage({
               {feedbacks.map(
                 (feedback) => (
                   <article
-                    key={
-                      feedback.id
-                    }
+                    key={feedback.id}
                     className="rounded-xl border border-white/10 bg-white/[0.025] p-5"
                   >
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -436,6 +477,29 @@ export default async function FeedbackPage({
                       </p>
                     </div>
 
+                    {/* CERTIFICATE NAME */}
+
+                    {feedback.certificate_recipient_name && (
+                      <div className="mt-5 border-t border-white/10 pt-5">
+                        <p className="text-xs uppercase tracking-[0.13em] text-white/35">
+                          Certificate Name
+                        </p>
+
+                        <p className="mt-2 text-sm font-medium text-white">
+                          {
+                            feedback.certificate_recipient_name
+                          }
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-white/35">
+                          This is the name provided for the
+                          Certificate of Completion.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* COMMENTS */}
+
                     {feedback.comments && (
                       <div className="mt-5 border-t border-white/10 pt-5">
                         <p className="text-xs uppercase tracking-[0.13em] text-white/35">
@@ -456,6 +520,7 @@ export default async function FeedbackPage({
         {/* =====================================================
             OPERATIONAL REVIEW
         ===================================================== */}
+
         {!isClient && (
           <section className="rounded-2xl border border-white/10 bg-[#07130f] p-6">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -499,36 +564,32 @@ export default async function FeedbackPage({
                 {feedbacks.map(
                   (feedback) => (
                     <article
-                      key={
-                        feedback.id
-                      }
+                      key={feedback.id}
                       className="rounded-xl border border-white/10 bg-white/[0.025] p-5"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-white/35">
-                              Rating
-                            </p>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.12em] text-white/35">
+                            Rating
+                          </p>
 
-                            <p className="mt-1 text-amber-300">
-                              {Array.from(
-                                {
-                                  length: 5,
-                                },
-                                (
-                                  _,
-                                  index,
-                                ) =>
-                                  index <
-                                  Number(
-                                    feedback.rating,
-                                  )
-                                    ? "★"
-                                    : "☆",
-                              ).join("")}
-                            </p>
-                          </div>
+                          <p className="mt-1 text-amber-300">
+                            {Array.from(
+                              {
+                                length: 5,
+                              },
+                              (
+                                _,
+                                index,
+                              ) =>
+                                index <
+                                Number(
+                                  feedback.rating,
+                                )
+                                  ? "★"
+                                  : "☆",
+                            ).join("")}
+                          </p>
                         </div>
 
                         <p className="text-xs text-white/30">
@@ -537,6 +598,20 @@ export default async function FeedbackPage({
                           )}
                         </p>
                       </div>
+
+                      {feedback.certificate_recipient_name && (
+                        <div className="mt-4">
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
+                            Certificate Name
+                          </p>
+
+                          <p className="mt-1 text-sm font-medium text-white/80">
+                            {
+                              feedback.certificate_recipient_name
+                            }
+                          </p>
+                        </div>
+                      )}
 
                       {feedback.comments && (
                         <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-white/55">
@@ -554,6 +629,7 @@ export default async function FeedbackPage({
         {/* =====================================================
             CERTIFICATE NEXT STEP
         ===================================================== */}
+
         {isClient &&
           feedbackUnlocked &&
           feedbackSubmitted && (

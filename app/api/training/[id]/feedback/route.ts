@@ -24,6 +24,8 @@ type FeedbackRow = {
   client_profile_id: string
   rating: number | string
   comments: string | null
+  certificate_recipient_name: string | null
+  public_testimonial_allowed: boolean | null
   created_at: string | null
 }
 
@@ -96,6 +98,8 @@ async function listFeedbackForEngagement(
           client_profile_id,
           rating,
           feedback AS comments,
+          certificate_recipient_name,
+          public_testimonial_allowed,
           created_at
         FROM training_feedback
         WHERE training_engagement_id = $1
@@ -160,8 +164,6 @@ export async function GET(
 
     /*
      * Clients receive only their own feedback.
-     * Operational users may review feedback
-     * according to the existing training access model.
      */
     if (
       user.role === "client"
@@ -190,6 +192,8 @@ export async function GET(
               client_profile_id,
               rating,
               feedback AS comments,
+              certificate_recipient_name,
+              public_testimonial_allowed,
               created_at
             FROM training_feedback
             WHERE training_engagement_id = $1
@@ -223,6 +227,10 @@ export async function GET(
       )
     }
 
+    /*
+     * Operational users can review feedback only
+     * after passing engagement-level authorization.
+     */
     if (
       isOperationalRole(
         user.role,
@@ -332,6 +340,9 @@ export async function POST(
       )
     }
 
+    /*
+     * Only the client may submit feedback.
+     */
     if (
       user.role !== "client"
     ) {
@@ -390,10 +401,8 @@ export async function POST(
      * --------------------------------------------------------
      * COMPLETION GATE
      * --------------------------------------------------------
-     *
-     * Feedback cannot be submitted until the
-     * authoritative training progress reaches 100%.
      */
+
     const progress =
       Number(
         engagement.progress || 0,
@@ -418,12 +427,11 @@ export async function POST(
     }
 
     /*
-     * The completion workflow should also have marked
-     * the engagement completed by this point.
-     *
-     * We do not require status === "completed" here
-     * because progress is the explicit unlock condition.
+     * --------------------------------------------------------
+     * PARSE REQUEST
+     * --------------------------------------------------------
      */
+
     let body: Record<
       string,
       unknown
@@ -443,6 +451,12 @@ export async function POST(
         },
       )
     }
+
+    /*
+     * --------------------------------------------------------
+     * RATING
+     * --------------------------------------------------------
+     */
 
     const rating =
       Number(body.rating)
@@ -464,20 +478,111 @@ export async function POST(
       )
     }
 
-    const comments =
-      typeof body.comments ===
+    /*
+     * --------------------------------------------------------
+     * COMMENTS
+     * --------------------------------------------------------
+     *
+     * Accept both:
+     *
+     * feedback
+     * comments
+     *
+     * The database column is "feedback".
+     */
+
+    const rawComments =
+      typeof body.feedback ===
       "string"
-        ? body.comments.trim()
-        : null
+        ? body.feedback
+        : typeof body.comments ===
+            "string"
+          ? body.comments
+          : ""
+
+    const comments =
+      rawComments.trim()
+
+    if (!comments) {
+      return NextResponse.json(
+        {
+          error:
+            "Feedback comments are required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * --------------------------------------------------------
+     * CERTIFICATE RECIPIENT NAME
+     * --------------------------------------------------------
+     *
+     * This is the authoritative name that will appear
+     * on the Certificate of Completion.
+     *
+     * It is intentionally NOT taken from:
+     *
+     * - username
+     * - email
+     * - account display name
+     * - client profile nickname
+     */
+
+    const certificateRecipientName =
+      typeof body
+        .certificate_recipient_name ===
+      "string"
+        ? body.certificate_recipient_name.trim()
+        : ""
+
+    if (
+      !certificateRecipientName
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Full Name for Certificate is required.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    if (
+      certificateRecipientName.length >
+      160
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Full Name for Certificate must be 160 characters or fewer.",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    /*
+     * --------------------------------------------------------
+     * PUBLIC TESTIMONIAL PERMISSION
+     * --------------------------------------------------------
+     */
+
+    const publicTestimonialAllowed =
+      body.public_testimonial_allowed ===
+      true
 
     /*
      * --------------------------------------------------------
      * ONE-TIME SUBMISSION
      * --------------------------------------------------------
-     *
-     * A client can submit feedback only once for
-     * a particular training engagement.
      */
+
     const existing =
       await query<{
         id: string
@@ -513,8 +618,11 @@ export async function POST(
     }
 
     /*
-     * Insert feedback.
+     * --------------------------------------------------------
+     * INSERT FEEDBACK
+     * --------------------------------------------------------
      */
+
     const result =
       await query<FeedbackRow>(
         `
@@ -523,14 +631,20 @@ export async function POST(
             client_profile_id,
             rating,
             feedback,
+            certificate_recipient_name,
+            public_testimonial_allowed,
             created_at,
-            updated_at
+            updated_at,
+            submitted_at
           )
           SELECT
             $1,
             $2,
             $3,
             $4,
+            $5,
+            $6,
+            NOW(),
             NOW(),
             NOW()
           WHERE NOT EXISTS (
@@ -544,23 +658,25 @@ export async function POST(
             client_profile_id,
             rating,
             feedback AS comments,
+            certificate_recipient_name,
+            public_testimonial_allowed,
             created_at
         `,
         [
           id,
           access.profileId,
           rating,
-          comments || null,
+          comments,
+          certificateRecipientName,
+          publicTestimonialAllowed,
         ],
       )
 
     /*
-     * If another request inserted the feedback
-     * between our existence check and insert,
-     * RETURNING will be empty.
-     *
-     * That means the one-time rule still wins.
+     * If another request inserted the feedback between
+     * our existence check and insert, RETURNING is empty.
      */
+
     if (!result.rows[0]) {
       const alreadySubmitted =
         await query<{
@@ -600,9 +716,11 @@ export async function POST(
       result.rows[0]
 
     /*
-     * Record the event in the existing training
-     * activity ledger.
+     * --------------------------------------------------------
+     * TRAINING ACTIVITY
+     * --------------------------------------------------------
      */
+
     try {
       await query(
         `
@@ -631,14 +749,20 @@ export async function POST(
       )
     } catch (updateError) {
       /*
-       * Feedback submission itself must remain
-       * successful even if the activity ledger fails.
+       * Feedback submission itself must remain successful
+       * even if the activity ledger fails.
        */
       console.error(
         "TRAINING FEEDBACK ACTIVITY ERROR:",
         updateError,
       )
     }
+
+    /*
+     * --------------------------------------------------------
+     * RESPONSE
+     * --------------------------------------------------------
+     */
 
     return NextResponse.json(
       {

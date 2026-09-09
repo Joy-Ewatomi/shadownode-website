@@ -768,6 +768,7 @@ CREATE TABLE public.training_feedback (
   submitted_at timestamp with time zone DEFAULT now(),
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  certificate_recipient_name character varying,
   CONSTRAINT training_feedback_pkey PRIMARY KEY (id),
   CONSTRAINT training_feedback_engagement_fk FOREIGN KEY (training_engagement_id) REFERENCES public.training_engagements(id),
   CONSTRAINT training_feedback_client_fk FOREIGN KEY (client_profile_id) REFERENCES public.user_profiles(id)

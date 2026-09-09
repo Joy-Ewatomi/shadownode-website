@@ -88,36 +88,27 @@ export default function TrainingCertificate({
   certificateRecipientName = null,
 }: TrainingCertificateProps) {
   const [cert, setCert] =
-    useState<CertificateData | null>(
-      certificate,
-    )
+    useState<CertificateData | null>(certificate)
 
-  const [loading, setLoading] =
-    useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const [feedback, setFeedback] =
-    useState<FeedbackData | null>(
-      feedbackRating ||
-        feedbackComments ||
-        certificateRecipientName
-        ? {
-            rating: clampRating(
-              feedbackRating || 0,
-            ),
-            comments:
-              feedbackComments || null,
-            certificate_recipient_name:
-              certificateRecipientName ||
-              null,
-          }
-        : null,
-    )
+  const [feedback, setFeedback] = useState<FeedbackData | null>(
+    feedbackRating ||
+      feedbackComments ||
+      certificateRecipientName
+      ? {
+          rating: clampRating(feedbackRating || 0),
+          comments: feedbackComments || null,
+          certificate_recipient_name:
+            certificateRecipientName || null,
+        }
+      : null,
+  )
 
   const [feedbackLoading, setFeedbackLoading] =
     useState(false)
 
-  const safeProgress =
-    clampProgress(progress)
+  const safeProgress = clampProgress(progress)
 
   const isTrainingComplete =
     safeProgress >= 100 ||
@@ -148,21 +139,19 @@ export default function TrainingCertificate({
       setFeedbackLoading(true)
 
       try {
-        const response =
-          await fetch(
-            `/api/training/${engagementId}/feedback`,
-            {
-              method: "GET",
-              cache: "no-store",
-            },
-          )
+        const response = await fetch(
+          `/api/training/${engagementId}/feedback`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        )
 
         if (!response.ok) {
           return
         }
 
-        const payload =
-          await response.json()
+        const payload = await response.json()
 
         if (cancelled) {
           return
@@ -179,18 +168,15 @@ export default function TrainingCertificate({
           !Array.isArray(rawFeedback) &&
           typeof rawFeedback === "object"
         ) {
-          const ratingValue =
-            Number(
-              rawFeedback.rating ??
-                rawFeedback.rating_value ??
-                0,
-            )
+          const ratingValue = Number(
+            rawFeedback.rating ??
+              rawFeedback.rating_value ??
+              0,
+          )
 
           setFeedback({
             rating: clampRating(
-              Number.isFinite(
-                ratingValue,
-              )
+              Number.isFinite(ratingValue)
                 ? ratingValue
                 : 0,
             ),
@@ -212,28 +198,22 @@ export default function TrainingCertificate({
           return
         }
 
-        if (
-          Array.isArray(rawFeedback)
-        ) {
-          const first =
-            rawFeedback[0]
+        if (Array.isArray(rawFeedback)) {
+          const first = rawFeedback[0]
 
           if (!first) {
             return
           }
 
-          const ratingValue =
-            Number(
-              first.rating ??
-                first.rating_value ??
-                0,
-            )
+          const ratingValue = Number(
+            first.rating ??
+              first.rating_value ??
+              0,
+          )
 
           setFeedback({
             rating: clampRating(
-              Number.isFinite(
-                ratingValue,
-              )
+              Number.isFinite(ratingValue)
                 ? ratingValue
                 : 0,
             ),
@@ -282,10 +262,9 @@ export default function TrainingCertificate({
       return
     }
 
-    const confirmed =
-      window.confirm(
-        "Issue this Certificate of Completion?",
-      )
+    const confirmed = window.confirm(
+      "Issue this Certificate of Completion?",
+    )
 
     if (!confirmed) {
       return
@@ -294,16 +273,14 @@ export default function TrainingCertificate({
     setLoading(true)
 
     try {
-      const response =
-        await fetch(
-          `/api/training/${engagementId}/certificate`,
-          {
-            method: "POST",
-          },
-        )
+      const response = await fetch(
+        `/api/training/${engagementId}/certificate`,
+        {
+          method: "POST",
+        },
+      )
 
-      const payload =
-        await response.json()
+      const payload = await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -313,43 +290,37 @@ export default function TrainingCertificate({
       }
 
       setCert({
-        id:
-          payload.certificate_id,
-
+        id: payload.certificate_id,
         certificate_number:
           payload.certificate_number,
-
         recipient_name:
           payload.recipient_name ||
           feedback?.certificate_recipient_name ||
           null,
-
         training_title:
           payload.training_title ||
           trainingTitle ||
           "Cybersecurity Awareness Training",
-
         training_type:
-          payload.training_type ||
-          null,
+          payload.training_type || null,
 
+        /*
+         * Public certificate designation.
+         * Do not expose internal role labels such as
+         * "analyst" on the certificate.
+         */
         trainer_name:
-          payload.trainer_name ||
-          trainerName ||
-          null,
+          "ShadowNode Training Facilitator",
 
         completion_date:
           payload.completion_date ||
           completionDate ||
           null,
-
         issued_at:
           payload.issued_at ||
           new Date().toISOString(),
-
         verification_url:
-          payload.verification_url ||
-          null,
+          payload.verification_url || null,
       })
 
       window.alert(
@@ -393,10 +364,12 @@ export default function TrainingCertificate({
     trainingTitle ||
     "Cybersecurity Awareness Training"
 
+  /*
+   * Public-facing trainer designation.
+   * Never show internal role labels such as "analyst".
+   */
   const finalTrainerName =
-    cert?.trainer_name ||
-    trainerName ||
-    "ShadowNode Training Team"
+    "ShadowNode Training Facilitator"
 
   const finalCompletionDate =
     cert?.completion_date ||
@@ -408,14 +381,12 @@ export default function TrainingCertificate({
     feedback?.certificate_recipient_name ||
     "Certificate Recipient"
 
-  const finalRating =
-    feedback?.rating
-      ? clampRating(feedback.rating)
-      : 0
+  const finalRating = feedback?.rating
+    ? clampRating(feedback.rating)
+    : 0
 
   const finalComments =
-    feedback?.comments?.trim() ||
-    ""
+    feedback?.comments?.trim() || ""
 
   /*
    * ============================================================
@@ -446,8 +417,7 @@ export default function TrainingCertificate({
         background: #ffffff !important;
       }
 
-      body.printing-training-certificate
-        > * {
+      body.printing-training-certificate > * {
         visibility: hidden !important;
       }
 
@@ -503,8 +473,7 @@ export default function TrainingCertificate({
       }
 
       body.printing-training-certificate
-        #training-certificate
-        * {
+        #training-certificate * {
         break-inside: avoid !important;
       }
     }
@@ -525,7 +494,6 @@ export default function TrainingCertificate({
 
         <div className="space-y-6">
           {/* SCREEN HEADER */}
-
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between print:hidden">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a227]">
@@ -555,100 +523,110 @@ export default function TrainingCertificate({
               CERTIFICATE
              ================================================== */}
 
-          <div
-            id="training-certificate"
-            className="mx-auto w-full max-w-[1450px] overflow-hidden bg-[#f7f1e4] text-[#10203b] shadow-2xl print:max-w-none print:shadow-none"
-          >
-            <div className="certificate-page relative aspect-[297/210] w-full overflow-hidden bg-[#f7f1e4]">
-              {/* BACKGROUND */}
-
+        <div
+  id="training-certificate"
+  className="mx-auto w-full max-w-[1400px] bg-[#f7f1e4] text-[#10203b] shadow-2xl print:max-w-none print:shadow-none print:overflow-hidden"
+>
+  <div className="certificate-page relative w-full overflow-hidden bg-[#f7f1e4] aspect-[297/210] print:aspect-auto">
+              {/* Base */}
               <div className="absolute inset-0 bg-[#f7f1e4]" />
 
-              {/* WATERMARK */}
+              {/* Subtle radial */}
+              <div className="pointer-events-none absolute inset-0 opacity-[0.03]">
+                <div className="absolute left-1/2 top-1/2 h-[80%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#10203b]" />
+              </div>
 
+              {/* Watermark */}
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="font-serif text-[15rem] font-bold tracking-[0.08em] text-[#10203b]/[0.018]">
+                <div className="font-serif text-[14rem] font-bold tracking-[0.08em] text-[#10203b]/[0.022]">
                   SN
                 </div>
               </div>
 
-              {/* TOP LEFT NAVY */}
-
+              {/* ========== TOP-LEFT CORNER ========== */}
               <div
-                className="absolute left-0 top-0 h-[39%] w-[24%] bg-[#07162f]"
+                className="absolute left-0 top-0 h-[42%] w-[26%] bg-[#07162f]"
                 style={{
                   clipPath:
-                    "polygon(0 0,100% 0,0 100%)",
-                }}
-              />
-
-              {/* TOP LEFT GOLD */}
-
-              <div
-                className="absolute left-[7.5%] top-0 h-[42%] w-[5.5%] bg-[#d6aa43]"
-                style={{
-                  clipPath:
-                    "polygon(0 0,100% 0,0 100%)",
+                    "polygon(0 0, 100% 0, 0 100%)",
                 }}
               />
 
               <div
-                className="absolute left-[12%] top-0 h-[36%] w-[3.3%] bg-[#f2d17a]"
+                className="absolute left-[6.8%] top-0 h-[44%] w-[6.2%] bg-[#d6aa43]"
                 style={{
                   clipPath:
-                    "polygon(0 0,100% 0,0 100%)",
-                }}
-              />
-
-              {/* BOTTOM RIGHT NAVY */}
-
-              <div
-                className="absolute bottom-0 right-0 h-[41%] w-[25%] bg-[#07162f]"
-                style={{
-                  clipPath:
-                    "polygon(100% 0,100% 100%,0 100%)",
-                }}
-              />
-
-              {/* BOTTOM RIGHT GOLD */}
-
-              <div
-                className="absolute bottom-0 right-[7.5%] h-[43%] w-[5.5%] bg-[#d6aa43]"
-                style={{
-                  clipPath:
-                    "polygon(100% 0,100% 100%,0 100%)",
+                    "polygon(0 0, 100% 0, 0 100%)",
                 }}
               />
 
               <div
-                className="absolute bottom-0 right-[12%] h-[37%] w-[3.3%] bg-[#f2d17a]"
+                className="absolute left-[11.5%] top-0 h-[38%] w-[3.8%] bg-[#f2d17a]"
                 style={{
                   clipPath:
-                    "polygon(100% 0,100% 100%,0 100%)",
+                    "polygon(0 0, 100% 0, 0 100%)",
                 }}
               />
 
-              {/* GOLD FRAME */}
+              <div
+                className="absolute left-[14.2%] top-0 h-[32%] w-[2.2%] bg-[#c79b31]"
+                style={{
+                  clipPath:
+                    "polygon(0 0, 100% 0, 0 100%)",
+                }}
+              />
 
-              <div className="absolute inset-[3.7%] border-2 border-[#c79b31]" />
+              {/* ========== BOTTOM-RIGHT CORNER ========== */}
+              <div
+                className="absolute bottom-0 right-0 h-[43%] w-[27%] bg-[#07162f]"
+                style={{
+                  clipPath:
+                    "polygon(100% 0, 100% 100%, 0 100%)",
+                }}
+              />
 
-              <div className="absolute inset-[5.9%] border border-[#d5ae52]/70" />
+              <div
+                className="absolute bottom-0 right-[6.8%] h-[45%] w-[6.2%] bg-[#d6aa43]"
+                style={{
+                  clipPath:
+                    "polygon(100% 0, 100% 100%, 0 100%)",
+                }}
+              />
+
+              <div
+                className="absolute bottom-0 right-[11.5%] h-[39%] w-[3.8%] bg-[#f2d17a]"
+                style={{
+                  clipPath:
+                    "polygon(100% 0, 100% 100%, 0 100%)",
+                }}
+              />
+
+              <div
+                className="absolute bottom-0 right-[14.2%] h-[33%] w-[2.2%] bg-[#c79b31]"
+                style={{
+                  clipPath:
+                    "polygon(100% 0, 100% 100%, 0 100%)",
+                }}
+              />
+
+              {/* Gold frames */}
+              <div className="absolute inset-[3.4%] border-[2.5px] border-[#c79b31]" />
+
+              <div className="absolute inset-[5.5%] border border-[#d5ae52]/75" />
 
               {/* CONTENT */}
-
-              <div className="certificate-content relative z-10 flex h-full flex-col px-[6.5%] py-[5.2%]">
+              <div className="certificate-content relative z-10 flex h-full flex-col px-[6.2%] py-[4.0%]">
                 {/* BRAND */}
-
                 <div className="flex items-start justify-center">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3.5">
                     <ShieldLogo />
 
                     <div>
-                      <div className="font-sans text-2xl font-semibold tracking-[0.1em] text-[#10203b] sm:text-3xl">
+                      <div className="font-sans text-[1.65rem] font-semibold tracking-[0.12em] text-[#10203b] sm:text-[1.85rem]">
                         SHADOWNODE
                       </div>
 
-                      <div className="mt-1 text-center text-[8px] font-medium uppercase tracking-[0.34em] text-[#ae7d18] sm:text-[9px]">
+                      <div className="mt-0.5 text-center text-[8px] font-medium uppercase tracking-[0.32em] text-[#ae7d18] sm:text-[9px]">
                         Trusted. Secure. Unseen.
                       </div>
                     </div>
@@ -656,91 +634,87 @@ export default function TrainingCertificate({
                 </div>
 
                 {/* EXCELLENCE RIBBON */}
-
-                <div className="absolute right-[6%] top-[1%] hidden h-[32%] w-[7.7%] sm:block">
+                <div className="absolute right-[5.2%] top-[0.8%] hidden h-[34%] w-[8.2%] sm:block">
                   <div className="relative h-full">
-                    <div className="absolute inset-x-0 top-0 h-[78%] bg-[#0a1934] shadow-xl">
-                      <div className="absolute inset-[7px] border border-[#d7af4d]/60" />
+                    <div className="absolute inset-x-0 top-0 h-[76%] bg-[#0a1934] shadow-xl">
+                      <div className="absolute inset-[6px] border border-[#d7af4d]/65" />
 
-                      <div className="absolute left-1/2 top-[16%] flex h-[82px] w-[82px] -translate-x-1/2 flex-col items-center justify-center rounded-full border border-[#ddb94f]">
-                        <div className="text-[10px] text-[#f0d36d]">
+                      <div className="absolute left-1/2 top-[14%] flex h-[88px] w-[88px] -translate-x-1/2 flex-col items-center justify-center rounded-full border-[1.5px] border-[#ddb94f] bg-[#0a1934]">
+                        <div className="text-[11px] leading-none text-[#f0d36d]">
                           ★ ★ ★
                         </div>
 
-                        <div className="mt-1 text-[7px] font-semibold uppercase tracking-[0.11em] text-white">
+                        <div className="mt-1.5 text-[7px] font-semibold uppercase tracking-[0.12em] text-white">
                           Commitment to
                         </div>
 
-                        <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#f0d36d]">
+                        <div className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#f0d36d]">
                           Excellence
                         </div>
 
-                        <div className="mt-1 text-[9px] text-[#f0d36d]">
+                        <div className="mt-1.5 text-[10px] text-[#f0d36d]">
                           ★
                         </div>
                       </div>
                     </div>
 
                     <div
-                      className="absolute bottom-[8%] left-0 right-0 h-[30%] bg-[#0a1934]"
+                      className="absolute bottom-[6%] left-0 right-0 h-[28%] bg-[#0a1934]"
                       style={{
                         clipPath:
-                          "polygon(0 0,100% 0,50% 100%)",
+                          "polygon(0 0, 100% 0, 50% 100%)",
                       }}
                     />
                   </div>
                 </div>
 
                 {/* TITLE */}
-
-                <div className="mt-[3.8%] text-center">
-                  <div className="font-serif text-[clamp(3rem,6vw,5.6rem)] font-medium uppercase leading-none tracking-[0.11em] text-[#10203b]">
+                <div className="mt-[2.6%] text-center">
+                  <div className="font-serif text-[clamp(2.8rem,5.8vw,5.4rem)] font-medium uppercase leading-none tracking-[0.12em] text-[#10203b]">
                     Certificate
                   </div>
 
-                  <div className="mt-2 flex items-center justify-center gap-4">
-                    <div className="h-px w-20 bg-[#c79b31]" />
+                  <div className="mt-2.5 flex items-center justify-center gap-4">
+                    <div className="h-px w-16 bg-[#c79b31] sm:w-24" />
 
-                    <div className="font-serif text-[clamp(1rem,2vw,1.5rem)] uppercase tracking-[0.34em] text-[#a97918]">
+                    <div className="font-serif text-[clamp(0.95rem,1.9vw,1.45rem)] uppercase tracking-[0.36em] text-[#a97918]">
                       Of Completion
                     </div>
 
-                    <div className="h-px w-20 bg-[#c79b31]" />
+                    <div className="h-px w-16 bg-[#c79b31] sm:w-24" />
                   </div>
                 </div>
 
                 {/* RECIPIENT */}
+                <div className="mt-[2.2%] text-center">
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="h-px w-16 bg-[#a97918] sm:w-24" />
 
-                <div className="mt-[3.4%] text-center">
-                  <div className="flex items-center justify-center gap-5">
-                    <div className="h-px w-24 bg-[#a97918]" />
-
-                    <p className="text-[8px] font-semibold uppercase tracking-[0.26em] text-[#1a2940] sm:text-[10px]">
+                    <p className="text-[8px] font-semibold uppercase tracking-[0.28em] text-[#1a2940] sm:text-[10px]">
                       This is to certify that
                     </p>
 
-                    <div className="h-px w-24 bg-[#a97918]" />
+                    <div className="h-px w-16 bg-[#a97918] sm:w-24" />
                   </div>
 
-                  <div className="mt-4 break-words px-6 font-serif text-[clamp(2rem,4.5vw,4.3rem)] italic leading-none text-[#10203b]">
+                  <div className="mt-3.5 break-words px-4 font-serif text-[clamp(1.9rem,4.2vw,4.1rem)] italic leading-none text-[#10203b]">
                     {finalRecipientName}
                   </div>
 
-                  <div className="mx-auto mt-3 h-px w-72 bg-[#c79b31]/65" />
+                  <div className="mx-auto mt-2.5 h-px w-64 bg-[#c79b31]/70 sm:w-80" />
                 </div>
 
                 {/* TRAINING */}
-
-                <div className="mt-[2.6%] text-center">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.17em] text-[#3d4654] sm:text-sm">
+                <div className="mt-[1.7%] text-center">
+                  <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#3d4654] sm:text-[11px]">
                     Has successfully completed the
                   </p>
 
-                  <div className="mt-2 px-8 font-serif text-[clamp(1.1rem,2.4vw,2rem)] font-semibold text-[#10203b]">
+                  <div className="mt-1.5 px-6 font-serif text-[clamp(1.05rem,2.2vw,1.9rem)] font-semibold uppercase tracking-wide text-[#10203b]">
                     {finalTrainingTitle}
                   </div>
 
-                  <p className="mx-auto mt-2 max-w-4xl text-[9px] leading-5 text-[#555d68] sm:text-xs">
+                  <p className="mx-auto mt-2 max-w-3xl text-[8.5px] leading-4 text-[#555d68] sm:text-[10.5px] sm:leading-5">
                     This training has equipped the participant
                     with essential knowledge and practical
                     skills to identify, prevent, and respond
@@ -749,9 +723,8 @@ export default function TrainingCertificate({
                 </div>
 
                 {/* DETAILS */}
-
-                <div className="mt-[2.6%] border-y border-[#c79b31]/55 py-[1.5%]">
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                <div className="mt-[1.6%] border-y border-[#c79b31]/60 py-[1.35%]">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                     <CertificateDetail
                       icon="calendar"
                       label="Completion Date"
@@ -763,70 +736,55 @@ export default function TrainingCertificate({
                     <CertificateDetail
                       icon="clock"
                       label="Duration"
-                      value={
-                        duration ||
-                        "Training Program"
-                      }
+                      value={duration || "20 Hours"}
                     />
 
                     <CertificateDetail
                       icon="certificate"
                       label="Certificate ID"
-                      value={
-                        cert.certificate_number
-                      }
+                      value={cert.certificate_number}
                     />
 
                     <CertificateDetail
                       icon="trainer"
                       label="Trainer"
-                      value={
-                        finalTrainerName
-                      }
+                      value={finalTrainerName}
                     />
 
                     <CertificateDetail
                       icon="issued"
                       label="Issued On"
-                      value={formatDate(
-                        cert.issued_at,
-                      )}
+                      value={formatDate(cert.issued_at)}
                     />
                   </div>
                 </div>
 
                 {/* LOWER SECTION */}
-
-                <div className="mt-[2.4%] grid grid-cols-1 gap-5 sm:grid-cols-[0.75fr_1.65fr_0.85fr] sm:items-start">
+                <div className="mt-[1.4%] grid grid-cols-1 gap-4 sm:grid-cols-[0.78fr_1.7fr_0.82fr] sm:items-start">
                   {/* SEAL */}
-
                   <div className="flex items-center justify-start">
                     <CertificateSeal />
                   </div>
 
                   {/* FEEDBACK */}
-
-                  <div className="rounded-[17px] border border-[#c79b31] bg-[#fbf6eb]/90 px-5 py-3.5">
+                  <div className="rounded-[14px] border border-[#c79b31] bg-[#fbf6eb]/95 px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
-                      <div className="h-px w-10 bg-[#c79b31]" />
+                      <div className="h-px w-8 bg-[#c79b31]" />
 
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#a97918] sm:text-[10px]">
+                      <p className="text-[8.5px] font-semibold uppercase tracking-[0.2em] text-[#a97918] sm:text-[9.5px]">
                         Participant Feedback
                       </p>
 
-                      <div className="h-px w-10 bg-[#c79b31]" />
+                      <div className="h-px w-8 bg-[#c79b31]" />
                     </div>
 
-                    <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-[0.9fr_1.4fr]">
-                      {/* RATING */}
-
-                      <div className="text-center sm:border-r sm:border-[#c79b31]/35 sm:pr-4">
-                        <p className="text-[8px] font-medium text-[#2b3544] sm:text-[9px]">
-                          How would you rate this
-                          training?
+                    <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-[0.85fr_1.35fr]">
+                      <div className="text-center sm:border-r sm:border-[#c79b31]/40 sm:pr-3">
+                        <p className="text-[7.5px] font-medium text-[#2b3544] sm:text-[8.5px]">
+                          How would you rate this training?
                         </p>
 
-                        <div className="mt-2 flex justify-center gap-0.5">
+                        <div className="mt-1.5 flex justify-center gap-0.5">
                           {Array.from(
                             { length: 5 },
                             (_, index) => {
@@ -835,14 +793,12 @@ export default function TrainingCertificate({
 
                               return (
                                 <span
-                                  key={
-                                    starNumber
-                                  }
+                                  key={starNumber}
                                   className={
                                     finalRating >=
                                     starNumber
-                                      ? "text-[21px] leading-none text-[#d3a13a]"
-                                      : "text-[21px] leading-none text-[#d3a13a]/25"
+                                      ? "text-[20px] leading-none text-[#d3a13a]"
+                                      : "text-[20px] leading-none text-[#d3a13a]/30"
                                   }
                                   aria-hidden="true"
                                 >
@@ -853,97 +809,87 @@ export default function TrainingCertificate({
                           )}
                         </div>
 
-                        <p className="mt-1 text-[7px] font-semibold uppercase tracking-[0.14em] text-[#8c6a1d]">
+                        <p className="mt-0.5 text-[6.5px] font-semibold uppercase tracking-[0.14em] text-[#8c6a1d]">
                           {finalRating
                             ? `${finalRating}/5`
                             : "Submitted"}
                         </p>
                       </div>
 
-                      {/* COMMENTS */}
-
                       <div className="min-w-0">
-                        <p className="text-[8px] font-medium text-[#2b3544] sm:text-[9px]">
-                          Your Feedback /
-                          Comments
+                        <p className="text-[7.5px] font-medium text-[#2b3544] sm:text-[8.5px]">
+                          Your Feedback / Comments
                         </p>
 
-                        <div className="mt-1.5">
-                          <div className="border-b border-[#8c8065]/35" />
+                        <div className="mt-1">
+                          <div className="border-b border-[#8c8065]/40" />
 
-                          <div className="min-h-[40px] border-b border-[#8c8065]/35 py-1.5">
-                            <p className="max-h-[44px] overflow-hidden break-words text-[8px] leading-4 text-[#293242] sm:text-[9px]">
+                          <div className="min-h-[38px] border-b border-[#8c8065]/40 py-1">
+                            <p className="max-h-[42px] overflow-hidden break-words text-[7.5px] leading-3.5 text-[#293242] sm:text-[8.5px]">
                               {finalComments ||
                                 "Thank you for completing and participating in the training programme."}
                             </p>
                           </div>
 
-                          <div className="border-b border-[#8c8065]/35" />
+                          <div className="border-b border-[#8c8065]/40" />
                         </div>
                       </div>
                     </div>
-
-                    {feedbackLoading && (
-                      <p className="mt-1 text-center text-[6px] uppercase tracking-[0.08em] text-[#9b8a67]">
-                        Loading feedback...
-                      </p>
-                    )}
                   </div>
 
                   {/* SIGNATURE */}
-
-                  <div className="pt-1 text-center">
-                    <div className="font-serif text-2xl italic text-[#17243b] sm:text-3xl">
+                  <div className="pt-0.5 text-center">
+                    <div className="font-serif text-[1.55rem] italic leading-none text-[#17243b] sm:text-[1.85rem]">
                       Joy Ewatomi
                     </div>
 
-                    <div className="mx-auto mt-1 h-px w-36 bg-[#17243b]/35" />
+                    <div className="mx-auto mt-1 h-px w-32 bg-[#17243b]/40" />
 
-                    <p className="mt-2 text-[8px] font-semibold uppercase tracking-[0.15em] text-[#17243b] sm:text-[9px]">
+                    <p className="mt-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-[#17243b] sm:text-[9px]">
                       Joy Ewatomi
                     </p>
 
-                    <p className="mt-1 text-[7px] uppercase tracking-[0.19em] text-[#a97918] sm:text-[8px]">
-                      Founder & CEO
+                    <p className="mt-0.5 text-[6.5px] uppercase tracking-[0.2em] text-[#a97918] sm:text-[7.5px]">
+                      Founder &amp; CEO
                     </p>
                   </div>
                 </div>
 
                 {/* VERIFICATION */}
-
-                <div className="mt-auto pt-[1.5%]">
-                  <div className="border-t border-[#c79b31]/40 pt-3">
-                    <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center">
+                <div className="mt-auto pt-[0.8%]">
+                  <div className="border-t border-[#c79b31]/45 pt-2">
+                    <div className="flex items-center justify-between gap-3">
+                      {/* LEFT */}
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center">
                           <ShieldCheckIcon />
                         </div>
 
-                        <div>
-                          <p className="text-[7px] font-semibold uppercase tracking-[0.18em] text-[#17243b]">
+                        <div className="min-w-0">
+                          <p className="text-[6.5px] font-semibold uppercase tracking-[0.16em] text-[#17243b]">
                             Verification
                           </p>
 
-                          <p className="mt-0.5 text-[8px] text-[#5f6470]">
+                          <p className="mt-0.5 text-[7px] leading-tight text-[#5f6470]">
                             Verify this certificate at:
                           </p>
+
+                         <p className="mt-0.5 break-all text-[7px] font-bold text-[#192840]">
+  {cert.verification_url}
+</p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        <p className="text-[9px] font-bold text-[#192840]">
-                          verify.shadownode.com
-                        </p>
-
+                      {/* QR */}
+                      <div className="shrink-0">
                         {cert.verification_url ? (
                           <RealQrCode
-                            value={
-                              cert.verification_url
-                            }
+                            value={cert.verification_url}
+                            size={58}
                           />
                         ) : (
-                          <div className="flex h-[74px] w-[74px] items-center justify-center border border-[#17243b]/20 bg-white px-2 text-center text-[7px] uppercase leading-3 tracking-[0.05em] text-[#6b7079]">
-                            Verification
+                          <div className="flex h-[58px] w-[58px] items-center justify-center border border-[#17243b]/20 bg-white px-1 text-center text-[6px] uppercase leading-tight tracking-[0.04em] text-[#6b7079]">
+                            QR
                             <br />
                             unavailable
                           </div>
@@ -956,50 +902,6 @@ export default function TrainingCertificate({
             </div>
           </div>
         </div>
-
-        {/* META */}
-
-        <div className="certificate-meta grid gap-4 sm:grid-cols-3 print:hidden">
-          <MetaCard
-            label="Certificate ID"
-            value={
-              cert.certificate_number
-            }
-          />
-
-          <MetaCard
-            label="Status"
-            value="Issued"
-          />
-
-          <MetaCard
-            label="Verification"
-            value={
-              cert.verification_url
-                ? "Public verification available"
-                : "Verification URL unavailable"
-            }
-          />
-        </div>
-
-        {cert.verification_url && (
-          <div className="certificate-footer-extra rounded-xl border border-[#143b28] bg-[#04100b]/60 p-5 print:hidden">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
-              Public Verification
-            </p>
-
-            <a
-              href={
-                cert.verification_url
-              }
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 block break-all text-sm text-[#20dc73] underline underline-offset-4"
-            >
-              {cert.verification_url}
-            </a>
-          </div>
-        )}
       </>
     )
   }
@@ -1010,10 +912,7 @@ export default function TrainingCertificate({
    * ============================================================
    */
 
-  if (
-    isTrainingComplete &&
-    !hasFeedback
-  ) {
+  if (isTrainingComplete && !hasFeedback) {
     return (
       <LockedState
         eyebrow="Certificate Locked"
@@ -1031,10 +930,7 @@ export default function TrainingCertificate({
    * ============================================================
    */
 
-  if (
-    isTrainingComplete &&
-    hasFeedback
-  ) {
+  if (isTrainingComplete && hasFeedback) {
     return (
       <div className="space-y-6">
         <div className="rounded-2xl border border-[#20dc73]/20 bg-[#04100b]/70 p-6 sm:p-8">
@@ -1087,9 +983,7 @@ export default function TrainingCertificate({
                 <p className="mt-3 text-xs text-white/55">
                   Certificate name:{" "}
                   <span className="font-semibold text-white">
-                    {
-                      feedback.certificate_recipient_name
-                    }
+                    {feedback.certificate_recipient_name}
                   </span>
                 </p>
               ) : null}
@@ -1104,8 +998,7 @@ export default function TrainingCertificate({
                           key={index}
                           className="text-lg leading-none"
                         >
-                          {feedback.rating >
-                          index
+                          {feedback.rating > index
                             ? "★"
                             : "☆"}
                         </span>
@@ -1210,14 +1103,15 @@ export default function TrainingCertificate({
 
 function RealQrCode({
   value,
+  size = 58,
 }: {
   value: string
+  size?: number
 }) {
   const [qrDataUrl, setQrDataUrl] =
     useState<string | null>(null)
 
-  const [error, setError] =
-    useState(false)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -1231,20 +1125,15 @@ function RealQrCode({
       try {
         setError(false)
 
-        const dataUrl =
-          await QRCode.toDataURL(
-            value,
-            {
-              errorCorrectionLevel:
-                "H",
-              margin: 1,
-              width: 240,
-              color: {
-                dark: "#101b32",
-                light: "#ffffff",
-              },
-            },
-          )
+        const dataUrl = await QRCode.toDataURL(value, {
+          errorCorrectionLevel: "H",
+          margin: 1,
+          width: 300,
+          color: {
+            dark: "#101b32",
+            light: "#ffffff",
+          },
+        })
 
         if (!cancelled) {
           setQrDataUrl(dataUrl)
@@ -1271,7 +1160,13 @@ function RealQrCode({
 
   if (error) {
     return (
-      <div className="flex h-[74px] w-[74px] items-center justify-center border border-[#101b32]/20 bg-white px-2 text-center text-[7px] uppercase leading-3 tracking-[0.05em] text-[#6b7079]">
+      <div
+        className="flex items-center justify-center border border-[#101b32]/20 bg-white text-center text-[6px] uppercase leading-tight tracking-[0.04em] text-[#6b7079]"
+        style={{
+          width: size,
+          height: size,
+        }}
+      >
         QR
         <br />
         unavailable
@@ -1282,10 +1177,14 @@ function RealQrCode({
   if (!qrDataUrl) {
     return (
       <div
-        className="flex h-[74px] w-[74px] items-center justify-center border border-[#101b32]/20 bg-white"
+        className="flex items-center justify-center bg-white"
+        style={{
+          width: size,
+          height: size,
+        }}
         aria-label="Generating verification QR code"
       >
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#101b32]/15 border-t-[#101b32]" />
+        <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#101b32]/15 border-t-[#101b32]" />
       </div>
     )
   }
@@ -1296,14 +1195,22 @@ function RealQrCode({
       target="_blank"
       rel="noreferrer"
       title="Open certificate verification"
-      className="block h-[74px] w-[74px] bg-white p-1 transition hover:opacity-90"
+      className="block shrink-0 bg-white p-[3px] transition hover:opacity-90"
+      style={{
+        width: size,
+        height: size,
+      }}
     >
       <img
         src={qrDataUrl}
         alt="Scan to verify this ShadowNode certificate"
-        width={66}
-        height={66}
-        className="block h-[66px] w-[66px]"
+        width={size - 6}
+        height={size - 6}
+        className="block"
+        style={{
+          width: size - 6,
+          height: size - 6,
+        }}
       />
     </a>
   )
@@ -1317,32 +1224,217 @@ function RealQrCode({
 
 function CertificateSeal() {
   return (
-    <div className="relative flex h-[96px] w-[96px] items-center justify-center rounded-full border-[3px] border-[#c69b35] bg-[#dfbd5d]/20 shadow-md">
-      <div className="absolute inset-[7px] rounded-full border border-[#c69b35]" />
+    <div className="relative flex h-[110px] w-[110px] items-center justify-center">
+      <svg
+        width="110"
+        height="110"
+        viewBox="0 0 110 110"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="drop-shadow-md"
+      >
+        <defs>
+          <linearGradient
+            id="goldGrad"
+            x1="0%"
+            y1="0%"
+            x2="100%"
+            y2="100%"
+          >
+            <stop
+              offset="0%"
+              stopColor="#f0d36d"
+            />
 
-      <div className="absolute inset-[13px] rounded-full border border-[#c69b35]/70" />
+            <stop
+              offset="40%"
+              stopColor="#d6aa43"
+            />
 
-      <div className="flex h-[48px] w-[48px] items-center justify-center rounded-full border border-[#c69b35] bg-[#d6aa43]/10 font-serif text-xl font-bold text-[#8b6615]">
-        SN
-      </div>
+            <stop
+              offset="100%"
+              stopColor="#b8860b"
+            />
+          </linearGradient>
 
-      <div className="pointer-events-none absolute inset-0">
-        <span className="absolute left-1/2 top-[5px] -translate-x-1/2 whitespace-nowrap text-[6px] font-bold uppercase tracking-[0.12em] text-[#8b6615]">
-          SHADOWNODE
-        </span>
+          <linearGradient
+            id="goldGradLight"
+            x1="0%"
+            y1="0%"
+            x2="0%"
+            y2="100%"
+          >
+            <stop
+              offset="0%"
+              stopColor="#f8e7a0"
+            />
 
-        <span className="absolute bottom-[7px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[5px] font-bold uppercase tracking-[0.08em] text-[#8b6615]">
-          CYBER INTELLIGENCE SOLUTIONS
-        </span>
+            <stop
+              offset="100%"
+              stopColor="#c99b31"
+            />
+          </linearGradient>
 
-        <span className="absolute left-[8px] top-1/2 -translate-y-1/2 text-[7px] text-[#8b6615]">
+          <path
+            id="topArc"
+            d="M 22,55 A 33,33 0 0,1 88,55"
+            fill="none"
+          />
+
+          <path
+            id="bottomArc"
+            d="M 88,55 A 33,33 0 0,1 22,55"
+            fill="none"
+          />
+        </defs>
+
+        {/* Outer gold disc */}
+        <circle
+          cx="55"
+          cy="55"
+          r="52"
+          fill="url(#goldGrad)"
+        />
+
+        {/* Scalloped edge */}
+        {Array.from({ length: 24 }).map(
+          (_, i) => {
+            const angle =
+              (i * 15 * Math.PI) / 180
+
+            const x =
+              55 + Math.cos(angle) * 49
+
+            const y =
+              55 + Math.sin(angle) * 49
+
+            return (
+              <circle
+                key={i}
+                cx={x}
+                cy={y}
+                r="4.2"
+                fill="url(#goldGradLight)"
+              />
+            )
+          },
+        )}
+
+        {/* Inner cream */}
+        <circle
+          cx="55"
+          cy="55"
+          r="42"
+          fill="#f7f1e4"
+        />
+
+        {/* Gold rings */}
+        <circle
+          cx="55"
+          cy="55"
+          r="39.5"
+          fill="none"
+          stroke="url(#goldGrad)"
+          strokeWidth="2.5"
+        />
+
+        <circle
+          cx="55"
+          cy="55"
+          r="34"
+          fill="none"
+          stroke="#c99b31"
+          strokeWidth="1.2"
+          opacity="0.7"
+        />
+
+        {/* Curved text */}
+        <text
+          fill="#8b6615"
+          fontSize="6.2"
+          fontWeight="700"
+          fontFamily="system-ui, -apple-system, sans-serif"
+          letterSpacing="1.8"
+        >
+          <textPath
+            href="#topArc"
+            startOffset="50%"
+            textAnchor="middle"
+          >
+            SHADOWNODE
+          </textPath>
+        </text>
+
+        <text
+          fill="#8b6615"
+          fontSize="4.8"
+          fontWeight="700"
+          fontFamily="system-ui, -apple-system, sans-serif"
+          letterSpacing="0.6"
+        >
+          <textPath
+            href="#bottomArc"
+            startOffset="50%"
+            textAnchor="middle"
+          >
+            CYBER INTELLIGENCE SOLUTIONS
+          </textPath>
+        </text>
+
+        {/* Side stars */}
+        <text
+          x="18"
+          y="58"
+          fill="#8b6615"
+          fontSize="9"
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
           ★
-        </span>
+        </text>
 
-        <span className="absolute right-[8px] top-1/2 -translate-y-1/2 text-[7px] text-[#8b6615]">
+        <text
+          x="92"
+          y="58"
+          fill="#8b6615"
+          fontSize="9"
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
           ★
-        </span>
-      </div>
+        </text>
+
+        {/* Central SN */}
+        <circle
+          cx="55"
+          cy="55"
+          r="18"
+          fill="#d6aa43"
+          fillOpacity="0.15"
+          stroke="#c99b31"
+          strokeWidth="1.5"
+        />
+
+        <path
+          d="M55 42 L66 46 V55 C66 61 61 66 55 69 C49 66 44 61 44 55 V46 L55 42Z"
+          fill="#101B32"
+          stroke="#c99b31"
+          strokeWidth="1"
+        />
+
+        <text
+          x="55"
+          y="58"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="#E1B84F"
+          fontSize="13"
+          fontWeight="700"
+          fontFamily="Georgia, 'Times New Roman', serif"
+        >
+          SN
+        </text>
+      </svg>
     </div>
   )
 }
@@ -1396,32 +1488,6 @@ function CertificateDetail({
       </p>
 
       <p className="mx-auto mt-1 max-w-[170px] break-words text-[8px] font-semibold text-[#10203b] sm:text-[9px]">
-        {value}
-      </p>
-    </div>
-  )
-}
-
-/*
- * ============================================================
- * META CARD
- * ============================================================
- */
-
-function MetaCard({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-xl border border-[#143b28] bg-[#04100b]/60 p-4">
-      <p className="text-[9px] uppercase tracking-[0.16em] text-white/30">
-        {label}
-      </p>
-
-      <p className="mt-2 text-sm font-medium text-white">
         {value}
       </p>
     </div>
@@ -1490,10 +1556,7 @@ function LockedState({
 
           <div className="mt-4 flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-white/20">
             <span>Locked</span>
-
-            <span>
-              100% Required
-            </span>
+            <span>100% Required</span>
           </div>
         </div>
       </div>
@@ -1510,8 +1573,8 @@ function LockedState({
 function ShieldLogo() {
   return (
     <svg
-      width="42"
-      height="48"
+      width="40"
+      height="46"
       viewBox="0 0 42 48"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -1520,7 +1583,7 @@ function ShieldLogo() {
       <path
         d="M21 2L38 8V20.5C38 31.2 31.1 40.3 21 46C10.9 40.3 4 31.2 4 20.5V8L21 2Z"
         fill="#D6AA43"
-        fillOpacity="0.16"
+        fillOpacity="0.18"
         stroke="#C99B31"
         strokeWidth="2"
       />
@@ -1532,10 +1595,10 @@ function ShieldLogo() {
 
       <text
         x="21"
-        y="27"
+        y="26.5"
         textAnchor="middle"
         fill="#E1B84F"
-        fontSize="12"
+        fontSize="11.5"
         fontFamily="Georgia, serif"
         fontWeight="700"
       >
