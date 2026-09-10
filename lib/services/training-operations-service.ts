@@ -11,6 +11,11 @@ import {
   cancelTrainingSessionCalendarEvent,
 } from "@/lib/services/calendar-service"
 
+export {
+  syncTrainingSessionToGoogle,
+  cancelTrainingSessionCalendarEvent,
+}
+
 type AppUser = {
   id: string
   role: string

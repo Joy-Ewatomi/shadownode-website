@@ -58,11 +58,6 @@ export const TRAINING_FORMATS = [
 ]
 
 export const TRAINING_DURATION_OPTIONS = [
-  "2 Hours",
-  "Half Day",
-  "Full Day",
-  "2 Days",
-  "1 Week",
   "custom",
 ]
 

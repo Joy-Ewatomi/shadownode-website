@@ -2,8 +2,10 @@
 
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react"
+
 import QRCode from "qrcode"
 
 type CertificateData = {
@@ -37,7 +39,20 @@ type TrainingCertificateProps = {
 
   trainingTitle?: string | null
   trainerName?: string | null
+
+  /*
+   * Training timeline
+   */
+  startDate?: string | null
   completionDate?: string | null
+
+  /*
+   * Optional legacy duration value.
+   *
+   * It is retained for compatibility with existing callers,
+   * but the certificate duration is now calculated from
+   * startDate -> completionDate whenever both are available.
+   */
   duration?: string | null
 
   feedbackRating?: number | null
@@ -45,30 +60,241 @@ type TrainingCertificateProps = {
   certificateRecipientName?: string | null
 }
 
-function formatDate(value?: string | null) {
+function parseDateOnly(
+  value?: string | null,
+): Date | null {
+  if (!value) {
+    return null
+  }
+
+  const parts =
+    String(value)
+      .slice(0, 10)
+      .split("-")
+      .map(Number)
+
+  if (
+    parts.length !== 3 ||
+    parts.some(
+      (part) => !Number.isFinite(part),
+    )
+  ) {
+    return null
+  }
+
+  const [
+    year,
+    month,
+    day,
+  ] = parts
+
+  const date = new Date(
+    year,
+    month - 1,
+    day,
+  )
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null
+  }
+
+  return date
+}
+
+function formatDate(
+  value?: string | null,
+) {
   if (!value) {
     return "—"
   }
 
-  const date = new Date(value)
+  const date =
+    parseDateOnly(value)
 
-  if (Number.isNaN(date.getTime())) {
-    return value
+  if (!date) {
+    const fallback = new Date(value)
+
+    if (
+      Number.isNaN(
+        fallback.getTime(),
+      )
+    ) {
+      return value
+    }
+
+    return fallback.toLocaleDateString(
+      "en-US",
+      {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      },
+    )
   }
 
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
+  return date.toLocaleDateString(
+    "en-US",
+    {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    },
+  )
 }
 
-function clampProgress(value: number) {
-  return Math.min(100, Math.max(0, Math.round(value)))
+function calculateTrainingDuration(
+  startDate?: string | null,
+  completionDate?: string | null,
+) {
+  const start =
+    parseDateOnly(startDate)
+
+  const completion =
+    parseDateOnly(
+      completionDate,
+    )
+
+  if (
+    !start ||
+    !completion
+  ) {
+    return null
+  }
+
+  const milliseconds =
+    completion.getTime() -
+    start.getTime()
+
+  const days = Math.round(
+    milliseconds /
+      (1000 * 60 * 60 * 24),
+  )
+
+  if (days < 0) {
+    return null
+  }
+
+  if (days === 0) {
+    return {
+      days: 0,
+      weeks: 0,
+      months: 0,
+      label: "1 Day",
+    }
+  }
+
+  /*
+   * Prefer calendar-month wording when the range
+   * represents an exact number of months.
+   */
+  let calendarMonths =
+    (completion.getFullYear() -
+      start.getFullYear()) *
+      12 +
+    (completion.getMonth() -
+      start.getMonth())
+
+  const sameOrLaterDay =
+    completion.getDate() >=
+    start.getDate()
+
+  if (!sameOrLaterDay) {
+    calendarMonths -= 1
+  }
+
+  if (
+    calendarMonths > 0 &&
+    completion.getDate() ===
+      start.getDate()
+  ) {
+    return {
+      days,
+      weeks: Math.round(
+        days / 7,
+      ),
+      months: calendarMonths,
+      label: `${calendarMonths} Month${
+        calendarMonths === 1
+          ? ""
+          : "s"
+      }`,
+    }
+  }
+
+  if (days >= 60) {
+    const months =
+      Math.round(
+        days / 30,
+      )
+
+    return {
+      days,
+      weeks: Math.round(
+        days / 7,
+      ),
+      months,
+      label: `Approximately ${months} Month${
+        months === 1
+          ? ""
+          : "s"
+      }`,
+    }
+  }
+
+  if (days >= 14) {
+    const weeks =
+      Math.round(
+        days / 7,
+      )
+
+    return {
+      days,
+      weeks,
+      months: 0,
+      label: `${weeks} Week${
+        weeks === 1
+          ? ""
+          : "s"
+      }`,
+    }
+  }
+
+  return {
+    days,
+    weeks: 0,
+    months: 0,
+    label: `${days} Day${
+      days === 1 ? "" : "s"
+    }`,
+  }
 }
 
-function clampRating(value: number) {
-  return Math.min(5, Math.max(0, Math.round(value)))
+function clampProgress(
+  value: number,
+) {
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(value),
+    ),
+  )
+}
+
+function clampRating(
+  value: number,
+) {
+  return Math.min(
+    5,
+    Math.max(
+      0,
+      Math.round(value),
+    ),
+  )
 }
 
 export default function TrainingCertificate({
@@ -81,6 +307,7 @@ export default function TrainingCertificate({
   feedbackSubmitted = false,
   trainingTitle = null,
   trainerName = null,
+  startDate = null,
   completionDate = null,
   duration = null,
   feedbackRating = null,
@@ -88,27 +315,40 @@ export default function TrainingCertificate({
   certificateRecipientName = null,
 }: TrainingCertificateProps) {
   const [cert, setCert] =
-    useState<CertificateData | null>(certificate)
+    useState<CertificateData | null>(
+      certificate,
+    )
 
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] =
+    useState(false)
 
-  const [feedback, setFeedback] = useState<FeedbackData | null>(
-    feedbackRating ||
-      feedbackComments ||
-      certificateRecipientName
-      ? {
-          rating: clampRating(feedbackRating || 0),
-          comments: feedbackComments || null,
-          certificate_recipient_name:
-            certificateRecipientName || null,
-        }
-      : null,
-  )
+  const [feedback, setFeedback] =
+    useState<FeedbackData | null>(
+      feedbackRating ||
+        feedbackComments ||
+        certificateRecipientName
+        ? {
+            rating:
+              clampRating(
+                feedbackRating || 0,
+              ),
+
+            comments:
+              feedbackComments ||
+              null,
+
+            certificate_recipient_name:
+              certificateRecipientName ||
+              null,
+          }
+        : null,
+    )
 
   const [feedbackLoading, setFeedbackLoading] =
     useState(false)
 
-  const safeProgress = clampProgress(progress)
+  const safeProgress =
+    clampProgress(progress)
 
   const isTrainingComplete =
     safeProgress >= 100 ||
@@ -139,19 +379,21 @@ export default function TrainingCertificate({
       setFeedbackLoading(true)
 
       try {
-        const response = await fetch(
-          `/api/training/${engagementId}/feedback`,
-          {
-            method: "GET",
-            cache: "no-store",
-          },
-        )
+        const response =
+          await fetch(
+            `/api/training/${engagementId}/feedback`,
+            {
+              method: "GET",
+              cache: "no-store",
+            },
+          )
 
         if (!response.ok) {
           return
         }
 
-        const payload = await response.json()
+        const payload =
+          await response.json()
 
         if (cancelled) {
           return
@@ -165,30 +407,39 @@ export default function TrainingCertificate({
 
         if (
           rawFeedback &&
-          !Array.isArray(rawFeedback) &&
-          typeof rawFeedback === "object"
+          !Array.isArray(
+            rawFeedback,
+          ) &&
+          typeof rawFeedback ===
+            "object"
         ) {
-          const ratingValue = Number(
-            rawFeedback.rating ??
-              rawFeedback.rating_value ??
-              0,
-          )
+          const ratingValue =
+            Number(
+              rawFeedback.rating ??
+                rawFeedback.rating_value ??
+                0,
+            )
 
           setFeedback({
             rating: clampRating(
-              Number.isFinite(ratingValue)
+              Number.isFinite(
+                ratingValue,
+              )
                 ? ratingValue
                 : 0,
             ),
+
             comments:
               rawFeedback.feedback ??
               rawFeedback.comments ??
               rawFeedback.comment ??
               null,
+
             certificate_recipient_name:
               rawFeedback.certificate_recipient_name ??
               rawFeedback.certificate_name ??
               null,
+
             submitted_at:
               rawFeedback.submitted_at ??
               rawFeedback.created_at ??
@@ -198,34 +449,45 @@ export default function TrainingCertificate({
           return
         }
 
-        if (Array.isArray(rawFeedback)) {
-          const first = rawFeedback[0]
+        if (
+          Array.isArray(
+            rawFeedback,
+          )
+        ) {
+          const first =
+            rawFeedback[0]
 
           if (!first) {
             return
           }
 
-          const ratingValue = Number(
-            first.rating ??
-              first.rating_value ??
-              0,
-          )
+          const ratingValue =
+            Number(
+              first.rating ??
+                first.rating_value ??
+                0,
+            )
 
           setFeedback({
             rating: clampRating(
-              Number.isFinite(ratingValue)
+              Number.isFinite(
+                ratingValue,
+              )
                 ? ratingValue
                 : 0,
             ),
+
             comments:
               first.feedback ??
               first.comments ??
               first.comment ??
               null,
+
             certificate_recipient_name:
               first.certificate_recipient_name ??
               first.certificate_name ??
               null,
+
             submitted_at:
               first.submitted_at ??
               first.created_at ??
@@ -262,9 +524,10 @@ export default function TrainingCertificate({
       return
     }
 
-    const confirmed = window.confirm(
-      "Issue this Certificate of Completion?",
-    )
+    const confirmed =
+      window.confirm(
+        "Issue this Certificate of Completion?",
+      )
 
     if (!confirmed) {
       return
@@ -273,14 +536,16 @@ export default function TrainingCertificate({
     setLoading(true)
 
     try {
-      const response = await fetch(
-        `/api/training/${engagementId}/certificate`,
-        {
-          method: "POST",
-        },
-      )
+      const response =
+        await fetch(
+          `/api/training/${engagementId}/certificate`,
+          {
+            method: "POST",
+          },
+        )
 
-      const payload = await response.json()
+      const payload =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -290,37 +555,46 @@ export default function TrainingCertificate({
       }
 
       setCert({
-        id: payload.certificate_id,
+        id:
+          payload.certificate_id,
+
         certificate_number:
           payload.certificate_number,
+
         recipient_name:
           payload.recipient_name ||
-          feedback?.certificate_recipient_name ||
+          feedback
+            ?.certificate_recipient_name ||
           null,
+
         training_title:
           payload.training_title ||
           trainingTitle ||
           "Cybersecurity Awareness Training",
-        training_type:
-          payload.training_type || null,
 
-        /*
-         * Public certificate designation.
-         * Do not expose internal role labels such as
-         * "analyst" on the certificate.
-         */
+        training_type:
+          payload.training_type ||
+          null,
+
         trainer_name:
           "ShadowNode Training Facilitator",
 
+        /*
+         * The certificate completion date should
+         * come from the engagement timeline.
+         */
         completion_date:
           payload.completion_date ||
           completionDate ||
           null,
+
         issued_at:
           payload.issued_at ||
           new Date().toISOString(),
+
         verification_url:
-          payload.verification_url || null,
+          payload.verification_url ||
+          null,
       })
 
       window.alert(
@@ -365,28 +639,70 @@ export default function TrainingCertificate({
     "Cybersecurity Awareness Training"
 
   /*
-   * Public-facing trainer designation.
-   * Never show internal role labels such as "analyst".
+   * Public trainer designation.
+   *
+   * Internal roles such as "analyst" must never appear
+   * on the public certificate.
    */
   const finalTrainerName =
     "ShadowNode Training Facilitator"
 
+  /*
+   * Certificate completion date:
+   *
+   * 1. Actual certificate record if already issued
+   * 2. Engagement timeline completion date
+   * 3. Legacy fallback
+   */
   const finalCompletionDate =
     cert?.completion_date ||
     completionDate ||
     null
 
+  /*
+   * Calculate certificate duration directly from
+   * the engagement timeline.
+   */
+  const calculatedDuration =
+    useMemo(
+      () =>
+        calculateTrainingDuration(
+          startDate,
+          finalCompletionDate,
+        ),
+      [
+        startDate,
+        finalCompletionDate,
+      ],
+    )
+
+  /*
+   * Only use the old duration prop if dates are
+   * unavailable. New certificates should normally
+   * use calculatedDuration.
+   */
+  const finalDuration =
+    calculatedDuration?.label ||
+    duration ||
+    "—"
+
   const finalRecipientName =
     cert?.recipient_name ||
-    feedback?.certificate_recipient_name ||
+    feedback
+      ?.certificate_recipient_name ||
+    certificateRecipientName ||
     "Certificate Recipient"
 
-  const finalRating = feedback?.rating
-    ? clampRating(feedback.rating)
-    : 0
+  const finalRating =
+    feedback?.rating
+      ? clampRating(
+          feedback.rating,
+        )
+      : 0
 
   const finalComments =
-    feedback?.comments?.trim() || ""
+    feedback?.comments?.trim() ||
+    ""
 
   /*
    * ============================================================
@@ -464,15 +780,6 @@ export default function TrainingCertificate({
       }
 
       body.printing-training-certificate
-        #training-certificate
-        .certificate-meta,
-      body.printing-training-certificate
-        #training-certificate
-        .certificate-footer-extra {
-        display: none !important;
-      }
-
-      body.printing-training-certificate
         #training-certificate * {
         break-inside: avoid !important;
       }
@@ -493,7 +800,9 @@ export default function TrainingCertificate({
         </style>
 
         <div className="space-y-6">
+
           {/* SCREEN HEADER */}
+
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between print:hidden">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a227]">
@@ -512,7 +821,9 @@ export default function TrainingCertificate({
 
             <button
               type="button"
-              onClick={printCertificate}
+              onClick={
+                printCertificate
+              }
               className="rounded-lg border border-[#c9a227]/40 bg-[#c9a227]/10 px-4 py-2 text-sm font-medium text-[#e8cf72] transition hover:bg-[#c9a227]/20"
             >
               Print / Save PDF
@@ -522,28 +833,33 @@ export default function TrainingCertificate({
           {/* ==================================================
               CERTIFICATE
              ================================================== */}
-
-        <div
+<div
   id="training-certificate"
   className="mx-auto w-full max-w-[1400px] bg-[#f7f1e4] text-[#10203b] shadow-2xl print:max-w-none print:shadow-none print:overflow-hidden"
 >
-  <div className="certificate-page relative w-full overflow-hidden bg-[#f7f1e4] aspect-[297/210] print:aspect-auto">
+  {/* On screen → allow full height. On print → force A4 landscape */}
+  <div className="certificate-page relative w-full bg-[#f7f1e4] aspect-[297/210] print:aspect-auto print:h-[210mm] print:overflow-hidden">
+
               {/* Base */}
+
               <div className="absolute inset-0 bg-[#f7f1e4]" />
 
               {/* Subtle radial */}
+
               <div className="pointer-events-none absolute inset-0 opacity-[0.03]">
                 <div className="absolute left-1/2 top-1/2 h-[80%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#10203b]" />
               </div>
 
               {/* Watermark */}
+
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="font-serif text-[14rem] font-bold tracking-[0.08em] text-[#10203b]/[0.022]">
                   SN
                 </div>
               </div>
 
-              {/* ========== TOP-LEFT CORNER ========== */}
+              {/* TOP-LEFT */}
+
               <div
                 className="absolute left-0 top-0 h-[42%] w-[26%] bg-[#07162f]"
                 style={{
@@ -576,7 +892,8 @@ export default function TrainingCertificate({
                 }}
               />
 
-              {/* ========== BOTTOM-RIGHT CORNER ========== */}
+              {/* BOTTOM-RIGHT */}
+
               <div
                 className="absolute bottom-0 right-0 h-[43%] w-[27%] bg-[#07162f]"
                 style={{
@@ -609,14 +926,18 @@ export default function TrainingCertificate({
                 }}
               />
 
-              {/* Gold frames */}
+              {/* Frames */}
+
               <div className="absolute inset-[3.4%] border-[2.5px] border-[#c79b31]" />
 
               <div className="absolute inset-[5.5%] border border-[#d5ae52]/75" />
 
               {/* CONTENT */}
+
               <div className="certificate-content relative z-10 flex h-full flex-col px-[6.2%] py-[4.0%]">
+
                 {/* BRAND */}
+
                 <div className="flex items-start justify-center">
                   <div className="flex items-center gap-3.5">
                     <ShieldLogo />
@@ -633,13 +954,16 @@ export default function TrainingCertificate({
                   </div>
                 </div>
 
-                {/* EXCELLENCE RIBBON */}
+                {/* EXCELLENCE */}
+
                 <div className="absolute right-[5.2%] top-[0.8%] hidden h-[34%] w-[8.2%] sm:block">
                   <div className="relative h-full">
+
                     <div className="absolute inset-x-0 top-0 h-[76%] bg-[#0a1934] shadow-xl">
                       <div className="absolute inset-[6px] border border-[#d7af4d]/65" />
 
                       <div className="absolute left-1/2 top-[14%] flex h-[88px] w-[88px] -translate-x-1/2 flex-col items-center justify-center rounded-full border-[1.5px] border-[#ddb94f] bg-[#0a1934]">
+
                         <div className="text-[11px] leading-none text-[#f0d36d]">
                           ★ ★ ★
                         </div>
@@ -669,6 +993,7 @@ export default function TrainingCertificate({
                 </div>
 
                 {/* TITLE */}
+
                 <div className="mt-[2.6%] text-center">
                   <div className="font-serif text-[clamp(2.8rem,5.8vw,5.4rem)] font-medium uppercase leading-none tracking-[0.12em] text-[#10203b]">
                     Certificate
@@ -686,6 +1011,7 @@ export default function TrainingCertificate({
                 </div>
 
                 {/* RECIPIENT */}
+
                 <div className="mt-[2.2%] text-center">
                   <div className="flex items-center justify-center gap-4">
                     <div className="h-px w-16 bg-[#a97918] sm:w-24" />
@@ -705,6 +1031,7 @@ export default function TrainingCertificate({
                 </div>
 
                 {/* TRAINING */}
+
                 <div className="mt-[1.7%] text-center">
                   <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#3d4654] sm:text-[11px]">
                     Has successfully completed the
@@ -723,8 +1050,10 @@ export default function TrainingCertificate({
                 </div>
 
                 {/* DETAILS */}
+
                 <div className="mt-[1.6%] border-y border-[#c79b31]/60 py-[1.35%]">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+
                     <CertificateDetail
                       icon="calendar"
                       label="Completion Date"
@@ -736,38 +1065,49 @@ export default function TrainingCertificate({
                     <CertificateDetail
                       icon="clock"
                       label="Duration"
-                      value={duration || "20 Hours"}
+                      value={finalDuration}
                     />
 
                     <CertificateDetail
                       icon="certificate"
                       label="Certificate ID"
-                      value={cert.certificate_number}
+                      value={
+                        cert.certificate_number
+                      }
                     />
 
                     <CertificateDetail
                       icon="trainer"
                       label="Trainer"
-                      value={finalTrainerName}
+                      value={
+                        finalTrainerName
+                      }
                     />
 
                     <CertificateDetail
                       icon="issued"
                       label="Issued On"
-                      value={formatDate(cert.issued_at)}
+                      value={formatDate(
+                        cert.issued_at,
+                      )}
                     />
                   </div>
                 </div>
 
                 {/* LOWER SECTION */}
+
                 <div className="mt-[1.4%] grid grid-cols-1 gap-4 sm:grid-cols-[0.78fr_1.7fr_0.82fr] sm:items-start">
+
                   {/* SEAL */}
+
                   <div className="flex items-center justify-start">
                     <CertificateSeal />
                   </div>
 
                   {/* FEEDBACK */}
+
                   <div className="rounded-[14px] border border-[#c79b31] bg-[#fbf6eb]/95 px-4 py-3">
+
                     <div className="flex items-center justify-center gap-2">
                       <div className="h-px w-8 bg-[#c79b31]" />
 
@@ -779,21 +1119,30 @@ export default function TrainingCertificate({
                     </div>
 
                     <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-[0.85fr_1.35fr]">
+
                       <div className="text-center sm:border-r sm:border-[#c79b31]/40 sm:pr-3">
+
                         <p className="text-[7.5px] font-medium text-[#2b3544] sm:text-[8.5px]">
                           How would you rate this training?
                         </p>
 
                         <div className="mt-1.5 flex justify-center gap-0.5">
                           {Array.from(
-                            { length: 5 },
-                            (_, index) => {
+                            {
+                              length: 5,
+                            },
+                            (
+                              _,
+                              index,
+                            ) => {
                               const starNumber =
                                 index + 1
 
                               return (
                                 <span
-                                  key={starNumber}
+                                  key={
+                                    starNumber
+                                  }
                                   className={
                                     finalRating >=
                                     starNumber
@@ -814,14 +1163,17 @@ export default function TrainingCertificate({
                             ? `${finalRating}/5`
                             : "Submitted"}
                         </p>
+
                       </div>
 
                       <div className="min-w-0">
+
                         <p className="text-[7.5px] font-medium text-[#2b3544] sm:text-[8.5px]">
                           Your Feedback / Comments
                         </p>
 
                         <div className="mt-1">
+
                           <div className="border-b border-[#8c8065]/40" />
 
                           <div className="min-h-[38px] border-b border-[#8c8065]/40 py-1">
@@ -832,13 +1184,16 @@ export default function TrainingCertificate({
                           </div>
 
                           <div className="border-b border-[#8c8065]/40" />
+
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* SIGNATURE */}
+
                   <div className="pt-0.5 text-center">
+
                     <div className="font-serif text-[1.55rem] italic leading-none text-[#17243b] sm:text-[1.85rem]">
                       Joy Ewatomi
                     </div>
@@ -852,20 +1207,28 @@ export default function TrainingCertificate({
                     <p className="mt-0.5 text-[6.5px] uppercase tracking-[0.2em] text-[#a97918] sm:text-[7.5px]">
                       Founder &amp; CEO
                     </p>
+
                   </div>
                 </div>
 
                 {/* VERIFICATION */}
+
                 <div className="mt-auto pt-[0.8%]">
+
                   <div className="border-t border-[#c79b31]/45 pt-2">
+
                     <div className="flex items-center justify-between gap-3">
+
                       {/* LEFT */}
+
                       <div className="flex min-w-0 items-center gap-2">
+
                         <div className="flex h-5 w-5 shrink-0 items-center justify-center">
                           <ShieldCheckIcon />
                         </div>
 
                         <div className="min-w-0">
+
                           <p className="text-[6.5px] font-semibold uppercase tracking-[0.16em] text-[#17243b]">
                             Verification
                           </p>
@@ -874,17 +1237,23 @@ export default function TrainingCertificate({
                             Verify this certificate at:
                           </p>
 
-                         <p className="mt-0.5 break-all text-[7px] font-bold text-[#192840]">
-  {cert.verification_url}
-</p>
+                          <p className="mt-0.5 break-all text-[7px] font-bold text-[#192840]">
+                            {cert.verification_url ||
+                              "Verification URL unavailable"}
+                          </p>
+
                         </div>
                       </div>
 
                       {/* QR */}
+
                       <div className="shrink-0">
+
                         {cert.verification_url ? (
                           <RealQrCode
-                            value={cert.verification_url}
+                            value={
+                              cert.verification_url
+                            }
                             size={58}
                           />
                         ) : (
@@ -894,10 +1263,13 @@ export default function TrainingCertificate({
                             unavailable
                           </div>
                         )}
+
                       </div>
+
                     </div>
                   </div>
                 </div>
+
               </div>
             </div>
           </div>
@@ -912,7 +1284,10 @@ export default function TrainingCertificate({
    * ============================================================
    */
 
-  if (isTrainingComplete && !hasFeedback) {
+  if (
+    isTrainingComplete &&
+    !hasFeedback
+  ) {
     return (
       <LockedState
         eyebrow="Certificate Locked"
@@ -930,12 +1305,19 @@ export default function TrainingCertificate({
    * ============================================================
    */
 
-  if (isTrainingComplete && hasFeedback) {
+  if (
+    isTrainingComplete &&
+    hasFeedback
+  ) {
     return (
       <div className="space-y-6">
+
         <div className="rounded-2xl border border-[#20dc73]/20 bg-[#04100b]/70 p-6 sm:p-8">
+
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+
             <div>
+
               <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#20dc73]/70">
                 Certificate Unlocked
               </p>
@@ -949,9 +1331,11 @@ export default function TrainingCertificate({
                 completion and the required participant
                 feedback has been submitted.
               </p>
+
             </div>
 
             <div className="shrink-0 rounded-xl border border-[#20dc73]/20 bg-[#20dc73]/10 px-5 py-4 text-center">
+
               <div className="font-mono text-3xl font-semibold text-[#20dc73]">
                 100%
               </div>
@@ -959,17 +1343,21 @@ export default function TrainingCertificate({
               <div className="mt-1 text-[9px] uppercase tracking-[0.16em] text-[#20dc73]/60">
                 Training Complete
               </div>
+
             </div>
           </div>
         </div>
 
         <div className="rounded-xl border border-[#c9a227]/30 bg-[#c9a227]/[0.04] p-5">
+
           <div className="flex items-start gap-4">
+
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#c9a227]/30 bg-[#c9a227]/10 text-[#e0ba53]">
               ✓
             </div>
 
             <div>
+
               <p className="text-sm font-semibold text-[#e0ba53]">
                 Participant feedback received
               </p>
@@ -979,26 +1367,37 @@ export default function TrainingCertificate({
                 engagement has been satisfied.
               </p>
 
-              {feedback?.certificate_recipient_name ? (
+              {feedback?.certificate_recipient_name && (
                 <p className="mt-3 text-xs text-white/55">
                   Certificate name:{" "}
                   <span className="font-semibold text-white">
-                    {feedback.certificate_recipient_name}
+                    {
+                      feedback.certificate_recipient_name
+                    }
                   </span>
                 </p>
-              ) : null}
+              )}
 
               {feedback?.rating ? (
                 <div className="mt-3 flex items-center gap-3">
+
                   <div className="flex gap-0.5 text-[#d5a63b]">
                     {Array.from(
-                      { length: 5 },
-                      (_, index) => (
+                      {
+                        length: 5,
+                      },
+                      (
+                        _,
+                        index,
+                      ) => (
                         <span
-                          key={index}
+                          key={
+                            index
+                          }
                           className="text-lg leading-none"
                         >
-                          {feedback.rating > index
+                          {feedback.rating >
+                          index
                             ? "★"
                             : "☆"}
                         </span>
@@ -1009,6 +1408,7 @@ export default function TrainingCertificate({
                   <span className="font-mono text-xs text-[#d5a63b]">
                     {feedback.rating}/5
                   </span>
+
                 </div>
               ) : null}
 
@@ -1017,12 +1417,14 @@ export default function TrainingCertificate({
                   “{feedback.comments}”
                 </p>
               ) : null}
+
             </div>
           </div>
         </div>
 
         {canIssueCertificate ? (
           <div className="rounded-xl border border-[#143b28] bg-[#04100b]/70 p-6">
+
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/25">
               Certificate Registry
             </p>
@@ -1039,17 +1441,23 @@ export default function TrainingCertificate({
 
             <button
               type="button"
-              onClick={issueCertificate}
-              disabled={loading}
+              onClick={
+                issueCertificate
+              }
+              disabled={
+                loading
+              }
               className="mt-5 inline-flex items-center rounded-lg bg-[#20dc73] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#35e47f] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading
                 ? "Issuing Certificate..."
                 : "Issue Certificate"}
             </button>
+
           </div>
         ) : (
           <div className="rounded-xl border border-[#143b28] bg-[#04100b]/70 p-6">
+
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/25">
               Certificate Registry
             </p>
@@ -1063,8 +1471,10 @@ export default function TrainingCertificate({
               have both been recorded. Certificate issuance
               is handled by an authorized training operator.
             </p>
+
           </div>
         )}
+
       </div>
     )
   }
@@ -1077,6 +1487,7 @@ export default function TrainingCertificate({
 
   return (
     <div className="space-y-5">
+
       <LockedState
         eyebrow="Certificate Locked"
         title="Training In Progress"
@@ -1091,6 +1502,7 @@ export default function TrainingCertificate({
           training completion and participant feedback.
         </div>
       )}
+
     </div>
   )
 }
@@ -1111,7 +1523,8 @@ function RealQrCode({
   const [qrDataUrl, setQrDataUrl] =
     useState<string | null>(null)
 
-  const [error, setError] = useState(false)
+  const [error, setError] =
+    useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -1125,18 +1538,25 @@ function RealQrCode({
       try {
         setError(false)
 
-        const dataUrl = await QRCode.toDataURL(value, {
-          errorCorrectionLevel: "H",
-          margin: 1,
-          width: 300,
-          color: {
-            dark: "#101b32",
-            light: "#ffffff",
-          },
-        })
+        const dataUrl =
+          await QRCode.toDataURL(
+            value,
+            {
+              errorCorrectionLevel:
+                "H",
+              margin: 1,
+              width: 300,
+              color: {
+                dark: "#101b32",
+                light: "#ffffff",
+              },
+            },
+          )
 
         if (!cancelled) {
-          setQrDataUrl(dataUrl)
+          setQrDataUrl(
+            dataUrl,
+          )
         }
       } catch (error) {
         console.error(
@@ -1234,6 +1654,7 @@ function CertificateSeal() {
         className="drop-shadow-md"
       >
         <defs>
+
           <linearGradient
             id="goldGrad"
             x1="0%"
@@ -1286,9 +1707,11 @@ function CertificateSeal() {
             d="M 88,55 A 33,33 0 0,1 22,55"
             fill="none"
           />
+
         </defs>
 
         {/* Outer gold disc */}
+
         <circle
           cx="55"
           cy="55"
@@ -1297,16 +1720,24 @@ function CertificateSeal() {
         />
 
         {/* Scalloped edge */}
-        {Array.from({ length: 24 }).map(
+
+        {Array.from(
+          { length: 24 },
+        ).map(
           (_, i) => {
             const angle =
-              (i * 15 * Math.PI) / 180
+              (i * 15 * Math.PI) /
+              180
 
             const x =
-              55 + Math.cos(angle) * 49
+              55 +
+              Math.cos(angle) *
+                49
 
             const y =
-              55 + Math.sin(angle) * 49
+              55 +
+              Math.sin(angle) *
+                49
 
             return (
               <circle
@@ -1321,6 +1752,7 @@ function CertificateSeal() {
         )}
 
         {/* Inner cream */}
+
         <circle
           cx="55"
           cy="55"
@@ -1329,6 +1761,7 @@ function CertificateSeal() {
         />
 
         {/* Gold rings */}
+
         <circle
           cx="55"
           cy="55"
@@ -1348,7 +1781,8 @@ function CertificateSeal() {
           opacity="0.7"
         />
 
-        {/* Curved text */}
+        {/* Top curved text */}
+
         <text
           fill="#8b6615"
           fontSize="6.2"
@@ -1364,6 +1798,8 @@ function CertificateSeal() {
             SHADOWNODE
           </textPath>
         </text>
+
+        {/* Bottom curved text */}
 
         <text
           fill="#8b6615"
@@ -1381,7 +1817,8 @@ function CertificateSeal() {
           </textPath>
         </text>
 
-        {/* Side stars */}
+        {/* Stars */}
+
         <text
           x="18"
           y="58"
@@ -1405,6 +1842,7 @@ function CertificateSeal() {
         </text>
 
         {/* Central SN */}
+
         <circle
           cx="55"
           cy="55"
@@ -1434,6 +1872,7 @@ function CertificateSeal() {
         >
           SN
         </text>
+
       </svg>
     </div>
   )
@@ -1456,31 +1895,40 @@ function CertificateDetail({
     | "certificate"
     | "trainer"
     | "issued"
+
   label: string
   value: string
 }) {
   return (
     <div className="px-2 text-center">
+
       <div className="mx-auto mb-1.5 flex h-7 items-center justify-center text-[#b17d16]">
-        {icon === "calendar" && (
+
+        {icon ===
+          "calendar" && (
           <CalendarIcon />
         )}
 
-        {icon === "clock" && (
+        {icon ===
+          "clock" && (
           <ClockIcon />
         )}
 
-        {icon === "certificate" && (
+        {icon ===
+          "certificate" && (
           <CertificateIcon />
         )}
 
-        {icon === "trainer" && (
+        {icon ===
+          "trainer" && (
           <UserIcon />
         )}
 
-        {icon === "issued" && (
+        {icon ===
+          "issued" && (
           <IssuedIcon />
         )}
+
       </div>
 
       <p className="text-[7px] font-semibold uppercase tracking-[0.13em] text-[#777b84] sm:text-[8px]">
@@ -1490,6 +1938,7 @@ function CertificateDetail({
       <p className="mx-auto mt-1 max-w-[170px] break-words text-[8px] font-semibold text-[#10203b] sm:text-[9px]">
         {value}
       </p>
+
     </div>
   )
 }
@@ -1515,8 +1964,11 @@ function LockedState({
 }) {
   return (
     <div className="rounded-2xl border border-[#143b28] bg-[#04100b]/60 p-6 sm:p-8">
+
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+
         <div className="max-w-2xl">
+
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a227]/70">
             {eyebrow}
           </p>
@@ -1532,10 +1984,13 @@ function LockedState({
           <p className="mt-4 text-xs text-white/30">
             {detail}
           </p>
+
         </div>
 
         <div className="w-full max-w-xs">
+
           <div className="flex items-end justify-between">
+
             <span className="text-[10px] uppercase tracking-[0.15em] text-white/30">
               Training Progress
             </span>
@@ -1543,6 +1998,7 @@ function LockedState({
             <span className="font-mono text-xl text-[#20dc73]">
               {progress}%
             </span>
+
           </div>
 
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
@@ -1558,7 +2014,9 @@ function LockedState({
             <span>Locked</span>
             <span>100% Required</span>
           </div>
+
         </div>
+
       </div>
     </div>
   )

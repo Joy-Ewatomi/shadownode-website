@@ -87,6 +87,15 @@ export default async function CertificatePage({
    * ============================================================
    * LOAD ENGAGEMENT
    * ============================================================
+   *
+   * preferred_start_date and preferred_completion_date are the
+   * client-selected training timeline values carried from the
+   * original training request into the engagement.
+   *
+   * They are used by the certificate to calculate the training
+   * duration and to provide the authoritative completion date
+   * for certificate issuance.
+   * ============================================================
    */
 
   const engRes = await query(
@@ -97,7 +106,9 @@ export default async function CertificatePage({
         status,
         progress,
         training_goal,
-        client_profile_id
+        client_profile_id,
+        preferred_start_date,
+        preferred_completion_date
       FROM training_engagements
       WHERE id = $1
       LIMIT 1
@@ -144,6 +155,16 @@ export default async function CertificatePage({
     client_profile_id:
       toNullableString(
         rawEngagement.client_profile_id,
+      ),
+
+    preferred_start_date:
+      toNullableString(
+        rawEngagement.preferred_start_date,
+      ),
+
+    preferred_completion_date:
+      toNullableString(
+        rawEngagement.preferred_completion_date,
       ),
   }
 
@@ -339,90 +360,138 @@ export default async function CertificatePage({
    * ============================================================
    */
 
-return (
-  <TrainingShell
-    user={user}
-    engagementId={id}
-    engagementNumber={engagement.engagement_number}
-    title="Certificate"
-    status={engagement.status}
-  >
-    {/* Scrollable wrapper – works on every screen size */}
-    <div className="certificate-scroll-wrapper">
-      <div className="certificate-page-container">
-        <TrainingCertificate
-          certificate={certificate}
-          engagementId={id}
-          userRole={user.role}
-          canIssueCertificate={canIssueCertificate}
-          progress={engagement.progress}
-          trainingStatus={engagement.status}
-          feedbackSubmitted={feedbackSubmitted}
-          trainingTitle={engagement.training_goal}
-          trainerName={
-            certificate?.trainer_name || "ShadowNode Training Facilitator"
-          }
-          completionDate={certificate?.completion_date || null}
-          feedbackRating={feedbackRating}
-          feedbackComments={feedbackComments}
-          certificateRecipientName={certificateRecipientName}
-        />
+  return (
+    <TrainingShell
+      user={user}
+      engagementId={id}
+      engagementNumber={
+        engagement.engagement_number
+      }
+      title="Certificate"
+      status={engagement.status}
+    >
+     <div className="w-full overflow-auto rounded-xl" style={{ maxHeight: "calc(100vh - 170px)" }}>
+  <div className="min-w-[1100px] p-2">
+   <TrainingCertificate
+            certificate={certificate}
+            engagementId={id}
+            userRole={user.role}
+            canIssueCertificate={
+              canIssueCertificate
+            }
+            progress={
+              engagement.progress
+            }
+            trainingStatus={
+              engagement.status
+            }
+            feedbackSubmitted={
+              feedbackSubmitted
+            }
+            trainingTitle={
+              engagement.training_goal
+            }
+
+            /*
+             * Certificate trainer designation is fixed.
+             * Do not expose an internal analyst/investigator
+             * name as the public certificate trainer.
+             */
+            trainerName="ShadowNode Training Facilitator"
+
+            /*
+             * Existing issued certificate takes precedence
+             * for the displayed stored completion date.
+             */
+            completionDate={
+              certificate?.completion_date ||
+              engagement.preferred_completion_date ||
+              null
+            }
+
+            /*
+             * Client-selected training dates.
+             * TrainingCertificate uses these to calculate the
+             * displayed duration.
+             */
+            startDate={
+              engagement.preferred_start_date
+            }
+
+            feedbackRating={
+              feedbackRating
+            }
+
+            feedbackComments={
+              feedbackComments
+            }
+
+            certificateRecipientName={
+              certificateRecipientName
+            }
+          />
+        </div>
       </div>
-    </div>
 
-    <style>{`
-      /* ========== SCREEN VIEW ========== */
-      .certificate-scroll-wrapper {
-        width: 100%;
-        max-height: calc(100vh - 180px);   /* adjust if your header is taller/shorter */
-        overflow: auto;                    /* scroll left/right + up/down */
-        border-radius: 12px;
-        background: #0a0f0d;
-        padding: 1.5rem;
-      }
+      <style>{`
+        /* ======================================================
+           SCREEN VIEW
+           ====================================================== */
 
-      .certificate-page-container {
-        min-width: 1100px;                 /* keeps the certificate from shrinking too much */
-        width: 100%;
-        display: flex;
-        justify-content: center;
-      }
-
-      .certificate-page-container #training-certificate {
-        width: 100%;
-        max-width: 1400px;
-      }
-
-      /* ========== PRINT / PDF ========== */
-      @media print {
         .certificate-scroll-wrapper {
-          max-height: none !important;
-          overflow: visible !important;
-          padding: 0 !important;
-          background: transparent !important;
-          border-radius: 0 !important;
+          width: 100%;
+          max-height: calc(100vh - 180px);
+          overflow: auto;
+          border-radius: 12px;
+          background: #0a0f0d;
+          padding: 1.5rem;
         }
 
         .certificate-page-container {
-          min-width: 0 !important;
-          width: 297mm !important;
-          height: 210mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
+          min-width: 1100px;
+          width: 100%;
+          display: flex;
+          justify-content: center;
         }
 
-        .certificate-page-container #training-certificate,
-        .certificate-page-container .certificate-page {
-          width: 297mm !important;
-          height: 210mm !important;
-          max-width: none !important;
-          max-height: 210mm !important;
-          min-height: 0 !important;
-          aspect-ratio: auto !important;
-          overflow: hidden !important;
+        .certificate-page-container #training-certificate {
+          width: 100%;
+          max-width: 1400px;
         }
-      }
-    `}</style>
-  </TrainingShell>
-)
+
+        /* ======================================================
+           PRINT / PDF
+           ====================================================== */
+
+        @media print {
+          .certificate-scroll-wrapper {
+            max-height: none !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+          }
+
+          .certificate-page-container {
+            min-width: 0 !important;
+            width: 297mm !important;
+            height: 210mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          .certificate-page-container #training-certificate,
+          .certificate-page-container .certificate-page {
+            width: 297mm !important;
+            height: 210mm !important;
+            max-width: none !important;
+            max-height: 210mm !important;
+            min-height: 0 !important;
+            aspect-ratio: auto !important;
+            overflow: hidden !important;
+          }
+        }
+      `}</style>
+    </TrainingShell>
+  )
 }

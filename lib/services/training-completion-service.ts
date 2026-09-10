@@ -17,17 +17,29 @@ type TrainingEngagementRow = {
   organization_id: string
   client_profile_id: string
   assigned_trainer: string | null
+
   pending_trainer_id: string | null
   trainer_approval_status: string | null
   trainer_approval_requested_by: string | null
   trainer_approval_approved_by: string | null
+
   progress: number | null
   status: string | null
+
   training_organization_name: string | null
   training_client_type: string | null
   skill_level: string | null
   training_goal: string | null
   training_topics: string | null
+
+  /*
+   * Client-selected training timeline.
+   *
+   * These are the authoritative dates for the planned
+   * training window and certificate completion date.
+   */
+  preferred_start_date: string | null
+  preferred_completion_date: string | null
 }
 
 type RequestRow = {
@@ -115,20 +127,30 @@ export async function completeTrainingEngagement(
             organization_id,
             client_profile_id,
             assigned_trainer,
+
             pending_trainer_id,
             trainer_approval_status,
             trainer_approval_requested_by,
             trainer_approval_approved_by,
+
             progress,
             status,
+
             training_organization_name,
             training_client_type,
             skill_level,
             training_goal,
-            training_topics
+            training_topics,
+
+            preferred_start_date,
+            preferred_completion_date
+
           FROM training_engagements
+
           WHERE id = $1
+
           FOR UPDATE
+
           LIMIT 1
         `,
         [engagementId],
@@ -157,6 +179,7 @@ export async function completeTrainingEngagement(
      * Everyone else must be the currently approved
      * assigned trainer.
      */
+
     if (!isSuperAdmin) {
       if (
         !engagement.assigned_trainer ||
@@ -220,14 +243,19 @@ export async function completeTrainingEngagement(
     await query(
       `
         UPDATE training_engagements
+
         SET
           status = 'completed',
+
           progress = 100,
+
           completed_at = COALESCE(
             completed_at,
             NOW()
           ),
+
           updated_at = NOW()
+
         WHERE id = $1
       `,
       [engagement.id],
@@ -246,6 +274,7 @@ export async function completeTrainingEngagement(
           title,
           content
         )
+
         VALUES (
           $1,
           $2,
@@ -289,19 +318,28 @@ export async function completeTrainingEngagement(
  * REQUIREMENTS:
  *
  * 1. Training must be completed.
- * 2. Mandatory client feedback must exist.
- * 3. Client must provide a certificate recipient name.
- * 4. Only one certificate can exist for an engagement.
+ * 2. Training progress must be 100%.
+ * 3. Mandatory client feedback must exist.
+ * 4. Client must provide a certificate recipient name.
+ * 5. Training completion date must exist.
+ * 6. Only one certificate can exist for an engagement.
  *
- * The certificate recipient name comes from:
+ * Certificate recipient name:
  *
- * training_feedback.certificate_recipient_name
+ *   training_feedback.certificate_recipient_name
  *
- * It does NOT come from the user's username or account name.
+ * It does NOT come from the user's username/account name.
+ *
+ * Certificate completion date:
+ *
+ *   training_engagements.preferred_completion_date
+ *
+ * This is the client-selected completion date captured
+ * during the original training request.
  *
  * Public trainer designation:
  *
- * ShadowNode Training Facilitator
+ *   ShadowNode Training Facilitator
  *
  * Internal trainer identity remains in the database elsewhere
  * and is not exposed as "analyst", etc. on the public certificate.
@@ -334,20 +372,30 @@ export async function issueTrainingCertificate(
             organization_id,
             client_profile_id,
             assigned_trainer,
+
             pending_trainer_id,
             trainer_approval_status,
             trainer_approval_requested_by,
             trainer_approval_approved_by,
+
             progress,
             status,
+
             training_organization_name,
             training_client_type,
             skill_level,
             training_goal,
-            training_topics
+            training_topics,
+
+            preferred_start_date,
+            preferred_completion_date
+
           FROM training_engagements
+
           WHERE id = $1
+
           FOR UPDATE
+
           LIMIT 1
         `,
         [engagementId],
@@ -375,10 +423,13 @@ export async function issueTrainingCertificate(
       )
     }
 
+    const progress = Number(
+      engagement.progress ?? 0,
+    )
+
     if (
-      Number(
-        engagement.progress ?? 0,
-      ) < 100
+      !Number.isFinite(progress) ||
+      progress < 100
     ) {
       throw new Error(
         "Training progress must be 100% before a certificate can be issued",
@@ -386,7 +437,37 @@ export async function issueTrainingCertificate(
     }
 
     /* ========================================================
-       3. VERIFY FEEDBACK
+       3. VERIFY CERTIFICATE COMPLETION DATE
+       ======================================================== */
+
+    /*
+     * The certificate must reflect the completion date
+     * captured from the training timeline.
+     *
+     * Do NOT use:
+     *
+     *   CURRENT_DATE
+     *   completed_at
+     *   NOW()
+     *
+     * for the certificate completion date.
+     *
+     * completed_at remains the actual system timestamp
+     * at which ShadowNode marked the engagement completed.
+     */
+
+    const completionDate =
+      engagement.preferred_completion_date
+        ?.trim() || ""
+
+    if (!completionDate) {
+      throw new Error(
+        "Training completion date is not set for this engagement",
+      )
+    }
+
+    /* ========================================================
+       4. VERIFY FEEDBACK
        ======================================================== */
 
     const feedbackResult =
@@ -395,12 +476,16 @@ export async function issueTrainingCertificate(
           SELECT
             id,
             certificate_recipient_name
+
           FROM training_feedback
+
           WHERE training_engagement_id = $1
             AND client_profile_id = $2
+
           ORDER BY
             submitted_at DESC NULLS LAST,
             created_at DESC
+
           LIMIT 1
         `,
         [
@@ -419,7 +504,7 @@ export async function issueTrainingCertificate(
     }
 
     /* ========================================================
-       4. VERIFY CERTIFICATE NAME
+       5. VERIFY CERTIFICATE NAME
        ======================================================== */
 
     const certificateRecipientName =
@@ -442,7 +527,7 @@ export async function issueTrainingCertificate(
     }
 
     /* ========================================================
-       5. DUPLICATE PROTECTION
+       6. DUPLICATE PROTECTION
        ======================================================== */
 
     const existingCertificate =
@@ -451,8 +536,11 @@ export async function issueTrainingCertificate(
           SELECT
             id,
             certificate_number
+
           FROM training_certificates
+
           WHERE training_engagement_id = $1
+
           LIMIT 1
         `,
         [engagement.id],
@@ -474,7 +562,7 @@ export async function issueTrainingCertificate(
     }
 
     /* ========================================================
-       6. VERIFY CLIENT PROFILE
+       7. VERIFY CLIENT PROFILE
        ======================================================== */
 
     const clientProfileResult =
@@ -483,8 +571,11 @@ export async function issueTrainingCertificate(
           SELECT
             id,
             full_name
+
           FROM user_profiles
+
           WHERE id = $1
+
           LIMIT 1
         `,
         [
@@ -502,8 +593,6 @@ export async function issueTrainingCertificate(
     }
 
     /*
-     * NOTE:
-     *
      * clientProfile.full_name is deliberately NOT used
      * as the certificate recipient name.
      *
@@ -514,21 +603,19 @@ export async function issueTrainingCertificate(
       certificateRecipientName
 
     /* ========================================================
-       7. TRAINER
+       8. PUBLIC TRAINER DESIGNATION
        ======================================================== */
 
     /*
-     * Keep internal trainer identity out of the public
-     * certificate.
-     *
-     * The public certificate uses a professional
-     * ShadowNode designation.
+     * Internal trainer identity must not appear on the
+     * public Certificate of Completion.
      */
+
     const trainerName =
       "ShadowNode Training Facilitator"
 
     /* ========================================================
-       8. ORIGINAL REQUEST
+       9. ORIGINAL REQUEST
        ======================================================== */
 
     let trainingTitle =
@@ -548,8 +635,11 @@ export async function issueTrainingCertificate(
             SELECT
               title,
               service_type
+
             FROM requests
+
             WHERE id = $1
+
             LIMIT 1
           `,
           [
@@ -573,7 +663,7 @@ export async function issueTrainingCertificate(
     }
 
     /* ========================================================
-       9. CERTIFICATE NUMBER
+       10. CERTIFICATE NUMBER
        ======================================================== */
 
     const year =
@@ -583,7 +673,7 @@ export async function issueTrainingCertificate(
       `SOB-CERT-${year}-${Date.now()}`
 
     /* ========================================================
-       10. VERIFICATION IDENTITY
+       11. VERIFICATION IDENTITY
        ======================================================== */
 
     const verificationToken =
@@ -601,7 +691,7 @@ export async function issueTrainingCertificate(
         : null
 
     /* ========================================================
-       11. CREATE CERTIFICATE RECORD
+       12. CREATE CERTIFICATE RECORD
        ======================================================== */
 
     const certificateResult =
@@ -610,48 +700,80 @@ export async function issueTrainingCertificate(
           INSERT INTO training_certificates (
             training_engagement_id,
             client_profile_id,
+
             certificate_number,
             recipient_name,
+
             training_title,
             training_type,
             trainer_name,
+
             completion_date,
+
             issued_at,
+
             verification_token,
             verification_url,
+
             status,
+
             created_at,
             updated_at
           )
+
           VALUES (
             $1,
             $2,
+
             $3,
             $4,
+
             $5,
             $6,
             $7,
-            CURRENT_DATE,
-            NOW(),
+
             $8,
+
+            NOW(),
+
             $9,
+            $10,
+
             'issued',
+
             NOW(),
             NOW()
           )
+
           RETURNING
             id,
             certificate_number
         `,
         [
           engagement.id,
+
           engagement.client_profile_id,
+
           certificateNumber,
+
           recipientName,
+
           trainingTitle,
+
           trainingType,
+
           trainerName,
+
+          /*
+           * IMPORTANT:
+           *
+           * This now comes from the client-selected
+           * training completion date.
+           */
+          completionDate,
+
           verificationToken,
+
           verificationUrl,
         ],
       )
@@ -666,7 +788,7 @@ export async function issueTrainingCertificate(
     }
 
     /* ========================================================
-       12. ACTIVITY
+       13. ACTIVITY
        ======================================================== */
 
     await query(
@@ -678,6 +800,7 @@ export async function issueTrainingCertificate(
           title,
           content
         )
+
         VALUES (
           $1,
           $2,
@@ -694,7 +817,7 @@ export async function issueTrainingCertificate(
     )
 
     /* ========================================================
-       13. COMMIT
+       14. COMMIT
        ======================================================== */
 
     await query("COMMIT")

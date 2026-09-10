@@ -1,111 +1,101 @@
-import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server"
 
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-}
-
-async function resolveCaseId(caseId: string) {
-  if (!caseId) {
-    return null
-  }
-
-  if (isUuid(caseId)) {
-    return caseId
-  }
-
-  const result = await query<{ id: string }>(
-    `SELECT id FROM cases WHERE case_number = $1 OR id::text = $1 LIMIT 1`,
-    [caseId]
-  )
-
-  return result.rows[0]?.id ?? null
-}
+import { query } from "@/lib/db"
+import { requireInvestigationWorkspace } from "@/lib/investigation-workspace"
 
 export async function GET(
-req:Request,
-context:{
-params:Promise<{id:string}>
-}
-){
+  request: NextRequest,
+  context: {
+    params: Promise<{
+      id: string
+    }>
+  },
+) {
+  try {
+    const { id } = await context.params
 
-try {
+    const access =
+      await requireInvestigationWorkspace(
+        request,
+        id,
+      )
 
+    if (!access.ok) {
+      return NextResponse.json(
+        {
+          error: access.error,
+        },
+        {
+          status: access.status,
+        },
+      )
+    }
 
-const { id: caseId } = await context.params;
-const resolvedCaseId = await resolveCaseId(caseId);
+    const [entities, relationships] =
+      await Promise.all([
+        query(
+          `
+            SELECT
+              id,
+              case_id,
+              name,
+              entity_type,
+              description,
+              verification_status,
+              confidence_score,
+              created_at,
+              updated_at
 
-if (!resolvedCaseId) {
-  return NextResponse.json({ entities: [], relationships: [] }, { status: 200 });
-}
+            FROM investigation_entities
 
-const entities = await query(
-`
-SELECT
-id,
-name,
-entity_type,
-verification_status,
-confidence_score
+            WHERE case_id = $1
 
-FROM investigation_entities
+            ORDER BY created_at DESC
+          `,
+          [access.caseId],
+        ),
 
-WHERE case_id=$1
+        query(
+          `
+            SELECT
+              id,
+              case_id,
+              source_entity_id,
+              target_entity_id,
+              relationship_type,
+              description,
+              verification_status,
+              confidence_score,
+              created_at,
+              updated_at
 
-`,
-[resolvedCaseId]
-);
+            FROM entity_relationships
 
+            WHERE case_id = $1
 
+            ORDER BY created_at DESC
+          `,
+          [access.caseId],
+        ),
+      ])
 
-const relationships = await query(
+    return NextResponse.json({
+      entities: entities.rows,
+      relationships: relationships.rows,
+    })
+  } catch (error) {
+    console.error(
+      "CASE GRAPH GET ERROR:",
+      error,
+    )
 
-`
-SELECT
-
-id,
-source_entity_id,
-target_entity_id,
-relationship_type,
-confidence_score
-
-FROM entity_relationships
-
-WHERE case_id=$1
-
-`,
-[resolvedCaseId]
-
-);
-
-
-
-return NextResponse.json({
-
-entities:entities.rows,
-
-relationships:relationships.rows
-
-});
-
-
-
-}catch(error){
-
-console.error(error);
-
-
-return NextResponse.json(
-{
-error:"Failed loading graph"
-},
-{
-status:500
-}
-)
-
-
-}
-
-
+    return NextResponse.json(
+      {
+        error: "Failed loading graph",
+      },
+      {
+        status: 500,
+      },
+    )
+  }
 }

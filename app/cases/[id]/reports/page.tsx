@@ -1,38 +1,62 @@
-export default function ReportsPage(){
+import { notFound, redirect } from "next/navigation"
 
+import ReportBuilder from "@/components/reports/ReportBuilder"
+import { getCurrentUser } from "@/lib/auth"
+import {
+  canUseInvestigationWorkspace,
+  resolveCaseId,
+} from "@/lib/investigation-workspace"
 
-return (
+export default async function ReportsPage({
+  params,
+}: {
+  params: Promise<{
+    id: string
+  }>
+}) {
+  const user = await getCurrentUser()
 
-<div className="
-border
-border-[#143b28]
-bg-[#06100c]
-rounded-lg
-p-6
-">
+  if (!user) {
+    redirect("/login")
+  }
 
+  const { id } = await params
 
-<h1 className="
-text-xl
-text-[#20dc73]
-font-bold
-">
+  const caseId = await resolveCaseId(id)
 
-Case Reports
+  if (!caseId) {
+    notFound()
+  }
 
-</h1>
+  const canView =
+    await canUseInvestigationWorkspace(
+      user.id,
+      user.role,
+      caseId,
+    )
 
+  if (!canView) {
+    redirect("/403")
+  }
 
-<p className="text-white/50 mt-3">
+  return (
+    <main className="space-y-6">
+      <header className="border-b border-[#143b28] pb-6">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#20dc73]">
+          Case Operations
+        </p>
 
-Final intelligence reports
+        <h1 className="mt-3 text-3xl font-bold text-white">
+          Case Reports
+        </h1>
 
-</p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
+          Draft, review, approve, and publish intelligence reports
+          associated with this case.
+        </p>
+      </header>
 
-
-</div>
-
-
-)
-
+      <ReportBuilder caseId={caseId} />
+    </main>
+  )
 }
