@@ -50,21 +50,6 @@ function formatNotificationType(
   )
 }
 
-function formatRole(
-  value: string | null | undefined,
-) {
-  if (!value) return "Unknown"
-
-  return value
-    .split("_")
-    .map(
-      (part) =>
-        part.charAt(0).toUpperCase() +
-        part.slice(1),
-    )
-    .join(" ")
-}
-
 function getCaseNumber(
   notification: Notification,
 ) {
@@ -79,11 +64,12 @@ function getCaseNumber(
     notification.case_id,
   ]
 
-  const found = candidates.find(
-    (value) =>
-      typeof value === "string" &&
-      value.trim(),
-  )
+  const found =
+    candidates.find(
+      (value) =>
+        typeof value === "string" &&
+        value.trim(),
+    )
 
   return found
     ? String(found)
@@ -149,36 +135,10 @@ function isSuperAdminRole(
   role: string | null | undefined,
 ) {
   return (
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
-}
-
-function isOwnNotification(
-  notification: Notification,
-  user: User | null,
-) {
-  if (!user) return false
-
-  /*
-   * Normal users receive only their own
-   * notifications from /api/notifications.
-   */
-  if (!isSuperAdminRole(user.role)) {
-    return true
-  }
-
-  /*
-   * Super Administrator receives the
-   * bureau-wide notification stream.
-   */
-  if (!user.id) {
-    return false
-  }
-
-  return (
-    notification.recipient_id ===
-    user.id
+    role ===
+      "super_administrator" ||
+    role ===
+      "super-administrator"
   )
 }
 
@@ -189,20 +149,15 @@ export default function NotificationBell() {
   const [open, setOpen] =
     useState(false)
 
-  const [notifications, setNotifications] =
-    useState<Notification[]>([])
+  const [
+    notifications,
+    setNotifications,
+  ] = useState<Notification[]>([])
 
-  const [soundEnabled, setSoundEnabled] =
-    useState(false)
-
-  /*
-   * ---------------------------------------------------------
-   * REFS
-   * ---------------------------------------------------------
-   */
-
-  const userRef =
-    useRef<User | null>(null)
+  const [
+    soundEnabled,
+    setSoundEnabled,
+  ] = useState(false)
 
   const notificationsRef =
     useRef<Notification[]>([])
@@ -213,108 +168,29 @@ export default function NotificationBell() {
   const inFlightRef =
     useRef<AbortController | null>(null)
 
-  const hasLoadedNotificationsRef =
+  const hasLoadedRef =
     useRef(false)
 
   const mountedRef =
     useRef(true)
 
-  /*
-   * ---------------------------------------------------------
-   * CURRENT USER
-   * ---------------------------------------------------------
-   */
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadUser() {
-      try {
-        const controller =
-          new AbortController()
-
-        const timeout =
-          window.setTimeout(
-            () => controller.abort(),
-            10000,
-          )
-
-        const res = await fetch(
-          "/api/auth/me",
-          {
-            credentials: "include",
-            cache: "no-store",
-            signal: controller.signal,
-          },
-        )
-
-        window.clearTimeout(timeout)
-
-        if (!res.ok) {
-          return
-        }
-
-        const data =
-          await res.json()
-
-        if (
-          !cancelled &&
-          data?.user
-        ) {
-          userRef.current =
-            data.user
-
-          setUser(data.user)
-        }
-      } catch (error) {
-        if (
-          error instanceof DOMException &&
-          error.name === "AbortError"
-        ) {
-          return
-        }
-
-        console.error(
-          "NOTIFICATION USER LOAD ERROR:",
-          error,
-        )
-      }
-    }
-
-    void loadUser()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  /*
-   * ---------------------------------------------------------
-   * LOAD NOTIFICATIONS
-   * ---------------------------------------------------------
-   *
-   * Important performance behavior:
-   *
-   * 1. Only one request may run at a time.
-   * 2. Requests have a timeout.
-   * 3. The caller's latest user is read from userRef.
-   * 4. Initial load never plays a sound.
-   */
-
   const loadNotifications =
     useCallback(async () => {
       /*
-       * Do not allow overlapping requests.
+       * Never allow overlapping requests.
        */
-      if (inFlightRef.current) {
+      if (
+        inFlightRef.current
+      ) {
         return
       }
 
       /*
-       * Do not poll hidden browser tabs.
+       * Do not poll hidden tabs.
        */
       if (
-        typeof document !== "undefined" &&
+        typeof document !==
+          "undefined" &&
         document.visibilityState !==
           "visible"
       ) {
@@ -329,23 +205,27 @@ export default function NotificationBell() {
 
       const timeout =
         window.setTimeout(
-          () => controller.abort(),
+          () =>
+            controller.abort(),
           10000,
         )
 
       try {
-        const res = await fetch(
-          "/api/notifications",
-          {
-            credentials: "include",
-            cache: "no-store",
-            signal: controller.signal,
-          },
-        )
+        const res =
+          await fetch(
+            "/api/notifications?scope=bell",
+            {
+              credentials: "include",
+              cache: "no-store",
+              signal:
+                controller.signal,
+            },
+          )
 
         if (!res.ok) {
           if (
-            res.status !== 401
+            res.status !==
+            401
           ) {
             console.warn(
               "NOTIFICATION FETCH FAILED:",
@@ -359,52 +239,68 @@ export default function NotificationBell() {
         const payload =
           await res.json()
 
+        /*
+         * The bell endpoint returns:
+         *
+         * {
+         *   notifications: [],
+         *   user: { id, role }
+         * }
+         */
         const next: Notification[] =
-          Array.isArray(payload)
-            ? payload
-            : Array.isArray(
-                  payload?.notifications,
-                )
-              ? payload.notifications
-              : []
+          Array.isArray(
+            payload?.notifications,
+          )
+            ? payload.notifications
+            : []
+
+        const currentUser: User | null =
+          payload?.user &&
+          typeof payload.user ===
+            "object"
+            ? {
+                id:
+                  typeof payload.user
+                    .id ===
+                    "string"
+                    ? payload.user.id
+                    : undefined,
+                role:
+                  typeof payload.user
+                    .role ===
+                    "string"
+                    ? payload.user.role
+                    : "",
+              }
+            : null
 
         const previous =
           notificationsRef.current
 
-        const currentUser =
-          userRef.current
-
         const previousUnread =
           previous.filter(
             (item) =>
-              !item.read &&
-              isOwnNotification(
-                item,
-                currentUser,
-              ),
+              !item.read,
           ).length
 
         const nextUnread =
           next.filter(
             (item) =>
-              !item.read &&
-              isOwnNotification(
-                item,
-                currentUser,
-              ),
+              !item.read,
           ).length
 
-        /*
-         * Do not play sound on initial
-         * notification load.
-         */
-        const isInitialLoad =
-          !hasLoadedNotificationsRef.current
+        const initialLoad =
+          !hasLoadedRef.current
 
+        /*
+         * Sound only plays when a later refresh
+         * detects an increase in unread count.
+         */
         if (
-          !isInitialLoad &&
+          !initialLoad &&
           soundEnabledRef.current &&
-          nextUnread > previousUnread
+          nextUnread >
+            previousUnread
         ) {
           try {
             const audio =
@@ -418,23 +314,33 @@ export default function NotificationBell() {
                 () => undefined,
               )
           } catch {
-            // Notification sound is optional.
+            // Sound is optional.
           }
         }
 
         notificationsRef.current =
           next
 
-        hasLoadedNotificationsRef.current =
+        hasLoadedRef.current =
           true
 
-        if (mountedRef.current) {
-          setNotifications(next)
+        if (
+          mountedRef.current
+        ) {
+          setUser(
+            currentUser,
+          )
+
+          setNotifications(
+            next,
+          )
         }
       } catch (error) {
         if (
-          error instanceof DOMException &&
-          error.name === "AbortError"
+          error instanceof
+            DOMException &&
+          error.name ===
+            "AbortError"
         ) {
           return
         }
@@ -444,7 +350,9 @@ export default function NotificationBell() {
           error,
         )
       } finally {
-        window.clearTimeout(timeout)
+        window.clearTimeout(
+          timeout,
+        )
 
         if (
           inFlightRef.current ===
@@ -457,27 +365,15 @@ export default function NotificationBell() {
     }, [])
 
   /*
-   * ---------------------------------------------------------
-   * POLLING
-   * ---------------------------------------------------------
-   *
-   * Old:
-   *   every 5 seconds
-   *
-   * New:
-   *   every 30 seconds
-   *
-   * Plus immediate refresh when:
-   *   - tab becomes visible
-   *   - browser window receives focus
+   * Initial load + controlled polling.
    */
-
   useEffect(() => {
-    mountedRef.current = true
+    mountedRef.current =
+      true
 
     void loadNotifications()
 
-    const refreshIfVisible =
+    const refresh =
       () => {
         if (
           document.visibilityState ===
@@ -489,35 +385,36 @@ export default function NotificationBell() {
 
     const timer =
       window.setInterval(
-        () => {
-          refreshIfVisible()
-        },
+        refresh,
         30000,
       )
 
     document.addEventListener(
       "visibilitychange",
-      refreshIfVisible,
+      refresh,
     )
 
     window.addEventListener(
       "focus",
-      refreshIfVisible,
+      refresh,
     )
 
     return () => {
-      mountedRef.current = false
+      mountedRef.current =
+        false
 
-      window.clearInterval(timer)
+      window.clearInterval(
+        timer,
+      )
 
       document.removeEventListener(
         "visibilitychange",
-        refreshIfVisible,
+        refresh,
       )
 
       window.removeEventListener(
         "focus",
-        refreshIfVisible,
+        refresh,
       )
 
       if (
@@ -530,87 +427,57 @@ export default function NotificationBell() {
     }
   }, [loadNotifications])
 
-  /*
-   * ---------------------------------------------------------
-   * SUPER ADMIN
-   * ---------------------------------------------------------
-   */
-
-  const isSuperAdministrator =
-    isSuperAdminRole(
-      user?.role,
-    )
-
-  /*
-   * ---------------------------------------------------------
-   * UNREAD COUNT
-   * ---------------------------------------------------------
-   */
-
-  const unread = useMemo(() => {
-    return notifications.filter(
-      (item) =>
-        !item.read &&
-        isOwnNotification(
-          item,
-          user,
-        ),
-    ).length
-  }, [notifications, user])
-
-  /*
-   * ---------------------------------------------------------
-   * BELL NOTIFICATIONS
-   * ---------------------------------------------------------
-   */
+  const unread = useMemo(
+    () =>
+      notifications.filter(
+        (item) =>
+          !item.read,
+      ).length,
+    [notifications],
+  )
 
   const bellNotifications =
-    useMemo(() => {
-      return notifications
-        .filter(
-          (item) =>
-            !item.read &&
-            isOwnNotification(
-              item,
-              user,
-            ),
-        )
-        .sort(
-          (left, right) =>
-            new Date(
-              right.created_at,
-            ).getTime() -
-            new Date(
-              left.created_at,
-            ).getTime(),
-        )
-    }, [notifications, user])
-
-  /*
-   * ---------------------------------------------------------
-   * MARK READ
-   * ---------------------------------------------------------
-   */
+    useMemo(
+      () =>
+        notifications
+          .filter(
+            (item) =>
+              !item.read,
+          )
+          .sort(
+            (left, right) =>
+              new Date(
+                right.created_at,
+              ).getTime() -
+              new Date(
+                left.created_at,
+              ).getTime(),
+          ),
+      [notifications],
+    )
 
   async function markRead(
     id: string,
   ) {
     try {
-      const res = await fetch(
-        `/api/notifications/${encodeURIComponent(id)}`,
-        {
-          method: "PATCH",
-          credentials: "include",
-          headers: {
-            "Content-Type":
-              "application/json",
+      const res =
+        await fetch(
+          `/api/notifications/${encodeURIComponent(id)}`,
+          {
+            method: "PATCH",
+            credentials:
+              "include",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            cache:
+              "no-store",
+            body: JSON.stringify({
+              id,
+            }),
           },
-          cache: "no-store",
-          body: JSON.stringify({
-            id,
-          }),
-        },
-      )
+        )
 
       if (!res.ok) {
         console.error(
@@ -652,27 +519,19 @@ export default function NotificationBell() {
     }
   }
 
-  /*
-   * ---------------------------------------------------------
-   * DELETE
-   * ---------------------------------------------------------
-   */
-
   async function deleteNotification(
     id: string,
   ) {
-    if (isSuperAdministrator) {
-      return
-    }
-
     try {
-      const res = await fetch(
-        `/api/notifications/${encodeURIComponent(id)}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      )
+      const res =
+        await fetch(
+          `/api/notifications/${encodeURIComponent(id)}`,
+          {
+            method: "DELETE",
+            credentials:
+              "include",
+          },
+        )
 
       if (!res.ok) {
         return
@@ -699,12 +558,6 @@ export default function NotificationBell() {
       )
     }
   }
-
-  /*
-   * ---------------------------------------------------------
-   * TYPE STYLING
-   * ---------------------------------------------------------
-   */
 
   const typeClass: Record<
     string,
@@ -774,23 +627,14 @@ export default function NotificationBell() {
       "border-white/25 bg-white/10 text-white/75",
   }
 
-  /*
-   * ---------------------------------------------------------
-   * RENDER
-   * ---------------------------------------------------------
-   */
-
   return (
     <div className="relative">
-      {/* =====================================================
-          BELL
-      ===================================================== */}
-
       <button
         type="button"
         onClick={() =>
           setOpen(
-            (value) => !value,
+            (value) =>
+              !value,
           )
         }
         className="relative flex h-10 w-10 items-center justify-center rounded-md border border-[#143b28] bg-[#06110f] text-white/75 transition hover:border-[#20dc73]/50 hover:text-[#20dc73]"
@@ -808,14 +652,8 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* =====================================================
-          DROPDOWN
-      ===================================================== */}
-
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-[26rem] overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] shadow-2xl">
-          {/* HEADER */}
-
           <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
             <div>
               <p className="font-semibold text-white">
@@ -828,7 +666,9 @@ export default function NotificationBell() {
             </div>
 
             <div className="flex items-center gap-2">
-              {!isSuperAdministrator && (
+              {!isSuperAdminRole(
+                user?.role,
+              ) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -865,10 +705,6 @@ export default function NotificationBell() {
             </div>
           </div>
 
-          {/* =================================================
-              NOTIFICATION LIST
-          ================================================= */}
-
           <div className="max-h-[28rem] overflow-y-auto">
             {bellNotifications.length >
             0 ? (
@@ -890,13 +726,6 @@ export default function NotificationBell() {
                   const notificationHref =
                     `${baseDestination}${separator}notificationId=${encodeURIComponent(item.id)}`
 
-                  const recipientLabel =
-                    item.recipient_name ||
-                    item.recipient_email ||
-                    formatRole(
-                      item.recipient_role,
-                    )
-
                   const category =
                     getCategoryFilter(
                       item.type,
@@ -907,169 +736,88 @@ export default function NotificationBell() {
                       key={item.id}
                       className="border-b border-[#143b28] px-4 py-4 transition hover:bg-white/5"
                     >
-                      {isSuperAdministrator &&
-                      !isOwnNotification(
-                        item,
-                        user,
-                      ) ? (
-                        <div className="block cursor-default">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-white">
-                                {item.title}
-                              </p>
+                      <Link
+                        href={
+                          notificationHref
+                        }
+                        onClick={async (
+                          event,
+                        ) => {
+                          event.preventDefault()
 
-                              <p className="mt-1 text-[11px] text-white/55">
-                                {item.message ||
-                                  "No message provided."}
-                              </p>
+                          setOpen(
+                            false,
+                          )
 
-                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
-                                <span>
-                                  Type:{" "}
-                                  {formatNotificationType(
-                                    item.type,
-                                  )}
-                                </span>
+                          const success =
+                            await markRead(
+                              item.id,
+                            )
 
-                                <span>
-                                  Category:{" "}
-                                  {category}
-                                </span>
-
-                                <span>
-                                  Case:{" "}
-                                  {getCaseNumber(
-                                    item,
-                                  )}
-                                </span>
-                              </div>
-
-                              <p className="mt-1 text-[10px] text-white/30">
-                                Recipient:{" "}
-                                {
-                                  recipientLabel
-                                }
-                              </p>
-
-                              <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
-                                {new Date(
-                                  item.created_at,
-                                ).toLocaleString()}
-                              </p>
-
-                              <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/25">
-                                Bureau record •
-                                Not assigned
-                                to you
-                              </p>
-                            </div>
-
-                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/20" />
-                          </div>
-
-                          <span
-                            className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
-                              typeClass[
-                                item.type
-                              ] ||
-                              typeClass.system
-                            }`}
-                          >
-                            {formatNotificationType(
-                              item.type,
-                            )}
-                          </span>
-                        </div>
-                      ) : (
-                        <Link
-                          href={
-                            notificationHref
+                          if (
+                            success
+                          ) {
+                            window.location.href =
+                              notificationHref
                           }
-                          onClick={async (
-                            event,
-                          ) => {
-                            event.preventDefault()
+                        }}
+                        className="block"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white">
+                              {item.title}
+                            </p>
 
-                            setOpen(false)
+                            <p className="mt-1 text-[11px] leading-5 text-white/55">
+                              {item.message ||
+                                "No message provided."}
+                            </p>
 
-                            const success =
-                              await markRead(
-                                item.id,
-                              )
+                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
+                              <span>
+                                Type:{" "}
+                                {formatNotificationType(
+                                  item.type,
+                                )}
+                              </span>
 
-                            if (success) {
-                              window.location.href =
-                                notificationHref
-                            }
-                          }}
-                          className="block"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-white">
-                                {item.title}
-                              </p>
+                              <span>
+                                Category:{" "}
+                                {category}
+                              </span>
 
-                              <p className="mt-1 text-[11px] leading-5 text-white/55">
-                                {item.message ||
-                                  "No message provided."}
-                              </p>
-
-                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/35">
-                                <span>
-                                  Type:{" "}
-                                  {formatNotificationType(
-                                    item.type,
-                                  )}
-                                </span>
-
-                                <span>
-                                  Category:{" "}
-                                  {category}
-                                </span>
-
-                                <span>
-                                  Case:{" "}
-                                  {getCaseNumber(
-                                    item,
-                                  )}
-                                </span>
-                              </div>
-
-                              {isSuperAdministrator && (
-                                <p className="mt-1 text-[10px] text-white/30">
-                                  Recipient:{" "}
-                                  {
-                                    recipientLabel
-                                  }
-                                </p>
-                              )}
-
-                              <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
-                                {new Date(
-                                  item.created_at,
-                                ).toLocaleString()}
-                              </p>
+                              <span>
+                                Case:{" "}
+                                {getCaseNumber(
+                                  item,
+                                )}
+                              </span>
                             </div>
 
-                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#20dc73]" />
+                            <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
+                              {new Date(
+                                item.created_at,
+                              ).toLocaleString()}
+                            </p>
                           </div>
 
-                          <span
-                            className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
-                              typeClass[
-                                item.type
-                              ] ||
-                              typeClass.system
-                            }`}
-                          >
-                            {formatNotificationType(
-                              item.type,
-                            )}
-                          </span>
-                        </Link>
-                      )}
+                          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#20dc73]" />
+                        </div>
+
+                        <span
+                          className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${
+                            typeClass[
+                              item.type
+                            ] ||
+                            typeClass.system
+                          }`}
+                        >
+                          {formatNotificationType(
+                            item.type,
+                          )}
+                        </span>
+                      </Link>
                     </div>
                   )
                 },
@@ -1088,10 +836,6 @@ export default function NotificationBell() {
               </div>
             )}
           </div>
-
-          {/* =================================================
-              VIEW ALL
-          ================================================= */}
 
           <div className="border-t border-[#143b28] px-4 py-3">
             <Link

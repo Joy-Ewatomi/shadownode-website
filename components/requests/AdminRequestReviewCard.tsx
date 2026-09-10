@@ -378,6 +378,13 @@ export default function AdminRequestReviewCard({
     isProfessionalTraining ||
     isCyberSecurity
 
+  const objectiveLabel =
+    hasTrainingDates
+      ? "Training Objective"
+      : isSecurityAssessment
+        ? "Assessment Objective"
+        : "Investigation Objective"
+
   /*
    * ========================================================
    * STATUS
@@ -858,7 +865,9 @@ export default function AdminRequestReviewCard({
         !form.completion_date
       ) {
         throw new Error(
-          "An estimated completion date is required.",
+          hasTrainingDates
+            ? "A training completion date is required."
+            : "An estimated completion date is required.",
         )
       }
 
@@ -868,7 +877,9 @@ export default function AdminRequestReviewCard({
         )
       ) {
         throw new Error(
-          "Estimated completion must be a valid date.",
+          hasTrainingDates
+            ? "Training completion date must be a valid date."
+            : "Estimated completion must be a valid date.",
         )
       }
 
@@ -1211,7 +1222,7 @@ export default function AdminRequestReviewCard({
           <div className="min-w-0 md:col-span-2">
 
             <p className="text-xs uppercase tracking-wider text-white/40">
-              Investigation Objective
+              {objectiveLabel}
             </p>
 
             <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-white/80">
@@ -1451,7 +1462,9 @@ export default function AdminRequestReviewCard({
             <div className="min-w-0">
 
               <p className="text-xs uppercase tracking-wider text-white/40">
-                Estimated Completion
+                {hasTrainingDates
+                  ? "Training Completion Date"
+                  : "Estimated Completion"}
               </p>
 
               <p className="mt-1 break-words text-sm text-white">
@@ -1887,10 +1900,10 @@ export default function AdminRequestReviewCard({
                     "Cybersecurity training completion date."}
 
                   {isSecurityAssessment &&
-                    "Security assessment completion date."}
+                    "Security assessment estimated completion date."}
 
                   {isInvestigation &&
-                    "Investigation completion date."}
+                    "Investigation estimated completion date."}
 
                 </p>
 

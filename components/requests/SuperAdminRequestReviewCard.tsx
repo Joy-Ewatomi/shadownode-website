@@ -291,6 +291,45 @@ function isAIQuote(
   )
 }
 
+
+function getRequestWorkflow(request: RequestData) {
+  const serviceType = String(request.service_type || "").trim().toLowerCase()
+
+  const isTraining =
+    serviceType === "cybersecurity_training" ||
+    serviceType.includes("cybersecurity training") ||
+    serviceType.includes("training")
+
+  const isSecurityAssessment =
+    serviceType === "security_assessment" ||
+    serviceType.includes("security assessment") ||
+    serviceType.includes("assessment")
+
+  return {
+    isTraining,
+    isSecurityAssessment,
+    requestLabel: isTraining
+      ? "Training Request"
+      : isSecurityAssessment
+        ? "Security Assessment Request"
+        : "Investigation Request",
+    objectiveLabel: isTraining
+      ? "Training Objective"
+      : isSecurityAssessment
+        ? "Assessment Objective"
+        : "Investigation Objective",
+    completionLabel: isTraining
+      ? "Training Completion Date"
+      : "Estimated Completion",
+    completionInputLabel: isTraining
+      ? "Training Completion Date"
+      : "Estimated Completion Date",
+    assessmentLabel: isTraining
+      ? "Training Assessment"
+      : "Intelligence Assessment",
+  }
+}
+
 export default function SuperAdminRequestReviewCard({
   request,
   aiQuote,
@@ -307,6 +346,15 @@ export default function SuperAdminRequestReviewCard({
   negotiationHistory?: NegotiationHistory[]
 }) {
   const router = useRouter()
+  const {
+    isTraining,
+    isSecurityAssessment,
+    requestLabel,
+    objectiveLabel,
+    completionLabel,
+    completionInputLabel,
+    assessmentLabel,
+  } = getRequestWorkflow(request)
   const searchParams = useSearchParams()
 
   /*
@@ -1049,7 +1097,9 @@ export default function SuperAdminRequestReviewCard({
         !form.estimated_completion
       ) {
         throw new Error(
-          "Estimated completion date is required.",
+          isTraining
+            ? "A training completion date is required."
+            : "An estimated completion date is required.",
         )
       }
 
@@ -1320,7 +1370,7 @@ export default function SuperAdminRequestReviewCard({
         <div className="border-b border-[#143b28] px-5 py-5 md:px-6">
 
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#20dc73]">
-            Request Information
+            {requestLabel}
           </p>
 
           <h3 className="mt-2 text-xl font-semibold text-white">
@@ -1387,7 +1437,7 @@ export default function SuperAdminRequestReviewCard({
           <div className="min-w-0 border-b border-[#143b28] p-5 md:col-span-2 md:px-6">
 
             <p className="text-[10px] uppercase tracking-wider text-white/30">
-              Investigation Objective
+              {objectiveLabel}
             </p>
 
             <div className="mt-3 rounded-xl border border-white/5 bg-black/25 p-4">
@@ -1435,7 +1485,7 @@ export default function SuperAdminRequestReviewCard({
             <div>
 
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#20dc73]">
-                Intelligence Assessment
+                {assessmentLabel}
               </p>
 
               <h3 className="mt-2 text-xl font-semibold text-white">
@@ -1673,7 +1723,7 @@ export default function SuperAdminRequestReviewCard({
           <div className="min-w-0 md:col-span-3">
 
             <p className="text-[10px] uppercase tracking-wider text-white/30">
-              Estimated Completion
+              {completionLabel}
             </p>
 
             <p className="mt-2 text-sm text-white">
@@ -2006,7 +2056,7 @@ export default function SuperAdminRequestReviewCard({
 
                       {quote.estimated_completion && (
                         <span>
-                          Completion:{" "}
+                          {completionLabel}:{" "}
                           {formatDate(
                             quote.estimated_completion,
                           )}
@@ -2795,7 +2845,7 @@ export default function SuperAdminRequestReviewCard({
                     <div className="mt-5">
 
                       <p className="text-[10px] uppercase tracking-wider text-white/30">
-                        Estimated Completion
+                        {completionInputLabel}
                       </p>
 
                       <p className="mt-2 text-sm text-white/70">
@@ -3415,7 +3465,7 @@ export default function SuperAdminRequestReviewCard({
                   <label className="min-w-0 text-sm text-white/60 md:col-span-2">
 
                     <span className="mb-2 block text-[10px] uppercase tracking-wider text-white/30">
-                      Estimated Completion
+                      {completionInputLabel}
                     </span>
 
                     <input
@@ -3797,7 +3847,7 @@ export default function SuperAdminRequestReviewCard({
                     <div className="mt-5">
 
                       <p className="text-[10px] uppercase tracking-wider text-white/30">
-                        Estimated Completion
+                        {completionLabel}
                       </p>
 
                       <p className="mt-2 text-sm text-white/70">

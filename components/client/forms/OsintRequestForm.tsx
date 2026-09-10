@@ -1,26 +1,39 @@
 "use client"
 
 import {
+  AlertTriangle,
+  ArrowRight,
   Building2,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
+  FileCheck2,
   FileText,
   Globe,
   Loader2,
+  MessageCircle,
   Plus,
+  ShieldCheck,
+  Sparkles,
+  Target,
   Trash2,
   Upload,
   User,
   X,
 } from "lucide-react"
-import { useCallback, useState } from "react"
+import {
+  useCallback,
+  useState,
+} from "react"
 
 import CommunicationSection from "./cybersecurity-training/sections/CommunicationSection"
 
-
-/* ──────────── Service Definitions ──────────── */
+/* ============================================================
+   SERVICE DEFINITIONS
+============================================================ */
 
 const OSINT_SERVICES = [
   "Digital Identity Analysis",
@@ -35,23 +48,67 @@ const OSINT_SERVICES = [
 ]
 
 const INVESTIGATION_DEPTHS = [
-  { value: "basic", label: "Basic Review", desc: "High-level overview and initial assessment" },
-  { value: "standard", label: "Standard Investigation", desc: "Thorough investigation following standard procedures" },
-  { value: "deep", label: "Deep Investigation", desc: "In-depth analysis with expanded resource allocation" },
-  { value: "comprehensive", label: "Comprehensive Intelligence Report", desc: "Full-scale intelligence operation with detailed reporting" },
+  {
+    value: "basic",
+    label: "Basic Review",
+    desc: "High-level overview and initial assessment",
+  },
+  {
+    value: "standard",
+    label: "Standard Investigation",
+    desc: "Thorough investigation following standard procedures",
+  },
+  {
+    value: "deep",
+    label: "Deep Investigation",
+    desc: "In-depth analysis with expanded resource allocation",
+  },
+  {
+    value: "comprehensive",
+    label: "Comprehensive Intelligence Report",
+    desc: "Full-scale intelligence operation with detailed reporting",
+  },
 ]
 
 const PRIORITY_LEVELS = [
-  { value: "low", label: "Low", desc: "No time pressure – standard processing" },
-  { value: "normal", label: "Normal", desc: "Standard turnaround expected" },
-  { value: "high", label: "High", desc: "Expedited processing requested" },
-  { value: "critical", label: "Critical", desc: "Immediate attention required" },
+  {
+    value: "low",
+    label: "Low",
+    desc: "No time pressure – standard processing",
+  },
+  {
+    value: "normal",
+    label: "Normal",
+    desc: "Standard turnaround expected",
+  },
+  {
+    value: "high",
+    label: "High",
+    desc: "Expedited processing requested",
+  },
+  {
+    value: "critical",
+    label: "Critical",
+    desc: "Immediate attention required",
+  },
 ]
 
 const SUBJECT_TYPES = [
-  { value: "person", label: "Person", icon: User },
-  { value: "company", label: "Company", icon: Building2 },
-  { value: "digital_asset", label: "Digital Asset", icon: Globe },
+  {
+    value: "person",
+    label: "Person",
+    icon: User,
+  },
+  {
+    value: "company",
+    label: "Company",
+    icon: Building2,
+  },
+  {
+    value: "digital_asset",
+    label: "Digital Asset",
+    icon: Globe,
+  },
 ]
 
 const LINK_TYPES = [
@@ -75,64 +132,75 @@ const OBJECTIVE_EXAMPLES = [
   "Security training request",
 ]
 
-/* ──────────── Country → Currency Mapping ──────────── */
+/* ============================================================
+   COUNTRY → CURRENCY
+============================================================ */
 
 const COUNTRY_CURRENCY_MAP: Record<string, string> = {
-  "Nigeria": "NGN",
+  Nigeria: "NGN",
   "United States": "USD",
   "United Kingdom": "GBP",
-  "Canada": "CAD",
-  "India": "INR",
+  Canada: "CAD",
+  India: "INR",
   "South Africa": "ZAR",
-  "Ghana": "GHS",
-  "Kenya": "KES",
-  "Egypt": "EGP",
-  "Morocco": "MAD",
-  "Germany": "EUR",
-  "France": "EUR",
-  "Italy": "EUR",
-  "Spain": "EUR",
-  "Netherlands": "EUR",
-  "Australia": "AUD",
-  "Brazil": "BRL",
-  "Mexico": "MXN",
-  "Japan": "JPY",
-  "China": "CNY",
-  "UAE": "AED",
+  Ghana: "GHS",
+  Kenya: "KES",
+  Egypt: "EGP",
+  Morocco: "MAD",
+  Germany: "EUR",
+  France: "EUR",
+  Italy: "EUR",
+  Spain: "EUR",
+  Netherlands: "EUR",
+  Australia: "AUD",
+  Brazil: "BRL",
+  Mexico: "MXN",
+  Japan: "JPY",
+  China: "CNY",
+  UAE: "AED",
   "Saudi Arabia": "SAR",
-  "Singapore": "SGD",
-  "Switzerland": "CHF",
-  "Sweden": "SEK",
-  "Norway": "NOK",
-  "Poland": "PLN",
-  "Turkey": "TRY",
+  Singapore: "SGD",
+  Switzerland: "CHF",
+  Sweden: "SEK",
+  Norway: "NOK",
+  Poland: "PLN",
+  Turkey: "TRY",
 }
 
-function getCurrencyForCountry(country: string): string {
-  return COUNTRY_CURRENCY_MAP[country] || "USD"
+function getCurrencyForCountry(
+  country: string,
+): string {
+  return (
+    COUNTRY_CURRENCY_MAP[country] ||
+    "USD"
+  )
 }
 
-/* ──────────── Supporting Link ──────────── */
+/* ============================================================
+   TYPES
+============================================================ */
 
 type SupportingLink = {
   type: string
   url: string
 }
 
-/* ──────────── Form Data Type ──────────── */
+export type EvidenceFile = {
+  id: string
+  name: string
+  size: number
+  type: string
+  dataUrl?: string
+}
 
 export type InvestigationFormData = {
-   /* Request metadata */
   title: string
 
-  /* Step 1 — Service */
   category: string
   service_type: string
 
-  /* Step 2 — Objective */
   investigation_objective: string
 
-  /* Step 3 — Subject / Target (OSINT only) */
   subject_type: string
   subject_full_name: string
   subject_known_usernames: string
@@ -142,19 +210,16 @@ export type InvestigationFormData = {
   subject_organization: string
   subject_websites: string
 
-  /* Step 3 — Company fields */
   subject_company_name: string
   subject_company_website: string
   subject_company_country: string
   subject_company_industry: string
 
-  /* Step 3 — Digital Asset fields */
   subject_domain: string
   subject_url: string
   subject_ip_address: string
   subject_platform: string
 
-  /* Step 3 — Additional Identifying Info (OSINT, optional, expandable) */
   show_additional_info: boolean
   subject_approximate_age: string
   subject_height: string
@@ -174,22 +239,16 @@ export type InvestigationFormData = {
   subject_ip_addresses: string
   subject_vehicle_registration: string
 
-  /* Step 4 — Supporting Intelligence & Evidence */
   existing_information: string
   supporting_links: SupportingLink[]
   additional_notes: string
-  /* Evidence upload — we store file metadata (name, size, type) for future backend processing */
   evidence_files: EvidenceFile[]
 
-  /* Step 5 — Investigation Scope */
   investigation_depth: string
 
+  urgency: string
+  osint_completion_date: string
 
- /* Step 6 — Priority & OSINT Completion Date */
-urgency: string
-osint_completion_date: string
-
-  /* Step 7 — Communication & Country */
   communication_method: string
   communication_email: string
   communication_country_code: string
@@ -199,32 +258,24 @@ osint_completion_date: string
   client_country: string
   preferred_currency: string
   custom_country: string
-  custom_description:string
+  custom_description: string
 
-  /* Step 8 — Authorization */
   authorization_confirmed: boolean
 
-  /* Legacy */
   description: string
 }
 
-/* ──────────── Evidence File Type ──────────── */
-
-export type EvidenceFile = {
-  id: string
-  name: string
-  size: number
-  type: string
-  dataUrl?: string // For preview; not sent to API
-}
-
-/* ──────────── Empty Form ──────────── */
+/* ============================================================
+   EMPTY FORM
+============================================================ */
 
 function createEmptyForm(): InvestigationFormData {
   return {
     title: "",
+
     category: "osint",
     service_type: "",
+
     investigation_objective: "",
 
     subject_type: "person",
@@ -275,7 +326,7 @@ function createEmptyForm(): InvestigationFormData {
     investigation_depth: "standard",
 
     urgency: "normal",
-   osint_completion_date: "",
+    osint_completion_date: "",
 
     communication_method: "portal_notification",
     communication_email: "",
@@ -287,40 +338,109 @@ function createEmptyForm(): InvestigationFormData {
     client_country: "",
     preferred_currency: "",
     custom_country: "",
-
     custom_description: "",
+
     authorization_confirmed: false,
 
     description: "",
   }
 }
 
-/* ──────────── Step Definitions ──────────── */
+/* ============================================================
+   STEP DEFINITIONS
+============================================================ */
 
-const STEPS = [
-  { id: 1, label: "Service Selection" },
-  { id: 2, label: "Investigation Objective" },
-  { id: 3, label: "Subject / Target Information" },
-  { id: 4, label: "Supporting Intelligence & Evidence" },
-  { id: 5, label: "Investigation Scope" },
-  { id: 6, label: "Priority & Timeline" },
-  { id: 7, label: "Communication Preferences" },
-  { id: 8, label: "Review & Legal Authorization" },
+type StepDefinition = {
+  id: number
+  label: string
+  shortLabel: string
+  description: string
+  icon: typeof Sparkles
+}
+
+const STEPS: StepDefinition[] = [
+  {
+    id: 1,
+    label: "Service Selection",
+    shortLabel: "Service",
+    description:
+      "Choose the intelligence service required for your investigation.",
+    icon: Sparkles,
+  },
+  {
+    id: 2,
+    label: "Investigation Objective",
+    shortLabel: "Objective",
+    description:
+      "Tell us what you need the investigation to determine or establish.",
+    icon: Target,
+  },
+  {
+    id: 3,
+    label: "Subject / Target",
+    shortLabel: "Target",
+    description:
+      "Provide the identifying information available about the subject.",
+    icon: User,
+  },
+  {
+    id: 4,
+    label: "Supporting Intelligence",
+    shortLabel: "Evidence",
+    description:
+      "Provide existing intelligence, links, files, and useful context.",
+    icon: FileText,
+  },
+  {
+    id: 5,
+    label: "Investigation Scope",
+    shortLabel: "Scope",
+    description:
+      "Select the level of investigation and reporting required.",
+    icon: ShieldCheck,
+  },
+  {
+    id: 6,
+    label: "Priority & Timeline",
+    shortLabel: "Priority",
+    description:
+      "Tell us how urgently the investigation should be completed.",
+    icon: Calendar,
+  },
+  {
+    id: 7,
+    label: "Communication",
+    shortLabel: "Contact",
+    description:
+      "Choose how ShadowNode should communicate with you.",
+    icon: MessageCircle,
+  },
+  {
+    id: 8,
+    label: "Review & Authorization",
+    shortLabel: "Review",
+    description:
+      "Review your investigation brief and confirm lawful authorization.",
+    icon: FileCheck2,
+  },
 ]
 
-/* ──────────── Props ──────────── */
+/* ============================================================
+   PROPS
+============================================================ */
 
 type Props = {
-  onSubmit: (data: InvestigationFormData) => Promise<void>
+  onSubmit: (
+    data: InvestigationFormData,
+  ) => Promise<void>
+
   submitting: boolean
 }
 
-/* ──────────── Component ──────────── */
+/* ============================================================
+   REUSABLE INPUT
+============================================================ */
 
-/** Small reusable form input.
- * Defined outside InvestigationForm so React preserves input focus
- * when the parent component re-renders after each keystroke.
- */
 function FormInput({
   label,
   value,
@@ -338,1167 +458,2791 @@ function FormInput({
 }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs uppercase tracking-[0.1em] text-white/50">{label}</label>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+        {label}
+      </label>
+
       <input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
         placeholder={placeholder}
-        className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
+        className="h-11 w-full rounded-xl border border-[#143b28] bg-black/60 px-3.5 text-sm text-white outline-none placeholder:text-white/25 transition focus:border-[#20dc73]/50 focus:bg-black"
       />
-      {note && <p className="mt-1 text-[11px] text-white/30">{note}</p>}
+
+      {note ? (
+        <p className="mt-1.5 text-[10px] leading-4 text-white/25">
+          {note}
+        </p>
+      ) : null}
     </div>
   )
 }
 
-export default function InvestigationForm({ onSubmit, submitting }: Props) {
-const [form, setForm] = useState<InvestigationFormData>(
-  createEmptyForm(),
-)
+/* ============================================================
+   MAIN COMPONENT
+============================================================ */
+
+export default function InvestigationForm({
+  onSubmit,
+  submitting,
+}: Props) {
+  const [form, setForm] =
+    useState<InvestigationFormData>(
+      createEmptyForm(),
+    )
+
   const [step, setStep] = useState(1)
-  const [supportingLinkInput, setSupportingLinkInput] = useState<SupportingLink>({ type: "Website", url: "" })
 
-  const set = useCallback((patch: Partial<InvestigationFormData>) => {
-    setForm((prev) => ({ ...prev, ...patch }))
-  }, [])
+  const [supportingLinkInput, setSupportingLinkInput] =
+    useState<SupportingLink>({
+      type: "Website",
+      url: "",
+    })
 
-/* Available services */
-const services = OSINT_SERVICES
+  const [lastFileError, setLastFileError] =
+    useState("")
 
-  
-  /* Automatically set currency when country changes */
-  const handleCountryChange = useCallback((country: string) => {
-    const currency = getCurrencyForCountry(country)
-    set({ client_country: country, preferred_currency: currency })
-  }, [set])
+  const [mobileStepsOpen, setMobileStepsOpen] =
+    useState(false)
 
-  /* ────────── Evidence file handling ────────── */
-  const [lastFileError, setLastFileError] = useState("")
+  /* ==========================================================
+     FORM UPDATE
+  ========================================================== */
 
-  const handleFileAdd = useCallback((files: FileList | null) => {
-    if (!files) return
-    setLastFileError("")
-    const newFiles: EvidenceFile[] = []
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i]
-      const MAX_SIZE = 50 * 1024 * 1024 // 50MB per file
-      if (f.size > MAX_SIZE) {
-        setLastFileError(`"${f.name}" exceeds the 50MB limit and has been skipped.`)
-        continue
+  const set = useCallback(
+    (
+      patch: Partial<InvestigationFormData>,
+    ) => {
+      setForm((previous) => ({
+        ...previous,
+        ...patch,
+      }))
+    },
+    [],
+  )
+
+  /* ==========================================================
+     COUNTRY
+  ========================================================== */
+
+  const handleCountryChange =
+    useCallback(
+      (country: string) => {
+        const currency =
+          getCurrencyForCountry(country)
+
+        set({
+          client_country: country,
+          preferred_currency:
+            currency,
+        })
+      },
+      [set],
+    )
+
+  /* ==========================================================
+     FILE HANDLING
+  ========================================================== */
+
+  const handleFileAdd =
+    useCallback(
+      (files: FileList | null) => {
+        if (!files) {
+          return
+        }
+
+        setLastFileError("")
+
+        const newFiles: EvidenceFile[] =
+          []
+
+        for (
+          let index = 0;
+          index < files.length;
+          index++
+        ) {
+          const file = files[index]
+
+          const MAX_SIZE =
+            50 * 1024 * 1024
+
+          if (file.size > MAX_SIZE) {
+            setLastFileError(
+              `"${file.name}" exceeds the 50MB limit and has been skipped.`,
+            )
+            continue
+          }
+
+          newFiles.push({
+            id:
+              typeof crypto !==
+                "undefined" &&
+              typeof crypto.randomUUID ===
+                "function"
+                ? crypto.randomUUID()
+                : `${Date.now()}-${index}`,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+          })
+        }
+
+        setForm((previous) => ({
+          ...previous,
+          evidence_files: [
+            ...previous.evidence_files,
+            ...newFiles,
+          ],
+        }))
+      },
+      [],
+    )
+
+  const removeEvidenceFile =
+    useCallback((id: string) => {
+      setForm((previous) => ({
+        ...previous,
+        evidence_files:
+          previous.evidence_files.filter(
+            (file) =>
+              file.id !== id,
+          ),
+      }))
+    }, [])
+
+  /* ==========================================================
+     SUPPORTING LINKS
+  ========================================================== */
+
+  const addSupportingLink =
+    useCallback(() => {
+      const url =
+        supportingLinkInput.url.trim()
+
+      if (!url) {
+        return
       }
-      newFiles.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${i}`,
-        name: f.name,
-        size: f.size,
-        type: f.type,
+
+      setForm((previous) => ({
+        ...previous,
+        supporting_links: [
+          ...previous.supporting_links,
+          {
+            ...supportingLinkInput,
+            url,
+          },
+        ],
+      }))
+
+      setSupportingLinkInput({
+        type: "Website",
+        url: "",
       })
-    }
-    setForm((prev) => ({
-      ...prev,
-      evidence_files: [...prev.evidence_files, ...newFiles],
-    }))
-  }, [])
+    }, [supportingLinkInput])
 
-  const removeEvidenceFile = useCallback((id: string) => {
-    setForm((prev) => ({
-      ...prev,
-      evidence_files: prev.evidence_files.filter((f) => f.id !== id),
-    }))
-  }, [])
+  const removeSupportingLink =
+    useCallback((index: number) => {
+      setForm((previous) => ({
+        ...previous,
+        supporting_links:
+          previous.supporting_links.filter(
+            (_, itemIndex) =>
+              itemIndex !== index,
+          ),
+      }))
+    }, [])
 
-  /* ────────── Supporting links ────────── */
-  const addSupportingLink = useCallback(() => {
-    if (!supportingLinkInput.url.trim()) return
-    setForm((prev) => ({
-      ...prev,
-      supporting_links: [...prev.supporting_links, { ...supportingLinkInput }],
-    }))
-    setSupportingLinkInput({ type: "Website", url: "" })
-  }, [supportingLinkInput])
+  /* ==========================================================
+     VALIDATION
+  ========================================================== */
 
-  const removeSupportingLink = useCallback((index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      supporting_links: prev.supporting_links.filter((_, i) => i !== index),
-    }))
-  }, [])
-
-  /* ────────── Navigation ────────── */
-  function nextStep() {
-    if (step < 8) setStep(step + 1)
-  }
-  function prevStep() {
-    if (step > 1) setStep(step - 1)
-  }
-
-  /* ────────── Validation per step ────────── */
   function canProceed(): boolean {
-  switch (step) {
-   case 1:
-  if (!form.service_type) {
-    return false
-  }
-
-  if (form.service_type === "custom") {
-    return form.custom_description.trim().length >= 10
-  }
-
-  return true
-
-    case 2:
-      return Boolean(
-        form.investigation_objective.trim().length >= 5
-      )
-
-    case 3:
-      switch (form.subject_type) {
-        case "person":
-          return Boolean(
-            form.subject_full_name.trim() ||
-            form.subject_known_usernames.trim() ||
-            form.subject_emails.trim() ||
-            form.subject_phone_numbers.trim()
-          )
-
-        case "company":
-          return Boolean(
-            form.subject_company_name.trim()
-          )
-
-        case "digital_asset":
-          return Boolean(
-            form.subject_domain.trim() ||
-            form.subject_url.trim()
-          )
-
-        default:
+    switch (step) {
+      case 1:
+        if (!form.service_type) {
           return false
-      }
+        }
 
-    case 4:
-      return true
+        if (
+          form.service_type ===
+          "custom"
+        ) {
+          return (
+            form.custom_description.trim()
+              .length >= 10
+          )
+        }
 
-    case 5:
-      return Boolean(form.investigation_depth)
+        return true
 
-    case 6:
-      return Boolean(form.urgency)
+      case 2:
+        return (
+          form.investigation_objective.trim()
+            .length >= 5
+        )
 
-    case 7:
-      return Boolean(
-        form.client_country &&
-        form.communication_method
-      )
+      case 3:
+        switch (
+          form.subject_type
+        ) {
+          case "person":
+            return Boolean(
+              form.subject_full_name.trim() ||
+                form.subject_known_usernames.trim() ||
+                form.subject_emails.trim() ||
+                form.subject_phone_numbers.trim(),
+            )
 
-    case 8:
-      return form.authorization_confirmed
+          case "company":
+            return Boolean(
+              form.subject_company_name.trim(),
+            )
 
-    default:
-      return false
+          case "digital_asset":
+            return Boolean(
+              form.subject_domain.trim() ||
+                form.subject_url.trim(),
+            )
+
+          default:
+            return false
+        }
+
+      case 4:
+        return true
+
+      case 5:
+        return Boolean(
+          form.investigation_depth,
+        )
+
+      case 6:
+        return Boolean(
+          form.urgency,
+        )
+
+      case 7:
+        if (
+          !form.client_country ||
+          (
+            form.client_country ===
+              "custom" &&
+            !form.custom_country.trim()
+          )
+        ) {
+          return false
+        }
+
+        if (
+          !form.communication_method
+        ) {
+          return false
+        }
+
+        switch (
+          form.communication_method
+        ) {
+          case "email":
+            return Boolean(
+              form.communication_email.trim(),
+            )
+
+          case "phone":
+            return Boolean(
+              form.communication_phone.trim(),
+            )
+
+          case "whatsapp":
+            return Boolean(
+              form.communication_whatsapp.trim(),
+            )
+
+          case "signal":
+            return Boolean(
+              form.communication_signal.trim(),
+            )
+
+          case "portal_notification":
+            return true
+
+          default:
+            return false
+        }
+
+      case 8:
+        return (
+          form.authorization_confirmed
+        )
+
+      default:
+        return false
+    }
   }
-}
 
-async function handleSubmit() {
-  const isCustom = form.service_type === "custom"
+  /* ==========================================================
+     NAVIGATION
+  ========================================================== */
 
-  const customText = form.custom_description.trim()
+  function nextStep() {
+    if (
+      !canProceed() ||
+      submitting
+    ) {
+      return
+    }
 
-  const title = isCustom
-    ? customText || "OSINT Investigation"
-    : form.title.trim() ||
-      form.service_type.trim() ||
-      "OSINT Investigation"
+    if (
+      step <
+      STEPS.length
+    ) {
+      setStep(
+        (current) =>
+          current + 1,
+      )
+    }
+  }
 
-  const serviceDescription = isCustom
-    ? customText
-    : `Service: ${form.service_type}`
+  function prevStep() {
+    if (
+      step > 1 &&
+      !submitting
+    ) {
+      setStep(
+        (current) =>
+          current - 1,
+      )
+    }
+  }
 
-  const description = [
-    serviceDescription,
+  function jumpToStep(
+    targetStep: number,
+  ) {
+    if (
+      submitting ||
+      targetStep > step ||
+      targetStep < 1
+    ) {
+      return
+    }
 
-    `Objective: ${form.investigation_objective}`,
+    setStep(targetStep)
+    setMobileStepsOpen(false)
+  }
 
-    `Subject Type: ${form.subject_type}`,
+  /* ==========================================================
+     SUBMIT
+  ========================================================== */
 
-    form.subject_full_name
-      ? `Subject Name: ${form.subject_full_name}`
-      : "",
+  async function handleSubmit() {
+    if (
+      !canProceed() ||
+      submitting
+    ) {
+      return
+    }
 
-    form.subject_known_usernames
-      ? `Known Usernames: ${form.subject_known_usernames}`
-      : "",
+    const isCustom =
+      form.service_type ===
+      "custom"
 
-    form.subject_emails
-      ? `Emails: ${form.subject_emails}`
-      : "",
+    const customText =
+      form.custom_description.trim()
 
-    form.subject_phone_numbers
-      ? `Phone Numbers: ${form.subject_phone_numbers}`
-      : "",
+    const title = isCustom
+      ? customText ||
+        "OSINT Investigation"
+      : form.title.trim() ||
+        form.service_type.trim() ||
+        "OSINT Investigation"
 
-    form.subject_location
-      ? `Location: ${form.subject_location}`
-      : "",
+    const serviceDescription =
+      isCustom
+        ? customText
+        : `Service: ${form.service_type}`
 
-    form.subject_organization
-      ? `Organization: ${form.subject_organization}`
-      : "",
+    const description = [
+      serviceDescription,
 
-    form.subject_websites
-      ? `Known Websites: ${form.subject_websites}`
-      : "",
+      `Objective: ${form.investigation_objective}`,
 
-    form.subject_company_name
-      ? `Company: ${form.subject_company_name}`
-      : "",
+      `Subject Type: ${form.subject_type}`,
 
-    form.subject_company_website
-      ? `Company Website: ${form.subject_company_website}`
-      : "",
+      form.subject_full_name
+        ? `Subject Name: ${form.subject_full_name}`
+        : "",
 
-    form.subject_company_country
-      ? `Company Country: ${form.subject_company_country}`
-      : "",
+      form.subject_known_usernames
+        ? `Known Usernames: ${form.subject_known_usernames}`
+        : "",
 
-    form.subject_company_industry
-      ? `Company Industry: ${form.subject_company_industry}`
-      : "",
+      form.subject_emails
+        ? `Emails: ${form.subject_emails}`
+        : "",
 
-    form.subject_domain
-      ? `Domain: ${form.subject_domain}`
-      : "",
+      form.subject_phone_numbers
+        ? `Phone Numbers: ${form.subject_phone_numbers}`
+        : "",
 
-    form.subject_url
-      ? `URL: ${form.subject_url}`
-      : "",
+      form.subject_location
+        ? `Location: ${form.subject_location}`
+        : "",
 
-    form.subject_ip_address
-      ? `IP Address: ${form.subject_ip_address}`
-      : "",
+      form.subject_organization
+        ? `Organization: ${form.subject_organization}`
+        : "",
 
-    form.subject_platform
-      ? `Platform: ${form.subject_platform}`
-      : "",
+      form.subject_websites
+        ? `Known Websites: ${form.subject_websites}`
+        : "",
 
-    form.existing_information
-      ? `Supporting Intelligence: ${form.existing_information}`
-      : "",
+      form.subject_company_name
+        ? `Company: ${form.subject_company_name}`
+        : "",
 
-    form.additional_notes
-      ? `Additional Notes: ${form.additional_notes}`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n")
+      form.subject_company_website
+        ? `Company Website: ${form.subject_company_website}`
+        : "",
 
-  await onSubmit({
-    ...form,
+      form.subject_company_country
+        ? `Company Country: ${form.subject_company_country}`
+        : "",
 
-    title,
+      form.subject_company_industry
+        ? `Company Industry: ${form.subject_company_industry}`
+        : "",
 
-    description,
+      form.subject_domain
+        ? `Domain: ${form.subject_domain}`
+        : "",
 
-    custom_description: isCustom
-      ? customText
-      : "",
-  })
-}
+      form.subject_url
+        ? `URL: ${form.subject_url}`
+        : "",
 
-  /* ────────── Render: Step 1 — Service Selection ────────── */
- function renderStep1() {
-  const isCustom = form.service_type === "custom"
-const canSubmit = canProceed()
-  return (
-    <div className="space-y-5">
-      <div>
-        <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-          Select Service
-        </label>
+      form.subject_ip_address
+        ? `IP Address: ${form.subject_ip_address}`
+        : "",
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          {services.map((service) => (
-            <button
-              key={service}
-              type="button"
-              onClick={() =>
-                set({
-                  service_type: service,
-                  custom_description: "",
-                })
-              }
-              className={`rounded-md border px-4 py-3 text-left text-sm transition ${
-                form.service_type === service
-                  ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                  : "border-[#143b28] text-white/60 hover:border-white/20 hover:text-white"
-              }`}
-            >
-              {service}
-            </button>
-          ))}
+      form.subject_platform
+        ? `Platform: ${form.subject_platform}`
+        : "",
 
-          {/* CUSTOM SERVICE */}
+      form.existing_information
+        ? `Supporting Intelligence: ${form.existing_information}`
+        : "",
+
+      form.additional_notes
+        ? `Additional Notes: ${form.additional_notes}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
+
+    await onSubmit({
+      ...form,
+      title,
+      description,
+      custom_description:
+        isCustom
+          ? customText
+          : "",
+    })
+  }
+
+  /* ==========================================================
+     SUMMARY HELPERS
+  ========================================================== */
+
+  function subjectSummary() {
+    if (
+      form.subject_type ===
+      "company"
+    ) {
+      return (
+        form.subject_company_name ||
+        "Company details"
+      )
+    }
+
+    if (
+      form.subject_type ===
+      "digital_asset"
+    ) {
+      return (
+        form.subject_domain ||
+        form.subject_url ||
+        "Digital asset"
+      )
+    }
+
+    return (
+      form.subject_full_name ||
+      form.subject_known_usernames ||
+      "Person details"
+    )
+  }
+
+  function isStepComplete(
+    targetStep: number,
+  ) {
+    if (targetStep === step) {
+      return false
+    }
+
+    switch (targetStep) {
+      case 1:
+        return Boolean(
+          form.service_type,
+        )
+
+      case 2:
+        return (
+          form.investigation_objective.trim()
+            .length >= 5
+        )
+
+      case 3:
+        return Boolean(
+          subjectSummary() &&
+            subjectSummary() !==
+              "Person details",
+        )
+
+      case 4:
+        return (
+          Boolean(
+            form.existing_information.trim(),
+          ) ||
+          form.supporting_links.length >
+            0 ||
+          form.evidence_files.length >
+            0 ||
+          Boolean(
+            form.additional_notes.trim(),
+          )
+        )
+
+      case 5:
+        return Boolean(
+          form.investigation_depth,
+        )
+
+      case 6:
+        return Boolean(
+          form.urgency,
+        )
+
+      case 7:
+        return Boolean(
+          form.client_country &&
+            form.communication_method,
+        )
+
+      case 8:
+        return Boolean(
+          form.authorization_confirmed,
+        )
+
+      default:
+        return false
+    }
+  }
+
+  /* ==========================================================
+     STEP 1
+  ========================================================== */
+
+  function renderStep1() {
+    const isCustom =
+      form.service_type ===
+      "custom"
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <p className="text-sm leading-6 text-white/45">
+            Select the intelligence operation that best matches your requirement.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {OSINT_SERVICES.map(
+            (service) => {
+              const active =
+                form.service_type ===
+                service
+
+              return (
+                <button
+                  key={service}
+                  type="button"
+                  onClick={() =>
+                    set({
+                      service_type:
+                        service,
+                      custom_description:
+                        "",
+                    })
+                  }
+                  className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition ${
+                    active
+                      ? "border-[#20dc73]/60 bg-[#20dc73]/8"
+                      : "border-[#143b28] bg-black/20 hover:border-white/15 hover:bg-white/[0.02]"
+                  }`}
+                >
+                  {active ? (
+                    <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#20dc73]">
+                      <Check className="h-3 w-3 text-black" />
+                    </div>
+                  ) : null}
+
+                  <div className="flex items-start gap-3 pr-6">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                        active
+                          ? "bg-[#20dc73]/10 text-[#20dc73]"
+                          : "bg-black/30 text-white/25"
+                      }`}
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+
+                    <div>
+                      <p
+                        className={`text-sm font-semibold leading-5 ${
+                          active
+                            ? "text-[#20dc73]"
+                            : "text-white/75"
+                        }`}
+                      >
+                        {service}
+                      </p>
+
+                      <p className="mt-1 text-[10px] leading-4 text-white/25">
+                        Intelligence operation
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              )
+            },
+          )}
+
           <button
             type="button"
             onClick={() =>
               set({
-                service_type: "custom",
+                service_type:
+                  "custom",
               })
             }
-            className={`rounded-md border px-4 py-3 text-left text-sm transition ${
+            className={`group relative rounded-2xl border p-4 text-left transition ${
               isCustom
-                ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                : "border-[#143b28] text-white/60 hover:border-white/20 hover:text-white"
+                ? "border-[#20dc73]/60 bg-[#20dc73]/8"
+                : "border-dashed border-[#143b28] bg-black/10 hover:border-[#20dc73]/30"
             }`}
           >
-            Custom Requirement
-          </button>
-        </div>
-      </div>
+            {isCustom ? (
+              <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#20dc73]">
+                <Check className="h-3 w-3 text-black" />
+              </div>
+            ) : null}
 
-      {/* CUSTOM DESCRIPTION */}
-      {isCustom && (
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-            Describe Your Custom Requirement
-          </label>
-
-          <textarea
-            value={form.custom_description}
-            onChange={(e) =>
-              set({
-                custom_description: e.target.value,
-              })
-            }
-            rows={5}
-            placeholder="Describe the investigation service you need..."
-            className="
-              w-full rounded-md
-              border border-[#143b28]
-              bg-black
-              p-4
-              text-sm
-              text-white
-              placeholder:text-white/30
-              outline-none
-              focus:border-[#20dc73]/50
-            "
-          />
-
-          <p className="mt-1 text-xs text-white/30">
-            Please describe what you want ShadowNode to investigate or analyze.
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
-  
-
-  /* ────────── Render: Step 2 — Investigation Objective ────────── */
-  function renderStep2() {
-    return (
-      <div className="space-y-5">
-        <p className="text-sm text-white/60">
-          Describe the primary objective of this investigation. What are you trying to determine or achieve?
-        </p>
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-            Objective suggestions
-          </label>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {OBJECTIVE_EXAMPLES.map((ex) => (
-              <button
-                key={ex}
-                type="button"
-                onClick={() => {
-                  set({ investigation_objective: ex })
-                }}
-                className={`rounded border px-3 py-1.5 text-xs transition ${
-                  form.investigation_objective === ex
-                    ? "border-[#20dc73] text-[#20dc73]"
-                    : "border-[#143b28] text-white/50 hover:border-white/20"
+            <div className="flex items-start gap-3 pr-6">
+              <div
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                  isCustom
+                    ? "bg-[#20dc73]/10 text-[#20dc73]"
+                    : "bg-black/30 text-white/25"
                 }`}
               >
-                {ex}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-            What is the objective of this request?
-          </label>
-          <textarea
-            value={form.investigation_objective}
-            onChange={(e) => set({ investigation_objective: e.target.value })}
-            placeholder="e.g. Identity verification, background verification, fraud investigation, digital footprint analysis..."
-            className="min-h-32 w-full rounded-md border border-[#143b28] bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
-          />
-          <p className="mt-1 text-xs text-white/40">
-            {form.investigation_objective.length} characters (minimum 10 required)
-          </p>
-        </div>
-      </div>
-    )
-  }
+                <Plus className="h-4 w-4" />
+              </div>
 
-  /* ────────── Render: Step 3 — Subject / Target Information ────────── */
-function renderStep3() {
-   return (
-      <div className="space-y-5">
-        <p className="text-sm text-white/60">
-          Provide information about the subject or target of the investigation.
-        </p>
+              <div>
+                <p
+                  className={`text-sm font-semibold ${
+                    isCustom
+                      ? "text-[#20dc73]"
+                      : "text-white/70"
+                  }`}
+                >
+                  Custom Requirement
+                </p>
 
-        {/* Subject Type */}
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">Subject Type</label>
-          <div className="flex gap-3">
-            {SUBJECT_TYPES.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => set({ subject_type: t.value })}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm transition ${
-                  form.subject_type === t.value
-                    ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]"
-                    : "border-[#143b28] text-white/50 hover:border-white/20"
-                }`}
-              >
-                <t.icon className="h-4 w-4" />
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Person fields */}
-        {form.subject_type === "person" && (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormInput label="Full Name" value={form.subject_full_name} onChange={(v) => set({ subject_full_name: v })} />
-              <FormInput label="Known Usernames" value={form.subject_known_usernames} onChange={(v) => set({ subject_known_usernames: v })} placeholder="Comma-separated" />
-              <FormInput label="Email Addresses" value={form.subject_emails} onChange={(v) => set({ subject_emails: v })} placeholder="Comma-separated" />
-              <FormInput label="Phone Numbers" value={form.subject_phone_numbers} onChange={(v) => set({ subject_phone_numbers: v })} placeholder="Comma-separated" />
-              <FormInput label="Location" value={form.subject_location} onChange={(v) => set({ subject_location: v })} />
-              <FormInput label="Organization / Company" value={form.subject_organization} onChange={(v) => set({ subject_organization: v })} />
-              <div className="sm:col-span-2">
-                <FormInput label="Known Websites / Social Profiles" value={form.subject_websites} onChange={(v) => set({ subject_websites: v })} placeholder="Comma-separated URLs" />
+                <p className="mt-1 text-[10px] leading-4 text-white/25">
+                  Tell us what intelligence support you need
+                </p>
               </div>
             </div>
+          </button>
+        </div>
 
-            {/* + Add Additional Identifying Information (expandable) */}
-            <div className="border-t border-[#143b28] pt-4">
-              <button
-                type="button"
-                onClick={() => set({ show_additional_info: !form.show_additional_info })}
-                className="inline-flex items-center gap-2 text-sm text-[#20dc73] hover:text-[#20dc73]/80"
-              >
-                {form.show_additional_info ? <ChevronUp className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                {form.show_additional_info ? "Hide" : "+ Add Additional Identifying Information"}
-              </button>
+        {isCustom ? (
+          <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+            <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+              Describe your custom requirement
+            </label>
 
-              {form.show_additional_info && (
-                <div className="mt-4 space-y-5">
-                  {/* Physical Description */}
-                  <div>
-                    <p className="mb-3 text-xs uppercase tracking-[0.1em] text-white/40">Physical Description</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <FormInput label="Approximate Age" value={form.subject_approximate_age} onChange={(v) => set({ subject_approximate_age: v })} placeholder="e.g. 30-35" />
-                      <FormInput label="Height" value={form.subject_height} onChange={(v) => set({ subject_height: v })} placeholder="e.g. 5'10" />
-                      <FormInput label="Weight" value={form.subject_weight} onChange={(v) => set({ subject_weight: v })} placeholder="e.g. 75kg" />
-                      <FormInput label="Hair Color" value={form.subject_hair_color} onChange={(v) => set({ subject_hair_color: v })} />
-                      <FormInput label="Eye Color" value={form.subject_eye_color} onChange={(v) => set({ subject_eye_color: v })} />
-                      <FormInput label="Skin Tone" value={form.subject_skin_tone} onChange={(v) => set({ subject_skin_tone: v })} />
-                      <FormInput label="Distinguishing Marks / Tattoos" value={form.subject_distinguishing_marks} onChange={(v) => set({ subject_distinguishing_marks: v })} className="sm:col-span-2" />
-                      <FormInput label="Nationality" value={form.subject_nationality} onChange={(v) => set({ subject_nationality: v })} />
-                      <FormInput label="Languages Spoken" value={form.subject_languages_spoken} onChange={(v) => set({ subject_languages_spoken: v })} placeholder="Comma-separated" />
-                      <FormInput label="Last Known Address" value={form.subject_last_known_address} onChange={(v) => set({ subject_last_known_address: v })} className="sm:col-span-2" />
-                      <FormInput label="Last Known Occupation" value={form.subject_last_known_occupation} onChange={(v) => set({ subject_last_known_occupation: v })} className="sm:col-span-2" />
-                    </div>
-                  </div>
+            <textarea
+              value={
+                form.custom_description
+              }
+              onChange={(event) =>
+                set({
+                  custom_description:
+                    event.target.value,
+                })
+              }
+              rows={5}
+              placeholder="Describe the investigation, analysis, verification, or intelligence support you require..."
+              className="w-full rounded-xl border border-[#143b28] bg-black px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 transition focus:border-[#20dc73]/50"
+            />
 
-                  {/* Digital Information */}
-                  <div>
-                    <p className="mb-3 text-xs uppercase tracking-[0.1em] text-white/40">Digital Information</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <FormInput label="Additional Usernames" value={form.subject_additional_usernames} onChange={(v) => set({ subject_additional_usernames: v })} placeholder="Comma-separated" />
-                      <FormInput label="Gaming IDs" value={form.subject_gaming_ids} onChange={(v) => set({ subject_gaming_ids: v })} placeholder="e.g. Steam, Xbox, PSN" />
-                      <FormInput label="Cryptocurrency Wallets" value={form.subject_cryptocurrency_wallets} onChange={(v) => set({ subject_cryptocurrency_wallets: v })} placeholder="Wallet addresses" />
-                      <FormInput label="Domain Names" value={form.subject_domain_names} onChange={(v) => set({ subject_domain_names: v })} placeholder="Comma-separated" />
-                      <FormInput label="IP Addresses" value={form.subject_ip_addresses} onChange={(v) => set({ subject_ip_addresses: v })} placeholder="Comma-separated" />
-                      <FormInput label="Vehicle Registration" value={form.subject_vehicle_registration} onChange={(v) => set({ subject_vehicle_registration: v })} placeholder="Where lawful and applicable" note="Only where lawful and applicable" />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Company fields */}
-        {form.subject_type === "company" && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormInput label="Company Name" value={form.subject_company_name} onChange={(v) => set({ subject_company_name: v })} />
-            <FormInput label="Website" value={form.subject_company_website} onChange={(v) => set({ subject_company_website: v })} />
-            <FormInput label="Country" value={form.subject_company_country} onChange={(v) => set({ subject_company_country: v })} />
-            <FormInput label="Industry" value={form.subject_company_industry} onChange={(v) => set({ subject_company_industry: v })} />
+            <p className="mt-2 text-[10px] text-white/25">
+              Minimum 10 characters.
+            </p>
           </div>
-        )}
-
-        {/* Digital Asset fields */}
-        {form.subject_type === "digital_asset" && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormInput label="Domain" value={form.subject_domain} onChange={(v) => set({ subject_domain: v })} />
-            <FormInput label="URL" value={form.subject_url} onChange={(v) => set({ subject_url: v })} />
-            <FormInput label="IP Address" value={form.subject_ip_address} onChange={(v) => set({ subject_ip_address: v })} />
-            <FormInput label="Platform" value={form.subject_platform} onChange={(v) => set({ subject_platform: v })} />
-          </div>
-        )}
+        ) : null}
       </div>
     )
   }
 
-  /* ────────── Render: Step 4 — Supporting Intelligence & Evidence ────────── */
-  function renderStep4() {
+  /* ==========================================================
+     STEP 2
+  ========================================================== */
+
+  function renderStep2() {
     return (
       <div className="space-y-6">
-        {/* Section A — Investigation Summary */}
-        <section>
-          <h3 className="mb-1 font-semibold text-white">Section A — Investigation Summary</h3>
-          <p className="mb-3 text-sm text-white/50">
-            Describe everything you already know that may assist our analysts.
-          </p>
-          <textarea
-            value={form.existing_information}
-            onChange={(e) => set({ existing_information: e.target.value })}
-            placeholder="Known facts, previous findings, relevant context, observations, and any intelligence that may assist our analysts..."
-            className="min-h-36 w-full rounded-md border border-[#143b28] bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
-          />
-        </section>
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#20dc73]/10 text-[#20dc73]">
+              <Target className="h-4 w-4" />
+            </div>
 
-        {/* Section B — Supporting Links */}
-        <section>
-          <h3 className="mb-1 font-semibold text-white">Section B — Supporting Links</h3>
-          <p className="mb-3 text-sm text-white/50">
-            Add links to relevant profiles, articles, websites, or other online resources.
-          </p>
+            <div>
+              <p className="text-sm font-semibold text-white">
+                What should the investigation establish?
+              </p>
 
-          {/* Existing links */}
-          {form.supporting_links.length > 0 && (
-            <div className="mb-3 space-y-2">
-              {form.supporting_links.map((link, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 rounded border border-[#143b28] bg-black/30 px-3 py-2"
-                >
-                  <span className="rounded bg-[#20dc73]/10 px-2 py-0.5 text-[11px] text-[#20dc73]">
-                    {link.type}
-                  </span>
-                  <span className="flex-1 truncate text-sm text-white/70">{link.url}</span>
+              <p className="mt-1 text-xs leading-5 text-white/35">
+                Describe the specific question, concern, or outcome you need ShadowNode to investigate.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+            Common objectives
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            {OBJECTIVE_EXAMPLES.map(
+              (example) => {
+                const active =
+                  form.investigation_objective ===
+                  example
+
+                return (
                   <button
+                    key={example}
                     type="button"
-                    onClick={() => removeSupportingLink(index)}
-                    className="shrink-0 text-white/30 hover:text-red-400"
+                    onClick={() =>
+                      set({
+                        investigation_objective:
+                          example,
+                      })
+                    }
+                    className={`rounded-full border px-3.5 py-2 text-[11px] transition ${
+                      active
+                        ? "border-[#20dc73]/50 bg-[#20dc73]/8 text-[#20dc73]"
+                        : "border-[#143b28] bg-black/20 text-white/45 hover:border-white/15 hover:text-white/70"
+                    }`}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    {example}
                   </button>
-                </div>
-              ))}
-            </div>
-          )}
+                )
+              },
+            )}
+          </div>
+        </div>
 
-          {/* Add link input */}
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex-1 min-w-[140px]">
-              <label className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-white/40">Type</label>
-              <select
-                value={supportingLinkInput.type}
-                onChange={(e) => setSupportingLinkInput((prev) => ({ ...prev, type: e.target.value }))}
-                className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/50"
-              >
-                {LINK_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+              Investigation objective
+            </label>
+
+            <span
+              className={`font-mono text-[10px] ${
+                form.investigation_objective.length >=
+                5
+                  ? "text-[#20dc73]"
+                  : "text-white/25"
+              }`}
+            >
+              {
+                form.investigation_objective
+                  .length
+              } chars
+            </span>
+          </div>
+
+          <textarea
+            value={
+              form.investigation_objective
+            }
+            onChange={(event) =>
+              set({
+                investigation_objective:
+                  event.target.value,
+              })
+            }
+            placeholder="Example: Determine whether this individual is using multiple online identities and establish which public profiles appear to belong to the same person."
+            className="mt-3 min-h-40 w-full rounded-xl border border-[#143b28] bg-black px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 transition focus:border-[#20dc73]/50"
+          />
+
+          <p className="mt-2 text-[10px] text-white/25">
+            Minimum 5 characters.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  /* ==========================================================
+     STEP 3
+  ========================================================== */
+
+  function renderStep3() {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm leading-6 text-white/45">
+            Provide whatever identifying information you currently have. You do not need to know every field.
+          </p>
+        </div>
+
+        {/* Subject types */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          {SUBJECT_TYPES.map(
+            (subject) => {
+              const Icon =
+                subject.icon
+
+              const active =
+                form.subject_type ===
+                subject.value
+
+              return (
+                <button
+                  key={subject.value}
+                  type="button"
+                  onClick={() =>
+                    set({
+                      subject_type:
+                        subject.value,
+                    })
+                  }
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    active
+                      ? "border-[#20dc73]/55 bg-[#20dc73]/8"
+                      : "border-[#143b28] bg-black/20 hover:border-white/15"
+                  }`}
+                >
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                      active
+                        ? "bg-[#20dc73]/10 text-[#20dc73]"
+                        : "bg-black/30 text-white/25"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+
+                  <p
+                    className={`mt-3 text-sm font-semibold ${
+                      active
+                        ? "text-[#20dc73]"
+                        : "text-white/70"
+                    }`}
+                  >
+                    {subject.label}
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-white/25">
+                    Investigation target
+                  </p>
+                </button>
+              )
+            },
+          )}
+        </div>
+
+        {/* Person */}
+        {form.subject_type ===
+        "person" ? (
+          <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">
+                Person Identification
+              </p>
+
+              <p className="mt-1 text-[11px] text-white/30">
+                Any one of these identifiers can help begin the investigation.
+              </p>
             </div>
-            <div className="flex-[2] min-w-[200px]">
-              <label className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-white/40">URL</label>
-              <input
-                value={supportingLinkInput.url}
-                onChange={(e) => setSupportingLinkInput((prev) => ({ ...prev, url: e.target.value }))}
-                placeholder="https://"
-                className="h-10 w-full rounded border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormInput
+                label="Full Name"
+                value={
+                  form.subject_full_name
+                }
+                onChange={(value) =>
+                  set({
+                    subject_full_name:
+                      value,
+                  })
+                }
+              />
+
+              <FormInput
+                label="Known Usernames"
+                value={
+                  form.subject_known_usernames
+                }
+                onChange={(value) =>
+                  set({
+                    subject_known_usernames:
+                      value,
+                  })
+                }
+                placeholder="Comma-separated"
+              />
+
+              <FormInput
+                label="Email Addresses"
+                value={
+                  form.subject_emails
+                }
+                onChange={(value) =>
+                  set({
+                    subject_emails:
+                      value,
+                  })
+                }
+                placeholder="Comma-separated"
+              />
+
+              <FormInput
+                label="Phone Numbers"
+                value={
+                  form.subject_phone_numbers
+                }
+                onChange={(value) =>
+                  set({
+                    subject_phone_numbers:
+                      value,
+                  })
+                }
+                placeholder="Comma-separated"
+              />
+
+              <FormInput
+                label="Known Location"
+                value={
+                  form.subject_location
+                }
+                onChange={(value) =>
+                  set({
+                    subject_location:
+                      value,
+                  })
+                }
+              />
+
+              <FormInput
+                label="Organization / Company"
+                value={
+                  form.subject_organization
+                }
+                onChange={(value) =>
+                  set({
+                    subject_organization:
+                      value,
+                  })
+                }
+              />
+
+              <FormInput
+                label="Known Websites / Social Profiles"
+                value={
+                  form.subject_websites
+                }
+                onChange={(value) =>
+                  set({
+                    subject_websites:
+                      value,
+                  })
+                }
+                placeholder="Comma-separated URLs"
+                className="sm:col-span-2"
               />
             </div>
+
             <button
               type="button"
-              onClick={addSupportingLink}
-              disabled={!supportingLinkInput.url.trim()}
-              className="inline-flex h-10 items-center gap-2 rounded bg-[#20dc73] px-4 text-sm font-bold text-black disabled:opacity-40"
+              onClick={() =>
+                set({
+                  show_additional_info:
+                    !form.show_additional_info,
+                })
+              }
+              className="mt-5 flex w-full items-center justify-between rounded-xl border border-[#143b28] bg-black/20 px-4 py-3 text-left transition hover:border-white/15"
             >
-              <Plus className="h-4 w-4" /> Add Link
+              <div className="flex items-center gap-3">
+                <Plus className="h-4 w-4 text-[#20dc73]" />
+
+                <div>
+                  <p className="text-xs font-semibold text-white/70">
+                    Additional identifying information
+                  </p>
+
+                  <p className="mt-0.5 text-[10px] text-white/25">
+                    Optional physical and digital details
+                  </p>
+                </div>
+              </div>
+
+              {form.show_additional_info ? (
+                <ChevronUp className="h-4 w-4 text-white/25" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-white/25" />
+              )}
+            </button>
+
+            {form.show_additional_info ? (
+              <div className="mt-4 space-y-6 rounded-xl border border-[#143b28]/70 bg-black/20 p-4">
+                <div>
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                    Physical Description
+                  </p>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormInput
+                      label="Approximate Age"
+                      value={
+                        form.subject_approximate_age
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_approximate_age:
+                            value,
+                        })
+                      }
+                      placeholder="e.g. 30-35"
+                    />
+
+                    <FormInput
+                      label="Height"
+                      value={
+                        form.subject_height
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_height:
+                            value,
+                        })
+                      }
+                      placeholder="e.g. 5'10"
+                    />
+
+                    <FormInput
+                      label="Weight"
+                      value={
+                        form.subject_weight
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_weight:
+                            value,
+                        })
+                      }
+                      placeholder="e.g. 75kg"
+                    />
+
+                    <FormInput
+                      label="Hair Color"
+                      value={
+                        form.subject_hair_color
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_hair_color:
+                            value,
+                        })
+                      }
+                    />
+
+                    <FormInput
+                      label="Eye Color"
+                      value={
+                        form.subject_eye_color
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_eye_color:
+                            value,
+                        })
+                      }
+                    />
+
+                    <FormInput
+                      label="Skin Tone"
+                      value={
+                        form.subject_skin_tone
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_skin_tone:
+                            value,
+                        })
+                      }
+                    />
+
+                    <FormInput
+                      label="Nationality"
+                      value={
+                        form.subject_nationality
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_nationality:
+                            value,
+                        })
+                      }
+                    />
+
+                    <FormInput
+                      label="Languages Spoken"
+                      value={
+                        form.subject_languages_spoken
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_languages_spoken:
+                            value,
+                        })
+                      }
+                      placeholder="Comma-separated"
+                    />
+
+                    <FormInput
+                      label="Distinguishing Marks / Tattoos"
+                      value={
+                        form.subject_distinguishing_marks
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_distinguishing_marks:
+                            value,
+                        })
+                      }
+                      className="sm:col-span-2"
+                    />
+
+                    <FormInput
+                      label="Last Known Address"
+                      value={
+                        form.subject_last_known_address
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_last_known_address:
+                            value,
+                        })
+                      }
+                      className="sm:col-span-2"
+                    />
+
+                    <FormInput
+                      label="Last Known Occupation"
+                      value={
+                        form.subject_last_known_occupation
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_last_known_occupation:
+                            value,
+                        })
+                      }
+                      className="sm:col-span-2"
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t border-[#143b28]/70 pt-5">
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                    Digital Information
+                  </p>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormInput
+                      label="Additional Usernames"
+                      value={
+                        form.subject_additional_usernames
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_additional_usernames:
+                            value,
+                        })
+                      }
+                      placeholder="Comma-separated"
+                    />
+
+                    <FormInput
+                      label="Gaming IDs"
+                      value={
+                        form.subject_gaming_ids
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_gaming_ids:
+                            value,
+                        })
+                      }
+                      placeholder="Steam, Xbox, PSN..."
+                    />
+
+                    <FormInput
+                      label="Cryptocurrency Wallets"
+                      value={
+                        form.subject_cryptocurrency_wallets
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_cryptocurrency_wallets:
+                            value,
+                        })
+                      }
+                    />
+
+                    <FormInput
+                      label="Domain Names"
+                      value={
+                        form.subject_domain_names
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_domain_names:
+                            value,
+                        })
+                      }
+                      placeholder="Comma-separated"
+                    />
+
+                    <FormInput
+                      label="IP Addresses"
+                      value={
+                        form.subject_ip_addresses
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_ip_addresses:
+                            value,
+                        })
+                      }
+                      placeholder="Comma-separated"
+                    />
+
+                    <FormInput
+                      label="Vehicle Registration"
+                      value={
+                        form.subject_vehicle_registration
+                      }
+                      onChange={(value) =>
+                        set({
+                          subject_vehicle_registration:
+                            value,
+                        })
+                      }
+                      note="Only where lawful and applicable."
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Company */}
+        {form.subject_type ===
+        "company" ? (
+          <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.12em] text-white/55">
+              Company Identification
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormInput
+                label="Company Name"
+                value={
+                  form.subject_company_name
+                }
+                onChange={(value) =>
+                  set({
+                    subject_company_name:
+                      value,
+                  })
+                }
+              />
+
+              <FormInput
+                label="Company Website"
+                value={
+                  form.subject_company_website
+                }
+                onChange={(value) =>
+                  set({
+                    subject_company_website:
+                      value,
+                  })
+                }
+                placeholder="https://"
+              />
+
+              <FormInput
+                label="Country"
+                value={
+                  form.subject_company_country
+                }
+                onChange={(value) =>
+                  set({
+                    subject_company_country:
+                      value,
+                  })
+                }
+              />
+
+              <FormInput
+                label="Industry"
+                value={
+                  form.subject_company_industry
+                }
+                onChange={(value) =>
+                  set({
+                    subject_company_industry:
+                      value,
+                  })
+                }
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {/* Digital asset */}
+        {form.subject_type ===
+        "digital_asset" ? (
+          <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.12em] text-white/55">
+              Digital Asset Identification
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormInput
+                label="Domain"
+                value={
+                  form.subject_domain
+                }
+                onChange={(value) =>
+                  set({
+                    subject_domain:
+                      value,
+                  })
+                }
+                placeholder="example.com"
+              />
+
+              <FormInput
+                label="URL"
+                value={
+                  form.subject_url
+                }
+                onChange={(value) =>
+                  set({
+                    subject_url:
+                      value,
+                  })
+                }
+                placeholder="https://"
+              />
+
+              <FormInput
+                label="IP Address"
+                value={
+                  form.subject_ip_address
+                }
+                onChange={(value) =>
+                  set({
+                    subject_ip_address:
+                      value,
+                  })
+                }
+              />
+
+              <FormInput
+                label="Platform"
+                value={
+                  form.subject_platform
+                }
+                onChange={(value) =>
+                  set({
+                    subject_platform:
+                      value,
+                  })
+                }
+                placeholder="Platform / service"
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  /* ==========================================================
+     STEP 4
+  ========================================================== */
+
+  function renderStep4() {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm leading-6 text-white/45">
+            Give our analysts the context, links, and files you already have. Everything here is optional.
+          </p>
+        </div>
+
+        {/* Existing intelligence */}
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#20dc73]/10 text-[#20dc73]">
+              <FileText className="h-4 w-4" />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-white">
+                Existing Intelligence
+              </p>
+
+              <p className="mt-1 text-[10px] leading-5 text-white/30">
+                Previous findings, observations, known facts, or context.
+              </p>
+            </div>
+          </div>
+
+          <textarea
+            value={
+              form.existing_information
+            }
+            onChange={(event) =>
+              set({
+                existing_information:
+                  event.target.value,
+              })
+            }
+            placeholder="Tell us what you already know..."
+            className="mt-4 min-h-32 w-full rounded-xl border border-[#143b28] bg-black px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/50"
+          />
+        </div>
+
+        {/* Links */}
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-white">
+                Supporting Links
+              </p>
+
+              <p className="mt-1 text-[10px] text-white/30">
+                Public profiles, websites, articles, or resources.
+              </p>
+            </div>
+
+            <span className="rounded-full border border-[#143b28] bg-black/30 px-2.5 py-1 text-[9px] font-mono text-white/30">
+              {form.supporting_links.length} added
+            </span>
+          </div>
+
+          {form.supporting_links.length >
+          0 ? (
+            <div className="mt-4 space-y-2">
+              {form.supporting_links.map(
+                (link, index) => (
+                  <div
+                    key={`${link.url}-${index}`}
+                    className="flex items-center gap-3 rounded-xl border border-[#143b28] bg-black/30 px-3 py-3"
+                  >
+                    <span className="shrink-0 rounded-full bg-[#20dc73]/8 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-[#20dc73]">
+                      {link.type}
+                    </span>
+
+                    <span className="min-w-0 flex-1 truncate text-xs text-white/55">
+                      {link.url}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeSupportingLink(
+                          index,
+                        )
+                      }
+                      className="shrink-0 rounded-lg p-1.5 text-white/20 transition hover:bg-red-500/10 hover:text-red-400"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-[150px_1fr_auto]">
+            <select
+              value={
+                supportingLinkInput.type
+              }
+              onChange={(event) =>
+                setSupportingLinkInput(
+                  (previous) => ({
+                    ...previous,
+                    type: event.target.value,
+                  }),
+                )
+              }
+              className="h-11 rounded-xl border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/50"
+            >
+              {LINK_TYPES.map(
+                (type) => (
+                  <option
+                    key={type}
+                    value={type}
+                  >
+                    {type}
+                  </option>
+                ),
+              )}
+            </select>
+
+            <input
+              value={
+                supportingLinkInput.url
+              }
+              onChange={(event) =>
+                setSupportingLinkInput(
+                  (previous) => ({
+                    ...previous,
+                    url: event.target.value,
+                  }),
+                )
+              }
+              placeholder="https://"
+              className="h-11 rounded-xl border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/50"
+            />
+
+            <button
+              type="button"
+              onClick={
+                addSupportingLink
+              }
+              disabled={
+                !supportingLinkInput.url.trim()
+              }
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#20dc73] px-4 text-sm font-bold text-black transition hover:bg-[#3aee89] disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <Plus className="h-4 w-4" />
+              Add
             </button>
           </div>
-        </section>
+        </div>
 
-        {/* Section C — Evidence Upload */}
-        <section>
-          <h3 className="mb-1 font-semibold text-white">Section C — Evidence Upload</h3>
-          <p className="mb-3 text-sm text-white/50">
-            Upload supporting evidence such as images, screenshots, PDFs, documents, videos, or audio files.
-            <br />
-            <span className="text-white/30">Maximum 50MB per file. Files are stored securely and reviewed by our analysts.</span>
-          </p>
-
-          {/* File dropzone */}
-          <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-[#143b28] bg-black/30 px-4 py-6 text-center transition hover:border-[#20dc73]/40">
-            <Upload className="h-8 w-8 text-white/30" />
-            <p className="text-sm text-white/50">
-              <span className="text-[#20dc73]">Click to upload</span> or drag and drop
+        {/* Evidence */}
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <div>
+            <p className="text-sm font-semibold text-white">
+              Evidence Files
             </p>
-            <p className="text-xs text-white/30">Images, Screenshots, PDFs, Documents, Videos, Audio</p>
+
+            <p className="mt-1 text-[10px] leading-5 text-white/30">
+              Screenshots, documents, PDFs, images, videos, audio, datasets, or related files.
+            </p>
+          </div>
+
+          <label className="mt-4 flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#143b28] bg-black/20 px-5 py-7 text-center transition hover:border-[#20dc73]/35 hover:bg-[#20dc73]/[0.02]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#20dc73]/8 text-[#20dc73]">
+              <Upload className="h-5 w-5" />
+            </div>
+
+            <p className="mt-3 text-sm font-medium text-white/55">
+              <span className="text-[#20dc73]">
+                Click to upload
+              </span>{" "}
+              or drag and drop
+            </p>
+
+            <p className="mt-1 text-[10px] text-white/25">
+              Maximum 50MB per file
+            </p>
+
             <input
               type="file"
               multiple
               accept="image/*,.pdf,.doc,.docx,.txt,.mp4,.mov,.avi,.mp3,.wav,.zip,.csv,.xls,.xlsx"
               className="hidden"
-              onChange={(e) => handleFileAdd(e.target.files)}
+              onChange={(event) =>
+                handleFileAdd(
+                  event.target.files,
+                )
+              }
             />
           </label>
 
-          {lastFileError && (
-            <p className="mt-2 text-xs text-red-400">{lastFileError}</p>
-          )}
-
-          {/* File list */}
-          {form.evidence_files.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {form.evidence_files.map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center gap-3 rounded border border-[#143b28] bg-black/30 px-3 py-2"
-                >
-                  <FileText className="h-4 w-4 shrink-0 text-[#20dc73]" />
-                  <span className="flex-1 truncate text-sm text-white/70">{file.name}</span>
-                  <span className="shrink-0 text-xs text-white/40">
-                    {(file.size / 1024 / 1024).toFixed(1)} MB
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeEvidenceFile(file.id)}
-                    className="shrink-0 text-white/30 hover:text-red-400"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+          {lastFileError ? (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-3 text-xs text-red-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                {lastFileError}
+              </span>
             </div>
-          )}
-        </section>
+          ) : null}
 
-        {/* Section D — Additional Notes */}
-        <section>
-          <h3 className="mb-1 font-semibold text-white">Section D — Additional Notes</h3>
-          <p className="mb-3 text-sm text-white/50">
-            Any additional information, context, or special instructions for our analysts.
+          {form.evidence_files.length >
+          0 ? (
+            <div className="mt-4 space-y-2">
+              {form.evidence_files.map(
+                (file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center gap-3 rounded-xl border border-[#143b28] bg-black/30 px-3 py-3"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#20dc73]/8">
+                      <FileText className="h-4 w-4 text-[#20dc73]" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-white/65">
+                        {file.name}
+                      </p>
+
+                      <p className="mt-0.5 text-[9px] text-white/25">
+                        {(
+                          file.size /
+                          1024 /
+                          1024
+                        ).toFixed(1)}{" "}
+                        MB
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeEvidenceFile(
+                          file.id,
+                        )
+                      }
+                      className="rounded-lg p-1.5 text-white/20 hover:bg-red-500/10 hover:text-red-400"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Notes */}
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <p className="text-sm font-semibold text-white">
+            Additional Notes
           </p>
+
+          <p className="mt-1 text-[10px] text-white/30">
+            Add any other context or instructions for our analysts.
+          </p>
+
           <textarea
-            value={form.additional_notes}
-            onChange={(e) => set({ additional_notes: e.target.value })}
-            placeholder="Any other relevant information, context, or special instructions..."
-            className="min-h-24 w-full rounded-md border border-[#143b28] bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#20dc73]/50"
+            value={
+              form.additional_notes
+            }
+            onChange={(event) =>
+              set({
+                additional_notes:
+                  event.target.value,
+              })
+            }
+            placeholder="Additional information..."
+            className="mt-4 min-h-24 w-full rounded-xl border border-[#143b28] bg-black px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/50"
           />
-        </section>
+        </div>
       </div>
     )
   }
 
-  /* ────────── Render: Step 5 — Investigation Scope ────────── */
+  /* ==========================================================
+     STEP 5
+  ========================================================== */
+
   function renderStep5() {
     return (
       <div className="space-y-5">
-        <p className="text-sm text-white/60">
-          Select the depth and scope of the investigation.
+        <p className="text-sm leading-6 text-white/45">
+          Select the investigation depth you need. ShadowNode will use this to determine the appropriate operational scope.
         </p>
+
         <div className="grid gap-3">
-          {INVESTIGATION_DEPTHS.map((d) => (
-            <button
-              key={d.value}
-              type="button"
-              onClick={() => set({ investigation_depth: d.value })}
-              className={`rounded-md border px-5 py-4 text-left transition ${
-                form.investigation_depth === d.value
-                  ? "border-[#20dc73] bg-[#20dc73]/10"
-                  : "border-[#143b28] hover:border-white/20"
-              }`}
-            >
-              <p className={`font-semibold ${form.investigation_depth === d.value ? "text-[#20dc73]" : "text-white"}`}>
-                {d.label}
-              </p>
-              <p className="mt-1 text-sm text-white/50">{d.desc}</p>
-            </button>
-          ))}
+          {INVESTIGATION_DEPTHS.map(
+            (depth) => {
+              const active =
+                form.investigation_depth ===
+                depth.value
+
+              return (
+                <button
+                  key={depth.value}
+                  type="button"
+                  onClick={() =>
+                    set({
+                      investigation_depth:
+                        depth.value,
+                    })
+                  }
+                  className={`group flex items-center gap-4 rounded-2xl border p-4 text-left transition ${
+                    active
+                      ? "border-[#20dc73]/55 bg-[#20dc73]/8"
+                      : "border-[#143b28] bg-black/20 hover:border-white/15"
+                  }`}
+                >
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-mono text-[10px] ${
+                      active
+                        ? "bg-[#20dc73] text-black"
+                        : "border border-[#143b28] bg-black/20 text-white/30"
+                    }`}
+                  >
+                    {active ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      depth.value
+                        .slice(0, 1)
+                        .toUpperCase()
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`text-sm font-semibold ${
+                        active
+                          ? "text-[#20dc73]"
+                          : "text-white/75"
+                      }`}
+                    >
+                      {depth.label}
+                    </p>
+
+                    <p className="mt-1 text-[11px] leading-5 text-white/30">
+                      {depth.desc}
+                    </p>
+                  </div>
+
+                  {active ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-[#20dc73]" />
+                  ) : (
+                    <ArrowRight className="h-4 w-4 shrink-0 text-white/15 transition group-hover:text-white/30" />
+                  )}
+                </button>
+              )
+            },
+          )}
         </div>
       </div>
     )
   }
 
-  /* ────────── Render: Step 6 — Priority & Timeline ────────── */
+  /* ==========================================================
+     STEP 6
+  ========================================================== */
+
   function renderStep6() {
     return (
       <div className="space-y-5">
-        <p className="text-sm text-white/60">
-          Set the priority level and preferred deadline for this investigation.
+        <p className="text-sm leading-6 text-white/45">
+          Set the priority and the date by which you would ideally like the investigation completed.
         </p>
 
-        {/* Priority */}
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">Priority</label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {PRIORITY_LEVELS.map((u) => (
-              <button
-                key={u.value}
-                type="button"
-                onClick={() => set({ urgency: u.value })}
-                className={`rounded-md border px-4 py-3 text-left transition ${
-                  form.urgency === u.value
-                    ? "border-[#20dc73] bg-[#20dc73]/10"
-                    : "border-[#143b28] hover:border-white/20"
-                }`}
-              >
-                <p className={`font-semibold text-sm ${form.urgency === u.value ? "text-[#20dc73]" : "text-white"}`}>
-                  {u.label}
-                </p>
-                <p className="mt-1 text-xs text-white/50">{u.desc}</p>
-              </button>
-            ))}
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {PRIORITY_LEVELS.map(
+            (priority) => {
+              const active =
+                form.urgency ===
+                priority.value
+
+              return (
+                <button
+                  key={priority.value}
+                  type="button"
+                  onClick={() =>
+                    set({
+                      urgency:
+                        priority.value,
+                    })
+                  }
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    active
+                      ? "border-[#20dc73]/55 bg-[#20dc73]/8"
+                      : "border-[#143b28] bg-black/20 hover:border-white/15"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p
+                      className={`text-sm font-semibold ${
+                        active
+                          ? "text-[#20dc73]"
+                          : "text-white/75"
+                      }`}
+                    >
+                      {priority.label}
+                    </p>
+
+                    {active ? (
+                      <CheckCircle2 className="h-4 w-4 text-[#20dc73]" />
+                    ) : null}
+                  </div>
+
+                  <p className="mt-1.5 text-[10px] leading-5 text-white/30">
+                    {priority.desc}
+                  </p>
+                </button>
+              )
+            },
+          )}
         </div>
 
-     {/* OSINT Completion Date */}
-<div>
-  <label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-    <Calendar className="mr-1.5 inline h-3 w-3" />
-    OSINT Completion Date (optional)
-  </label>
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-[#20dc73]" />
 
-  <input
-    type="date"
-    value={form.osint_completion_date}
-    onChange={(e) =>
-      set({
-        osint_completion_date: e.target.value,
-      })
-    }
-    className="h-10 w-full rounded-md border border-[#143b28] bg-black px-4 text-sm text-white outline-none focus:border-[#20dc73]/50"
-  />
+            <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+              Preferred completion date
+            </label>
+          </div>
 
-  <p className="mt-1 text-xs text-white/30">
-    The date by which you would ideally like the OSINT investigation completed.
-  </p>
-</div>
+          <input
+            type="date"
+            value={
+              form.osint_completion_date
+            }
+            onChange={(event) =>
+              set({
+                osint_completion_date:
+                  event.target.value,
+              })
+            }
+            className="mt-4 h-11 w-full rounded-xl border border-[#143b28] bg-black px-4 text-sm text-white outline-none transition focus:border-[#20dc73]/50"
+          />
+
+          <p className="mt-2 text-[10px] leading-4 text-white/25">
+            Optional. This is your preferred target date and not a guaranteed completion date.
+          </p>
+        </div>
       </div>
     )
   }
 
-  /* ────────── Render: Step 7 — Communication Preferences ────────── */
+  /* ==========================================================
+     STEP 7
+  ========================================================== */
+
   function renderStep7() {
     return (
-    
-    <div className="space-y-6">
-    
-    
-    <p className="text-sm text-white/60">
-    Provide your preferred communication details so our team can contact you.
-    </p>
-    
-    
-    <CommunicationSection
-    
-    country={form.client_country}
-    
-    customCountry={form.custom_country}
-    
-    
-    communicationMethod={
-    form.communication_method
-    }
-    
-    
-    email={
-    form.communication_email
-    }
-    
-    
-    whatsapp={
-    form.communication_whatsapp
-    }
-    
-    
-    signal={
-    form.communication_signal
-    }
-    
-    
-   onCountryChange={(value: string) => {
-  if (value === "custom") {
-    set({
-      client_country: value,
-      preferred_currency: "",
-    })
-
-    return
-  }
-
-  handleCountryChange(value)
-}}
-    
-    
-    
-    onCustomCountryChange={(value: any)=>
-    set({
-    custom_country:value
-    })
-    }
-    
-    
-    
-    onMethodChange={(value: any)=>
-    set({
-    communication_method:value
-    })
-    }
-    
-    
-    
-    onEmailChange={(value: any)=>
-    set({
-    communication_email:value
-    })
-    }
-    
-    
-    
-    onWhatsappChange={(value: any)=>
-    set({
-    communication_whatsapp:value
-    })
-    }
-    
-    
-    
-    onSignalChange={(value: any)=>
-    set({
-    communication_signal:value
-    })
-    }
-    
-    
-    
-    />
-    
-    
-    </div>
-    
-    )
-    
-    }
-
-  /* ────────── Render: Step 8 — Review & Legal Authorization ────────── */
-
-  function getSummaryItems() {
-    const items: { label: string; value: string }[] = [
-      { label: "Division", value: form.category === "osint" ? "OSINT Operations" : "Cybersecurity Services" },
-      {
-  label: "Service",
-  value:
-    form.service_type === "custom"
-      ? form.custom_description || "Custom Requirement"
-      : form.service_type,
-},
-      { label: "Objective", value: form.investigation_objective },
-    ]
-
-    items.push(
-     { label: "Subject Type", value: form.subject_type.replace("_", " ") },
-     { label: "Subject Name", value: form.subject_full_name },
-     { label: "Company", value: form.subject_company_name },
-     { label: "Domain", value: form.subject_domain },
-    )
-    items.push(
-      { label: "Depth", value: INVESTIGATION_DEPTHS.find((d) => d.value === form.investigation_depth)?.label || "" },
-      { label: "Priority", value: PRIORITY_LEVELS.find((u) => u.value === form.urgency)?.label || "" },
-      { label: "Country", value: form.client_country },
-      { label: "Currency", value: form.preferred_currency },
-      { label: "Communication", value: form.communication_method.replace(/_/g, " ") },
-    )
-
-    return items
-  }
-
- function renderStep8() {
-  return (
-    <div className="w-full min-w-0 space-y-5">
-      {/* ======================================================
-          SUMMARY
-      ====================================================== */}
-
-      <div className="w-full min-w-0 overflow-hidden rounded-md border border-[#143b28] bg-black/30 p-5">
-        <p className="mb-4 font-semibold text-white">
-          Review Your Investigation Request
+      <div className="space-y-5">
+        <p className="text-sm leading-6 text-white/45">
+          Choose the country associated with this request and how you would like ShadowNode to communicate with you.
         </p>
 
-        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-          {getSummaryItems().map((item) => (
-            <div
-              key={item.label}
-              className="min-w-0 max-w-full overflow-hidden"
-            >
-              <p className="text-xs uppercase tracking-[0.1em] text-white/40">
-                {item.label}
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <CommunicationSection
+            country={
+              form.client_country
+            }
+            customCountry={
+              form.custom_country
+            }
+            communicationMethod={
+              form.communication_method
+            }
+            email={
+              form.communication_email
+            }
+            whatsapp={
+              form.communication_whatsapp
+            }
+            signal={
+              form.communication_signal
+            }
+            onCountryChange={(
+              value: string,
+            ) => {
+              if (
+                value ===
+                "custom"
+              ) {
+                set({
+                  client_country:
+                    value,
+                  preferred_currency:
+                    "",
+                })
+
+                return
+              }
+
+              handleCountryChange(
+                value,
+              )
+            }}
+            onCustomCountryChange={(
+              value: string,
+            ) =>
+              set({
+                custom_country:
+                  value,
+              })
+            }
+            onMethodChange={(
+              value: string,
+            ) =>
+              set({
+                communication_method:
+                  value,
+              })
+            }
+            onEmailChange={(
+              value: string,
+            ) =>
+              set({
+                communication_email:
+                  value,
+              })
+            }
+            onWhatsappChange={(
+              value: string,
+            ) =>
+              set({
+                communication_whatsapp:
+                  value,
+              })
+            }
+            onSignalChange={(
+              value: string,
+            ) =>
+              set({
+                communication_signal:
+                  value,
+              })
+            }
+          />
+        </div>
+      </div>
+    )
+  }
+
+  /* ==========================================================
+     STEP 8
+  ========================================================== */
+
+  function getSummaryItems() {
+    return [
+      {
+        label: "Division",
+        value:
+          "OSINT Operations",
+      },
+      {
+        label: "Service",
+        value:
+          form.service_type ===
+          "custom"
+            ? form.custom_description ||
+              "Custom Requirement"
+            : form.service_type,
+      },
+      {
+        label: "Objective",
+        value:
+          form.investigation_objective,
+      },
+      {
+        label: "Subject",
+        value:
+          form.subject_type.replace(
+            "_",
+            " ",
+          ),
+      },
+      {
+        label: "Target",
+        value:
+          subjectSummary(),
+      },
+      {
+        label: "Depth",
+        value:
+          INVESTIGATION_DEPTHS.find(
+            (item) =>
+              item.value ===
+              form.investigation_depth,
+          )?.label ||
+          "",
+      },
+      {
+        label: "Priority",
+        value:
+          PRIORITY_LEVELS.find(
+            (item) =>
+              item.value ===
+              form.urgency,
+          )?.label ||
+          "",
+      },
+      {
+        label: "Country",
+        value:
+          form.client_country ===
+          "custom"
+            ? form.custom_country
+            : form.client_country,
+      },
+      {
+        label: "Currency",
+        value:
+          form.preferred_currency,
+      },
+      {
+        label: "Communication",
+        value:
+          form.communication_method.replace(
+            /_/g,
+            " ",
+          ),
+      },
+      {
+        label: "Completion Target",
+        value:
+          form.osint_completion_date ||
+          "Not specified",
+      },
+    ]
+  }
+
+  function renderStep8() {
+    const summaryItems =
+      getSummaryItems()
+
+    return (
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#20dc73]/10 text-[#20dc73]">
+              <FileCheck2 className="h-5 w-5" />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-white">
+                Investigation Brief
               </p>
 
-              <p
-                className="
-                  mt-1
-                  min-w-0
-                  max-w-full
-                  whitespace-pre-wrap
-                  break-words
-                  [overflow-wrap:anywhere]
-                  text-sm
-                  leading-6
-                  text-white/80
-                "
-              >
-                {item.value || "Not provided"}
+              <p className="mt-1 text-[10px] leading-5 text-white/30">
+                Review the information that will be sent to ShadowNode Operations.
               </p>
             </div>
-          ))}
+          </div>
 
-          {/* Supporting Links */}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {summaryItems.map(
+              (item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-[#143b28] bg-black/20 p-3.5"
+                >
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/25">
+                    {item.label}
+                  </p>
 
-          {form.supporting_links.length > 0 && (
-            <div className="min-w-0 max-w-full overflow-hidden sm:col-span-2">
-              <p className="text-xs uppercase tracking-[0.1em] text-white/40">
+                  <p className="mt-1.5 break-words text-xs leading-5 text-white/70">
+                    {item.value ||
+                      "Not provided"}
+                  </p>
+                </div>
+              ),
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-[#143b28] bg-black/20 p-3.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/25">
                 Supporting Links
               </p>
 
-              <p className="mt-1 text-sm leading-6 text-white/80">
-                {form.supporting_links.length} link(s) provided
+              <p className="mt-1.5 text-xs text-white/70">
+                {
+                  form.supporting_links
+                    .length
+                }{" "}
+                link
+                {form.supporting_links.length ===
+                1
+                  ? ""
+                  : "s"}{" "}
+                provided
               </p>
             </div>
-          )}
 
-          {/* Evidence Files */}
-
-          {form.evidence_files.length > 0 && (
-            <div className="min-w-0 max-w-full overflow-hidden sm:col-span-2">
-              <p className="text-xs uppercase tracking-[0.1em] text-white/40">
+            <div className="rounded-xl border border-[#143b28] bg-black/20 p-3.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/25">
                 Evidence Files
               </p>
 
-              <p className="mt-1 text-sm leading-6 text-white/80">
-                {form.evidence_files.length} file(s) uploaded
+              <p className="mt-1.5 text-xs text-white/70">
+                {
+                  form.evidence_files
+                    .length
+                }{" "}
+                file
+                {form.evidence_files.length ===
+                1
+                  ? ""
+                  : "s"}{" "}
+                attached
               </p>
             </div>
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* ======================================================
-          LEGAL AUTHORIZATION NOTICE
-      ====================================================== */}
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
 
-      <div className="w-full min-w-0 overflow-hidden rounded-md border border-yellow-500/30 bg-yellow-500/10 p-5">
-        <p className="text-sm font-semibold text-yellow-200">
-          Legal Authorization Required
-        </p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200/90">
+                Legal Authorization
+              </p>
 
-        <p
-          className="
-            mt-2
-            max-w-full
-            whitespace-pre-wrap
-            break-words
-            [overflow-wrap:anywhere]
-            text-sm
-            leading-6
-            text-yellow-100/70
-          "
-        >
-          By submitting this request, you confirm that you have the lawful
-          authority to request this investigation and that all information
-          provided is accurate and truthful.
-        </p>
-      </div>
-
-      {/* ======================================================
-          AUTHORIZATION CHECKBOX
-      ====================================================== */}
-
-      <div className="flex min-w-0 max-w-full items-start gap-3 overflow-hidden rounded-md border border-[#143b28] bg-black/30 p-5">
-        <input
-          id="auth-check"
-          type="checkbox"
-          checked={form.authorization_confirmed}
-          onChange={(e) =>
-            set({
-              authorization_confirmed: e.target.checked,
-            })
-          }
-          className="mt-1 h-4 w-4 shrink-0 accent-[#20dc73]"
-        />
-
-        <label
-          htmlFor="auth-check"
-          className="
-            min-w-0
-            max-w-full
-            break-words
-            [overflow-wrap:anywhere]
-            text-sm
-            leading-relaxed
-            text-white/80
-          "
-        >
-          I confirm that I have{" "}
-          <strong>lawful authorization</strong> to request this
-          investigation and that the information provided is accurate
-          to the best of my knowledge.
-        </label>
-      </div>
-
-      {/* ======================================================
-          SUBMISSION STATUS
-      ====================================================== */}
-
-      {submitting && (
-        <div className="flex min-w-0 items-center justify-center gap-2 overflow-hidden py-4 text-[#20dc73]">
-          <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
-
-          <span
-            className="
-              min-w-0
-              max-w-full
-              break-words
-              text-center
-              text-sm
-            "
-          >
-            Submitting investigation request...
-          </span>
+              <p className="mt-2 text-xs leading-6 text-amber-100/55">
+                By submitting this request, you confirm that you have lawful authority to request this investigation and that the information supplied is accurate to the best of your knowledge.
+              </p>
+            </div>
+          </div>
         </div>
-      )}
-    </div>
-  )
-}
 
-  /* ────────── Main Step Renderer ────────── */
- function renderStep() {
-  switch (step) {
-    case 1:
-      return renderStep1()
-
-    case 2:
-      return renderStep2()
-
-    case 3:
-      return renderStep3()
-
-    case 4:
-      return renderStep4()
-
-    case 5:
-      return renderStep5()
-
-    case 6:
-      return renderStep6()
-
-    case 7:
-      return renderStep7()
-
-    case 8:
-      return renderStep8()
-
-    default:
-      return null
-  }
-}
-  /* ────────── Main Render ────────── */
-  return (
-    <div className="rounded-md border border-[#143b28] bg-[#06110f] p-6">
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between border-b border-[#143b28] pb-4">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">
-          Step {step} of 8
-        </p>
-        <p className="text-xs text-white/40">{STEPS.find((s) => s.id === step)?.label}</p>
-      </div>
-
-      {/* Progress Dots */}
-      <div className="mb-6 flex gap-1">
-        {STEPS.map((s) => (
-          <div
-            key={s.id}
-            className={`h-1.5 flex-1 rounded-full transition ${
-              s.id < step ? "bg-[#20dc73]" : s.id === step ? "bg-[#20dc73]/70" : "bg-[#143b28]"
-            }`}
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#143b28] bg-black/20 p-5 transition hover:border-[#20dc73]/30">
+          <input
+            id="osint-auth-check"
+            type="checkbox"
+            checked={
+              form.authorization_confirmed
+            }
+            onChange={(event) =>
+              set({
+                authorization_confirmed:
+                  event.target
+                    .checked,
+              })
+            }
+            className="mt-1 h-4 w-4 shrink-0 accent-[#20dc73]"
           />
-        ))}
+
+          <span className="text-xs leading-6 text-white/65">
+            I confirm that I have{" "}
+            <strong className="text-white">
+              lawful authorization
+            </strong>{" "}
+            to request this investigation and that the information provided is accurate to the best of my knowledge.
+          </span>
+        </label>
+
+        {submitting ? (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-[#143b28] bg-black/20 py-4 text-xs text-[#20dc73]">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Submitting investigation request...
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  /* ==========================================================
+     RENDER STEP
+  ========================================================== */
+
+  function renderStep() {
+    switch (step) {
+      case 1:
+        return renderStep1()
+
+      case 2:
+        return renderStep2()
+
+      case 3:
+        return renderStep3()
+
+      case 4:
+        return renderStep4()
+
+      case 5:
+        return renderStep5()
+
+      case 6:
+        return renderStep6()
+
+      case 7:
+        return renderStep7()
+
+      case 8:
+        return renderStep8()
+
+      default:
+        return null
+    }
+  }
+
+  /* ==========================================================
+     CURRENT STEP
+  ========================================================== */
+
+  const currentStep =
+    STEPS.find(
+      (item) =>
+        item.id === step,
+    ) || STEPS[0]
+
+  const CurrentIcon =
+    currentStep.icon
+
+  const completedSteps =
+    STEPS.filter(
+      (item) =>
+        isStepComplete(
+          item.id,
+        ),
+    ).length
+
+  const progress =
+    (step / STEPS.length) *
+    100
+
+  /* ==========================================================
+     MAIN RENDER
+  ========================================================== */
+
+  return (
+    <div className="w-full">
+      {/* ======================================================
+          MOBILE HEADER
+      ====================================================== */}
+
+      <div className="mb-4 overflow-hidden rounded-2xl border border-[#143b28] bg-[#06110f] lg:hidden">
+        <button
+          type="button"
+          onClick={() =>
+            setMobileStepsOpen(
+              (current) =>
+                !current,
+            )
+          }
+          className="flex w-full items-center gap-3 p-4 text-left"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#20dc73]/25 bg-[#20dc73]/8">
+            <CurrentIcon className="h-5 w-5 text-[#20dc73]" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#20dc73]">
+              Investigation Intake · Step{" "}
+              {step}/{STEPS.length}
+            </p>
+
+            <p className="mt-1 truncate text-sm font-semibold text-white">
+              {currentStep.label}
+            </p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="font-mono text-[9px] text-white/25">
+              {Math.round(
+                progress,
+              )}
+              %
+            </span>
+
+            {mobileStepsOpen ? (
+              <ChevronUp className="h-4 w-4 text-white/30" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-white/30" />
+            )}
+          </div>
+        </button>
+
+        <div className="mx-4 mb-4 h-1 overflow-hidden rounded-full bg-white/5">
+          <div
+            className="h-full rounded-full bg-[#20dc73] transition-all duration-300"
+            style={{
+              width: `${progress}%`,
+            }}
+          />
+        </div>
+
+        {mobileStepsOpen ? (
+          <div className="border-t border-[#143b28] p-3">
+            <div className="grid gap-1">
+              {STEPS.map(
+                (item) => {
+                  const Icon =
+                    item.icon
+
+                  const active =
+                    item.id ===
+                    step
+
+                  const complete =
+                    isStepComplete(
+                      item.id,
+                    )
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() =>
+                        jumpToStep(
+                          item.id,
+                        )
+                      }
+                      disabled={
+                        item.id >
+                          step ||
+                        submitting
+                      }
+                      className={`flex items-center gap-3 rounded-xl p-3 text-left ${
+                        active
+                          ? "bg-[#20dc73]/8"
+                          : "hover:bg-white/[0.02]"
+                      }`}
+                    >
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
+                          active
+                            ? "border-[#20dc73] bg-[#20dc73] text-black"
+                            : complete
+                              ? "border-[#20dc73]/30 bg-[#20dc73]/8 text-[#20dc73]"
+                              : "border-[#143b28] text-white/25"
+                        }`}
+                      >
+                        {complete ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Icon className="h-3.5 w-3.5" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white/65">
+                          {item.label}
+                        </p>
+
+                        <p className="mt-0.5 text-[9px] text-white/25">
+                          Step{" "}
+                          {item.id}
+                        </p>
+                      </div>
+                    </button>
+                  )
+                },
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
 
-<form
-  onSubmit={(e) => {
-    e.preventDefault()
+      {/* ======================================================
+          MAIN WIZARD
+      ====================================================== */}
 
-    if (!canProceed() || submitting) {
-      return
-    }
+      <div className="overflow-hidden rounded-2xl border border-[#143b28] bg-[#06110f] shadow-[0_20px_70px_rgba(0,0,0,0.2)]">
+        <div className="grid lg:grid-cols-[245px_1fr]">
+          {/* ==================================================
+              DESKTOP RAIL
+          ================================================== */}
 
-    if (step < 8) {
-      nextStep()
-    } else {
-      handleSubmit()
-    }
-  }}
->
-        {renderStep()}
+          <aside className="hidden border-r border-[#143b28] bg-black/20 lg:block">
+            <div className="sticky top-6 p-5">
+              <div className="mb-7">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-[#20dc73]" />
 
-        {/* Navigation */}
-        <div
-          className={`mt-6 flex items-center ${
-            step === 1 ? "justify-end" : "justify-between"
-          } border-t border-[#143b28] pt-5`}
-        >
-          {step > 1 ? (
-            <button
-              type="button"
-              onClick={prevStep}
-              className="inline-flex h-10 items-center gap-2 rounded border border-[#143b28] px-5 text-sm text-white/60 hover:border-white/30 hover:text-white"
-            >
-              <ChevronUp className="h-4 w-4" /> Back
-            </button>
-          ) : (
-            <div />
-          )}
-          <button
-            type="submit"
-        disabled={submitting}
-            className="inline-flex h-10 items-center gap-2 rounded bg-[#20dc73] px-6 text-sm font-bold text-black transition enabled:hover:bg-[#20dc73]/80 disabled:opacity-40"
-          >
-            {step < 8 ? (
-              <>
-                Next <ChevronDown className="h-4 w-4" />
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4" /> Submit Investigation Request
-              </>
-            )}
-          </button>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#20dc73]">
+                    Secure Intake
+                  </span>
+                </div>
+
+                <h2 className="mt-3 text-lg font-bold text-white">
+                  OSINT Investigation
+                </h2>
+
+                <p className="mt-2 text-[11px] leading-5 text-white/30">
+                  Build a structured intelligence request for ShadowNode Operations.
+                </p>
+              </div>
+
+              <div className="relative space-y-1">
+                <div className="absolute left-[18px] top-5 bottom-5 w-px bg-[#143b28]" />
+
+                <div
+                  className="absolute left-[18px] top-5 w-px bg-[#20dc73] transition-all duration-300"
+                  style={{
+                    height: `${Math.max(
+                      0,
+                      progress - 12.5,
+                    )}%`,
+                  }}
+                />
+
+                {STEPS.map(
+                  (item) => {
+                    const Icon =
+                      item.icon
+
+                    const active =
+                      item.id ===
+                      step
+
+                    const complete =
+                      isStepComplete(
+                        item.id,
+                      )
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() =>
+                          jumpToStep(
+                            item.id,
+                          )
+                        }
+                        disabled={
+                          item.id >
+                            step ||
+                          submitting
+                        }
+                        className={`relative z-10 flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition ${
+                          active
+                            ? "bg-[#20dc73]/7"
+                            : complete
+                              ? "hover:bg-white/[0.02]"
+                              : "opacity-55"
+                        }`}
+                      >
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
+                            active
+                              ? "border-[#20dc73] bg-[#20dc73] text-black"
+                              : complete
+                                ? "border-[#20dc73]/35 bg-[#20dc73]/8 text-[#20dc73]"
+                                : "border-[#143b28] bg-[#06110f] text-white/25"
+                          }`}
+                        >
+                          {complete ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Icon className="h-4 w-4" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={`text-[11px] font-semibold ${
+                              active
+                                ? "text-white"
+                                : complete
+                                  ? "text-white/60"
+                                  : "text-white/40"
+                            }`}
+                          >
+                            {item.label}
+                          </p>
+
+                          <p className="mt-0.5 text-[8px] uppercase tracking-[0.12em] text-white/20">
+                            {complete
+                              ? "Completed"
+                              : active
+                                ? "Current"
+                                : `Stage ${item.id}`}
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  },
+                )}
+              </div>
+
+              <div className="mt-8 rounded-xl border border-[#143b28] bg-[#06110f] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.13em] text-white/30">
+                    Request Progress
+                  </span>
+
+                  <span className="font-mono text-[10px] text-[#20dc73]">
+                    {Math.round(
+                      progress,
+                    )}
+                    %
+                  </span>
+                </div>
+
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
+                  <div
+                    className="h-full rounded-full bg-[#20dc73] transition-all duration-300"
+                    style={{
+                      width: `${progress}%`,
+                    }}
+                  />
+                </div>
+
+                <p className="mt-2 text-[9px] text-white/20">
+                  {completedSteps} of{" "}
+                  {STEPS.length} stages
+                  completed
+                </p>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2 text-[9px] text-white/20">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#20dc73]/60" />
+
+                <span>
+                  Protected ShadowNode submission
+                </span>
+              </div>
+            </div>
+          </aside>
+
+          {/* ==================================================
+              CONTENT
+          ================================================== */}
+
+          <section className="min-w-0">
+            {/* Header */}
+            <div className="border-b border-[#143b28] px-5 py-5 sm:px-7 sm:py-6">
+              <div className="flex items-start justify-between gap-5">
+                <div className="flex min-w-0 items-start gap-4">
+                  <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#20dc73]/25 bg-[#20dc73]/8 sm:flex">
+                    <CurrentIcon className="h-5 w-5 text-[#20dc73]" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#20dc73]">
+                      OSINT OPERATIONS · STAGE{" "}
+                      {String(
+                        step,
+                      ).padStart(
+                        2,
+                        "0",
+                      )}
+                    </p>
+
+                    <h1 className="mt-1 text-xl font-bold tracking-tight text-white sm:text-2xl">
+                      {currentStep.label}
+                    </h1>
+
+                    <p className="mt-1.5 max-w-2xl text-xs leading-5 text-white/35 sm:text-sm">
+                      {
+                        currentStep.description
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-[#143b28] bg-black/20 px-3 py-2 sm:flex">
+                  <span className="font-mono text-[9px] text-white/30">
+                    {step} /{" "}
+                    {STEPS.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress */}
+              <div className="mt-5 flex items-center gap-2">
+                {STEPS.map(
+                  (item) => {
+                    const active =
+                      item.id ===
+                      step
+
+                    const complete =
+                      isStepComplete(
+                        item.id,
+                      )
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                          complete
+                            ? "bg-[#20dc73]"
+                            : active
+                              ? "bg-[#20dc73]/60"
+                              : "bg-[#143b28]"
+                        }`}
+                      />
+                    )
+                  },
+                )}
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-6 sm:px-7 sm:py-7">
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+
+                  if (
+                    step <
+                    STEPS.length
+                  ) {
+                    nextStep()
+                  } else {
+                    handleSubmit()
+                  }
+                }}
+              >
+                <div
+                  key={step}
+                  className="animate-[osintStepIn_.2s_ease-out]"
+                >
+                  {renderStep()}
+                </div>
+
+                {/* Navigation */}
+                <div className="mt-8 border-t border-[#143b28] pt-5">
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      {step > 1 ? (
+                        <button
+                          type="button"
+                          onClick={
+                            prevStep
+                          }
+                          disabled={
+                            submitting
+                          }
+                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#143b28] px-5 text-sm font-medium text-white/55 transition hover:border-white/20 hover:bg-white/[0.03] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Back
+                        </button>
+                      ) : (
+                        <div className="hidden sm:block">
+                          <p className="text-[9px] uppercase tracking-[0.14em] text-white/20">
+                            Secure intake
+                          </p>
+
+                          <p className="mt-1 text-[10px] text-white/30">
+                            One stage at a time.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3">
+                      <div className="hidden text-right sm:block">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-white/20">
+                          Progress
+                        </p>
+
+                        <p className="mt-1 font-mono text-[10px] text-white/35">
+                          {Math.round(
+                            progress,
+                          )}
+                          %
+                        </p>
+                      </div>
+
+                      {step <
+                      STEPS.length ? (
+                        <button
+                          type="submit"
+                          disabled={
+                            submitting ||
+                            !canProceed()
+                          }
+                          className="inline-flex h-11 min-w-[135px] items-center justify-center gap-2 rounded-xl bg-[#20dc73] px-6 text-sm font-bold text-black shadow-[0_10px_30px_rgba(32,220,115,0.07)] transition hover:bg-[#3aee89] disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                          Continue
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <button
+                          type="submit"
+                          disabled={
+                            submitting ||
+                            !canProceed()
+                          }
+                          className="inline-flex h-11 min-w-[190px] items-center justify-center gap-2 rounded-xl bg-[#20dc73] px-6 text-sm font-bold text-black shadow-[0_10px_30px_rgba(32,220,115,0.07)] transition hover:bg-[#3aee89] disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                          {submitting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Submitting...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-4 w-4" />
+                              Submit Investigation
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </section>
         </div>
-      </form>
+      </div>
+
+      <style jsx global>{`
+        @keyframes osintStepIn {
+          from {
+            opacity: 0;
+            transform: translateY(5px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   )
 }

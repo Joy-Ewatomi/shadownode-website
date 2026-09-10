@@ -6,6 +6,14 @@ import {
 
 import dns from "dns"
 
+// ============================================================
+// DNS
+// ============================================================
+//
+// Prefer IPv4 because this project previously encountered
+// IPv4/IPv6 connectivity differences with external services.
+//
+
 dns.setDefaultResultOrder("ipv4first")
 
 // ============================================================
@@ -50,20 +58,69 @@ const connectionString =
   )
 
 // ============================================================
-// POOL CONFIGURATION
+// CONFIGURATION
 // ============================================================
 
-const poolMax = Number(
-  process.env.DB_POOL_MAX || "10",
+const poolMaxRaw = Number(
+  process.env.DB_POOL_MAX ?? "10",
 )
 
-const poolIdleTimeout = Number(
-  process.env.DB_IDLE_TIMEOUT_MS || "30000",
+const poolIdleTimeoutRaw = Number(
+  process.env.DB_IDLE_TIMEOUT_MS ?? "60000",
 )
 
-const poolConnectionTimeout = Number(
-  process.env.DB_CONNECTION_TIMEOUT_MS || "5000",
+const poolConnectionTimeoutRaw = Number(
+  process.env.DB_CONNECTION_TIMEOUT_MS ?? "5000",
 )
+
+const poolQueryRetriesRaw = Number(
+  process.env.DB_QUERY_RETRIES ?? "1",
+)
+
+// ============================================================
+// NORMALIZED CONFIGURATION
+// ============================================================
+
+const poolMax =
+  Number.isFinite(poolMaxRaw) &&
+  poolMaxRaw > 0
+    ? Math.min(
+        Math.floor(poolMaxRaw),
+        20,
+      )
+    : 10
+
+const poolIdleTimeout =
+  Number.isFinite(
+    poolIdleTimeoutRaw,
+  ) &&
+  poolIdleTimeoutRaw >= 1000
+    ? poolIdleTimeoutRaw
+    : 60000
+
+const poolConnectionTimeout =
+  Number.isFinite(
+    poolConnectionTimeoutRaw,
+  ) &&
+  poolConnectionTimeoutRaw >= 1000
+    ? Math.min(
+        poolConnectionTimeoutRaw,
+        10000,
+      )
+    : 5000
+
+const poolQueryRetries =
+  Number.isFinite(
+    poolQueryRetriesRaw,
+  ) &&
+  poolQueryRetriesRaw >= 0
+    ? Math.min(
+        Math.floor(
+          poolQueryRetriesRaw,
+        ),
+        2,
+      )
+    : 1
 
 // ============================================================
 // CREATE POOL
@@ -77,59 +134,52 @@ function createPool(): Pool | null {
   return new Pool({
     connectionString,
 
+    /*
+     * Preserve the existing project's SSL behavior.
+     *
+     * Your current Supabase connection is already working with
+     * this configuration, so do not force SSL changes here.
+     */
     ssl:
       process.env.POSTGRES_SSL === "true"
         ? {
-            rejectUnauthorized: false,
+            rejectUnauthorized:
+              false,
           }
         : undefined,
 
     /*
-     * Keep the pool deliberately controlled.
-     *
-     * Increasing this blindly can make Supabase/Postgres
-     * connection exhaustion worse rather than better.
+     * Keep the pool deliberately conservative.
      */
-    max:
-      Number.isFinite(poolMax) &&
-      poolMax > 0
-        ? Math.min(poolMax, 20)
-        : 10,
+    max: poolMax,
 
     /*
-     * Connections that have been sitting unused for this
-     * long can be released.
+     * Keep idle connections around longer so normal dashboard
+     * navigation does not constantly require new remote
+     * PostgreSQL connections.
      */
     idleTimeoutMillis:
-      Number.isFinite(poolIdleTimeout) &&
-      poolIdleTimeout >= 1000
-        ? poolIdleTimeout
-        : 30000,
+      poolIdleTimeout,
 
     /*
-     * Do not wait 10+ seconds for a connection when the
-     * pool/database is unavailable.
+     * Do not allow a single connection attempt to hang
+     * indefinitely.
      */
     connectionTimeoutMillis:
-      Number.isFinite(
-        poolConnectionTimeout,
-      ) &&
-      poolConnectionTimeout >= 1000
-        ? Math.min(
-            poolConnectionTimeout,
-            10000,
-          )
-        : 5000,
-
-    allowExitOnIdle: false,
+      poolConnectionTimeout,
 
     /*
-     * Recycle connections periodically.
+     * Keep TCP connections alive.
      *
-     * This helps prevent long-lived stale connections from
-     * accumulating in development environments.
+     * This is useful with remote databases and can help
+     * identify dead network connections rather than silently
+     * keeping stale sockets around.
      */
-    maxLifetimeSeconds: 300,
+    keepAlive: true,
+    keepAliveInitialDelayMillis:
+      10000,
+
+    allowExitOnIdle: false,
   })
 }
 
@@ -141,24 +191,32 @@ export const db =
   globalThis.shadownodePgPool ??
   createPool()
 
+/*
+ * In development, Next.js/Turbopack can reload modules.
+ *
+ * Reuse one shared Pool across reloads so we do not create
+ * multiple pools unnecessarily.
+ */
 if (
   db &&
-  process.env.NODE_ENV !== "production"
+  process.env.NODE_ENV !==
+    "production"
 ) {
-  globalThis.shadownodePgPool = db
+  globalThis.shadownodePgPool =
+    db
 }
 
 // ============================================================
 // DATABASE STATUS HELPERS
 // ============================================================
 
-export function isDatabaseConfigured() {
+export function isDatabaseConfigured(): boolean {
   return Boolean(db)
 }
 
 export function isDatabaseConfigurationError(
   error: unknown,
-) {
+): boolean {
   return (
     error instanceof Error &&
     error.message.includes(
@@ -169,25 +227,32 @@ export function isDatabaseConfigurationError(
 
 export function isDatabaseNetworkError(
   error: unknown,
-) {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    [
-      "ENETUNREACH",
-      "ETIMEDOUT",
-      "ECONNREFUSED",
-      "ENOTFOUND",
-    ].includes(
-      String(
-        (
-          error as {
-            code?: unknown
-          }
-        ).code,
-      ),
-    )
-  )
+): boolean {
+  if (
+    !(error instanceof Error)
+  ) {
+    return false
+  }
+
+  const code =
+    "code" in error
+      ? String(
+          (
+            error as {
+              code?: unknown
+            }
+          ).code,
+        )
+      : ""
+
+  return [
+    "ENETUNREACH",
+    "ETIMEDOUT",
+    "ECONNREFUSED",
+    "ENOTFOUND",
+    "ECONNRESET",
+    "EHOSTUNREACH",
+  ].includes(code)
 }
 
 // ============================================================
@@ -200,10 +265,10 @@ const CONNECTION_TERMINATED_CODES =
     "57P02",
     "57P03",
     "08000",
-    "08003",
-    "08006",
     "08001",
+    "08003",
     "08004",
+    "08006",
     "53300",
   ])
 
@@ -216,24 +281,23 @@ function isConnectionTerminatedError(
     return false
   }
 
-  if (
+  const code =
     "code" in error
-  ) {
-    const code = String(
-      (
-        error as {
-          code?: unknown
-        }
-      ).code,
-    )
+      ? String(
+          (
+            error as {
+              code?: unknown
+            }
+          ).code,
+        )
+      : ""
 
-    if (
-      CONNECTION_TERMINATED_CODES.has(
-        code,
-      )
-    ) {
-      return true
-    }
+  if (
+    CONNECTION_TERMINATED_CODES.has(
+      code,
+    )
+  ) {
+    return true
   }
 
   const message =
@@ -254,6 +318,12 @@ function isConnectionTerminatedError(
     ) ||
     message.includes(
       "connection ended",
+    ) ||
+    message.includes(
+      "socket hang up",
+    ) ||
+    message.includes(
+      "connection terminated unexpectedly",
     )
   )
 }
@@ -271,26 +341,25 @@ function isTimeoutError(
     return false
   }
 
-  if (
+  const code =
     "code" in error
-  ) {
-    const code = String(
-      (
-        error as {
-          code?: unknown
-        }
-      ).code,
-    )
+      ? String(
+          (
+            error as {
+              code?: unknown
+            }
+          ).code,
+        )
+      : ""
 
-    if (
-      [
-        "ETIMEDOUT",
-        "ECONNRESET",
-        "ECONNREFUSED",
-      ].includes(code)
-    ) {
-      return true
-    }
+  if (
+    [
+      "ETIMEDOUT",
+      "ECONNRESET",
+      "ECONNREFUSED",
+    ].includes(code)
+  ) {
+    return true
   }
 
   const message =
@@ -305,19 +374,22 @@ function isTimeoutError(
     ) ||
     message.includes(
       "connection terminated",
+    ) ||
+    message.includes(
+      "connection terminated unexpectedly",
     )
   )
 }
 
 // ============================================================
-// QUERY RETRY POLICY
+// RETRY POLICY
 // ============================================================
 
 function shouldRetryQuery(
   error: unknown,
   attempt: number,
   retries: number,
-) {
+): boolean {
   if (
     attempt >= retries
   ) {
@@ -325,23 +397,59 @@ function shouldRetryQuery(
   }
 
   /*
-   * A connection timeout usually means the pool cannot
-   * obtain a connection. Immediately retrying the same
-   * operation can make pool pressure worse.
+   * We DO retry network/connection failures.
    *
-   * Therefore timeout errors are NOT retried here.
+   * Your environment has already demonstrated intermittent
+   * connection establishment failures to the Supabase pooler.
+   *
+   * A single controlled retry gives a request a chance to
+   * recover from a transient dead/stale connection.
    */
-  if (
-    isTimeoutError(error)
-  ) {
-    return false
-  }
+  return (
+    isTimeoutError(error) ||
+    isConnectionTerminatedError(
+      error,
+    ) ||
+    isDatabaseNetworkError(
+      error,
+    )
+  )
+}
 
+// ============================================================
+// BACKOFF
+// ============================================================
+
+function getRetryDelay(
+  attempt: number,
+): number {
   /*
-   * Retry only genuine terminated/stale connections.
+   * Small exponential backoff:
+   *
+   * attempt 0 → 250ms
+   * attempt 1 → 500ms
+   *
+   * We cap this at 1000ms.
    */
-  return isConnectionTerminatedError(
-    error,
+  return Math.min(
+    250 *
+      Math.pow(
+        2,
+        attempt,
+      ),
+    1000,
+  )
+}
+
+function wait(
+  milliseconds: number,
+): Promise<void> {
+  return new Promise(
+    (resolve) =>
+      setTimeout(
+        resolve,
+        milliseconds,
+      ),
   )
 }
 
@@ -354,7 +462,7 @@ export async function query<
 >(
   text: string,
   params: unknown[] = [],
-  retries = 1,
+  retries = poolQueryRetries,
 ): Promise<QueryResult<T>> {
   if (!db) {
     throw new Error(
@@ -362,48 +470,114 @@ export async function query<
     )
   }
 
+  const safeRetries =
+    Number.isFinite(retries) &&
+    retries >= 0
+      ? Math.min(
+          Math.floor(retries),
+          2,
+        )
+      : 0
+
   for (
     let attempt = 0;
-    attempt <= retries;
+    attempt <= safeRetries;
     attempt++
   ) {
+    const startedAt =
+      Date.now()
+
     try {
-      return await db.query<T>(
-        text,
-        params,
+      const result =
+        await db.query<T>(
+          text,
+          params,
+        )
+
+      const duration =
+        Date.now() -
+        startedAt
+
+      if (
+        duration >= 1500
+      ) {
+        console.warn(
+          `[db] Slow query: ${duration}ms`,
+          {
+            attempt:
+              attempt + 1,
+            rows:
+              result.rowCount ??
+              0,
+          },
+        )
+      }
+
+      return result
+    } catch (
+      error: unknown
+    ) {
+      const duration =
+        Date.now() -
+        startedAt
+
+      const code =
+        error &&
+        typeof error ===
+          "object" &&
+        "code" in error
+          ? String(
+              (
+                error as {
+                  code?: unknown
+                }
+              ).code,
+            )
+          : undefined
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error)
+
+      console.error(
+        "[db] Query failed",
+        {
+          attempt:
+            attempt + 1,
+          duration,
+          code,
+          message,
+        },
       )
-    } catch (error: unknown) {
+
       const retryable =
         shouldRetryQuery(
           error,
           attempt,
-          retries,
+          safeRetries,
         )
 
       if (!retryable) {
         throw error
       }
 
+      const delay =
+        getRetryDelay(
+          attempt,
+        )
+
       console.warn(
-        `[db] Query attempt ${
-          attempt + 1
-        } failed: ${
-          error instanceof Error
-            ? error.message
-            : "unknown database error"
-        }. Retrying once...`,
+        `[db] Transient connection failure. Retrying in ${delay}ms...`,
+        {
+          attempt:
+            attempt + 1,
+          retries:
+            safeRetries,
+        },
       )
 
-      /*
-       * Small backoff for a terminated connection.
-       */
-      await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            250,
-          ),
-      )
+      await wait(delay)
     }
   }
 
@@ -427,10 +601,15 @@ export async function withTransaction<T>(
     )
   }
 
+  /*
+   * Do not import PoolClient from "pg".
+   *
+   * Your installed pg typings do not export it from that module.
+   * We already define the small client interface required by this
+   * project, so use the returned client structurally.
+   */
   const client =
-    (await (
-      db.connect() as unknown as Promise<DatabasePoolClient>
-    ))
+    (await db.connect()) as unknown as DatabasePoolClient
 
   try {
     await client.query(
@@ -439,20 +618,24 @@ export async function withTransaction<T>(
 
     try {
       const result =
-        await callback(client)
+        await callback(
+          client,
+        )
 
       await client.query(
         "COMMIT",
       )
 
       return result
-    } catch (error) {
+    } catch (
+      error: unknown
+    ) {
       try {
         await client.query(
           "ROLLBACK",
         )
       } catch (
-        rollbackError
+        rollbackError: unknown
       ) {
         console.error(
           "[db] Transaction rollback failed",
