@@ -4,24 +4,36 @@ import {
   Background,
   Controls,
   MiniMap,
-  addEdge,
   type Connection,
   type Edge,
   type Node,
   ReactFlow,
 } from "reactflow"
+
 import {
   AlertTriangle,
   Fingerprint,
   GitBranch,
+  Globe,
   Loader2,
+  MapPin,
+  Network,
   Plus,
   RefreshCw,
   Save,
   ShieldCheck,
+  User,
+  Wallet,
   X,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
+
 import { useParams } from "next/navigation"
 
 import "reactflow/dist/style.css"
@@ -34,6 +46,140 @@ const nodeStyle = {
   borderRadius: "8px",
   whiteSpace: "pre-line" as const,
 }
+
+const ENTITY_TYPES = [
+  {
+    value: "PERSON",
+    label: "PERSON",
+  },
+  {
+    value: "ORGANIZATION",
+    label: "ORGANIZATION",
+  },
+  {
+    value: "LOCATION",
+    label: "LOCATION",
+  },
+  {
+    value: "EMAIL",
+    label: "EMAIL",
+  },
+  {
+    value: "PHONE",
+    label: "PHONE",
+  },
+  {
+    value: "USERNAME",
+    label: "USERNAME",
+  },
+  {
+    value: "SOCIAL_MEDIA_PROFILE",
+    label: "SOCIAL MEDIA PROFILE",
+  },
+  {
+    value: "WEBSITE",
+    label: "WEBSITE",
+  },
+  {
+    value: "DOMAIN",
+    label: "DOMAIN",
+  },
+  {
+    value: "IP_ADDRESS",
+    label: "IP ADDRESS",
+  },
+  {
+    value: "DOCUMENT",
+    label: "DOCUMENT",
+  },
+  {
+    value: "VEHICLE",
+    label: "VEHICLE",
+  },
+  {
+    value: "CRYPTOCURRENCY_WALLET",
+    label: "CRYPTOCURRENCY WALLET",
+  },
+] as const
+
+const RELATIONSHIP_TYPES = [
+  {
+    value: "associated_with",
+    label: "Associated With",
+  },
+  {
+    value: "works_for",
+    label: "Works For",
+  },
+  {
+    value: "director_of",
+    label: "Director Of",
+  },
+  {
+    value: "owner_of",
+    label: "Owner Of",
+  },
+  {
+    value: "owns",
+    label: "Owns",
+  },
+  {
+    value: "has_profile_on",
+    label: "Has Profile On",
+  },
+  {
+    value: "uses_username",
+    label: "Uses Username",
+  },
+  {
+    value: "uses_email",
+    label: "Uses Email",
+  },
+  {
+    value: "uses_phone",
+    label: "Uses Phone",
+  },
+  {
+    value: "registered_at",
+    label: "Registered At",
+  },
+  {
+    value: "located_at",
+    label: "Located At",
+  },
+  {
+    value: "hosts",
+    label: "Hosts",
+  },
+  {
+    value: "resolves_to",
+    label: "Resolves To",
+  },
+  {
+    value: "alias_of",
+    label: "Alias Of",
+  },
+  {
+    value: "formerly_known_as",
+    label: "Formerly Known As",
+  },
+  {
+    value: "linked_to",
+    label: "Linked To",
+  },
+  {
+    value: "communicated_with",
+    label: "Communicated With",
+  },
+  {
+    value: "financial_connection",
+    label: "Financial Connection",
+  },
+  {
+    value: "references",
+    label: "References",
+  },
+] as const
 
 type GraphEntity = {
   id: string
@@ -59,39 +205,101 @@ type GraphErrorResponse = {
 }
 
 function entityTypeLabel(value: string) {
-  return value.replace(/_/g, " ")
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase(),
+    )
 }
 
-function entityNodeLabel(entity: GraphEntity) {
-  return `${entity.name}\n${entityTypeLabel(entity.entity_type)}`
+function entityNodeLabel(
+  entity: GraphEntity,
+) {
+  return `${entity.name}\n${entityTypeLabel(
+    entity.entity_type,
+  )}`
+}
+
+function relationshipLabel(
+  value: string,
+) {
+  return value.replace(
+    /_/g,
+    " ",
+  )
+}
+
+function entityIcon(
+  entityType: string,
+) {
+  switch (entityType) {
+    case "PERSON":
+      return User
+
+    case "LOCATION":
+      return MapPin
+
+    case "DOMAIN":
+    case "WEBSITE":
+    case "IP_ADDRESS":
+      return Globe
+
+    case "CRYPTOCURRENCY_WALLET":
+      return Wallet
+
+    case "SOCIAL_MEDIA_PROFILE":
+    case "USERNAME":
+    case "EMAIL":
+    case "PHONE":
+    case "DOCUMENT":
+    case "VEHICLE":
+    case "ORGANIZATION":
+    default:
+      return Fingerprint
+  }
 }
 
 export default function InvestigationGraphPage() {
   const params = useParams()
+
   const caseId = String(params.id)
 
-  const [nodes, setNodes] = useState<Node[]>([])
-  const [edges, setEdges] = useState<Edge[]>([])
+  const [nodes, setNodes] =
+    useState<Node[]>([])
 
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [savingConnection, setSavingConnection] = useState(false)
+  const [edges, setEdges] =
+    useState<Edge[]>([])
 
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] =
+    useState(true)
+
+  const [refreshing, setRefreshing] =
+    useState(false)
+
+  const [savingConnection, setSavingConnection] =
+    useState(false)
+
+  const [error, setError] =
+    useState<string | null>(null)
+
   const [actionError, setActionError] =
     useState<string | null>(null)
 
   const [showEntityPanel, setShowEntityPanel] =
     useState(false)
 
-  const [showRelationshipPanel, setShowRelationshipPanel] =
-    useState(false)
+  const [
+    showRelationshipPanel,
+    setShowRelationshipPanel,
+  ] = useState(false)
 
   const [creatingEntity, setCreatingEntity] =
     useState(false)
 
-  const [creatingRelationship, setCreatingRelationship] =
-    useState(false)
+  const [
+    creatingRelationship,
+    setCreatingRelationship,
+  ] = useState(false)
 
   const [entityName, setEntityName] =
     useState("")
@@ -111,11 +319,15 @@ export default function InvestigationGraphPage() {
   const [target, setTarget] =
     useState("")
 
-  const [relationshipType, setRelationshipType] =
-    useState("")
+  const [
+    relationshipType,
+    setRelationshipType,
+  ] = useState("")
 
-  const [relationshipDescription, setRelationshipDescription] =
-    useState("")
+  const [
+    relationshipDescription,
+    setRelationshipDescription,
+  ] = useState("")
 
   const loadGraph = useCallback(
     async (refresh = false) => {
@@ -132,27 +344,32 @@ export default function InvestigationGraphPage() {
 
         setError(null)
 
-        const [entityResponse, relationshipResponse] =
-          await Promise.all([
-            fetch(
-              `/api/cases/${encodeURIComponent(
-                caseId,
-              )}/graph/entities`,
-              {
-                credentials: "include",
-                cache: "no-store",
-              },
-            ),
-            fetch(
-              `/api/cases/${encodeURIComponent(
-                caseId,
-              )}/graph/relationships`,
-              {
-                credentials: "include",
-                cache: "no-store",
-              },
-            ),
-          ])
+        const [
+          entityResponse,
+          relationshipResponse,
+        ] = await Promise.all([
+          fetch(
+            `/api/cases/${encodeURIComponent(
+              caseId,
+            )}/graph/entities`,
+            {
+              credentials:
+                "include",
+              cache: "no-store",
+            },
+          ),
+
+          fetch(
+            `/api/cases/${encodeURIComponent(
+              caseId,
+            )}/graph/relationships`,
+            {
+              credentials:
+                "include",
+              cache: "no-store",
+            },
+          ),
+        ])
 
         const entityPayload =
           (await entityResponse.json()) as
@@ -166,7 +383,9 @@ export default function InvestigationGraphPage() {
 
         if (!entityResponse.ok) {
           throw new Error(
-            !Array.isArray(entityPayload) &&
+            !Array.isArray(
+              entityPayload,
+            ) &&
               entityPayload.error
               ? entityPayload.error
               : "Failed to load graph entities",
@@ -175,59 +394,100 @@ export default function InvestigationGraphPage() {
 
         if (!relationshipResponse.ok) {
           throw new Error(
-            !Array.isArray(relationshipPayload) &&
+            !Array.isArray(
+              relationshipPayload,
+            ) &&
               relationshipPayload.error
               ? relationshipPayload.error
               : "Failed to load graph relationships",
           )
         }
 
-        const entities = Array.isArray(
-          entityPayload,
-        )
-          ? entityPayload
-          : []
+        const entities =
+          Array.isArray(
+            entityPayload,
+          )
+            ? entityPayload
+            : []
 
-        const relationships = Array.isArray(
-          relationshipPayload,
-        )
-          ? relationshipPayload
-          : []
+        const relationships =
+          Array.isArray(
+            relationshipPayload,
+          )
+            ? relationshipPayload
+            : []
 
         const graphNodes: Node[] =
-          entities.map((entity, index) => ({
-            id: String(entity.id),
-            position: {
-              x: 150 + (index % 4) * 220,
-              y: 120 + Math.floor(index / 4) * 170,
-            },
-            data: {
-              label: entityNodeLabel(entity),
-            },
-            style: nodeStyle,
-          }))
+          entities.map(
+            (
+              entity,
+              index,
+            ) => ({
+              id: String(
+                entity.id,
+              ),
+
+              position: {
+                x:
+                  150 +
+                  (index % 4) *
+                    220,
+
+                y:
+                  120 +
+                  Math.floor(
+                    index / 4,
+                  ) *
+                    170,
+              },
+
+              data: {
+                label:
+                  entityNodeLabel(
+                    entity,
+                  ),
+              },
+
+              style: nodeStyle,
+            }),
+          )
 
         const graphEdges: Edge[] =
           relationships.map(
-            (relationship, index) => ({
+            (
+              relationship,
+              index,
+            ) => ({
               id: String(
                 relationship.id ??
                   `edge-${index}`,
               ),
+
               source: String(
                 relationship.source_entity_id,
               ),
+
               target: String(
                 relationship.target_entity_id,
               ),
+
               label:
-                relationship.relationship_type,
-              animated: false,
+                relationshipLabel(
+                  relationship.relationship_type,
+                ),
+
+              animated:
+                false,
             }),
           )
 
-        setNodes(graphNodes)
-        setEdges(graphEdges)
+        setNodes(
+          graphNodes,
+        )
+
+        setEdges(
+          graphEdges,
+        )
       } catch (err) {
         setError(
           err instanceof Error
@@ -249,99 +509,133 @@ export default function InvestigationGraphPage() {
     loadGraph()
   }, [loadGraph])
 
-  const entityOptions = useMemo(
-    () =>
-      nodes.map((node) => ({
-        id: node.id,
-        label: String(
-          node.data?.label || node.id,
+  const entityOptions =
+    useMemo(
+      () =>
+        nodes.map(
+          (node) => ({
+            id: node.id,
+            label: String(
+              node.data?.label ||
+                node.id,
+            ),
+          }),
         ),
-      })),
-    [nodes],
-  )
+      [nodes],
+    )
 
-  const onConnect = useCallback(
-    async (connection: Connection) => {
-      if (
-        !connection.source ||
-        !connection.target ||
-        savingConnection
-      ) {
-        return
-      }
-
-      if (
-        connection.source ===
-        connection.target
-      ) {
-        setActionError(
-          "An entity cannot be related to itself.",
-        )
-        return
-      }
-
-      try {
-        setSavingConnection(true)
-        setActionError(null)
-
-        const response = await fetch(
-          `/api/cases/${encodeURIComponent(
-            caseId,
-          )}/graph/relationships`,
-          {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              source_entity_id:
-                connection.source,
-              target_entity_id:
-                connection.target,
-              relationship_type:
-                "associated_with",
-              description:
-                "Relationship created from the investigation graph.",
-              confidence_score: 50,
-              verification_status:
-                "unverified",
-            }),
-          },
-        )
-
-        const result =
-          (await response.json()) as
-            | GraphRelationship
-            | GraphErrorResponse
-
-        if (!response.ok) {
-          throw new Error(
-            "error" in result && result.error
-              ? result.error
-              : "Failed to save relationship",
-          )
+  const onConnect =
+    useCallback(
+      async (
+        connection: Connection,
+      ) => {
+        if (
+          !connection.source ||
+          !connection.target ||
+          savingConnection
+        ) {
+          return
         }
 
-        await loadGraph(true)
-      } catch (err) {
-        setActionError(
-          err instanceof Error
-            ? err.message
-            : "Failed to save relationship",
-        )
-      } finally {
-        setSavingConnection(false)
-      }
-    },
-    [caseId, loadGraph, savingConnection],
-  )
+        if (
+          connection.source ===
+          connection.target
+        ) {
+          setActionError(
+            "An entity cannot be related to itself.",
+          )
+          return
+        }
+
+        try {
+          setSavingConnection(
+            true,
+          )
+
+          setActionError(null)
+
+          const response =
+            await fetch(
+              `/api/cases/${encodeURIComponent(
+                caseId,
+              )}/graph/relationships`,
+              {
+                method:
+                  "POST",
+
+                credentials:
+                  "include",
+
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
+
+                body: JSON.stringify({
+                  source_entity_id:
+                    connection.source,
+
+                  target_entity_id:
+                    connection.target,
+
+                  relationship_type:
+                    "associated_with",
+
+                  description:
+                    "Relationship created from the investigation graph.",
+
+                  confidence_score: 50,
+
+                  verification_status:
+                    "unverified",
+                }),
+              },
+            )
+
+          const result =
+            (await response.json()) as
+              | GraphRelationship
+              | GraphErrorResponse
+
+          if (!response.ok) {
+            throw new Error(
+              "error" in result &&
+                result.error
+                ? result.error
+                : "Failed to save relationship",
+            )
+          }
+
+          await loadGraph(
+            true,
+          )
+        } catch (err) {
+          setActionError(
+            err instanceof Error
+              ? err.message
+              : "Failed to save relationship",
+          )
+        } finally {
+          setSavingConnection(
+            false,
+          )
+        }
+      },
+      [
+        caseId,
+        loadGraph,
+        savingConnection,
+      ],
+    )
 
   async function createEntity() {
-    const trimmedName = entityName.trim()
+    const trimmedName =
+      entityName.trim()
 
     if (!trimmedName) {
-      setActionError("Entity name is required.")
+      setActionError(
+        "Entity name is required.",
+      )
       return
     }
 
@@ -350,32 +644,50 @@ export default function InvestigationGraphPage() {
     }
 
     try {
-      setCreatingEntity(true)
+      setCreatingEntity(
+        true,
+      )
+
       setActionError(null)
 
-      const response = await fetch(
-        `/api/cases/${encodeURIComponent(
-          caseId,
-        )}/graph/entities`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
+      const response =
+        await fetch(
+          `/api/cases/${encodeURIComponent(
+            caseId,
+          )}/graph/entities`,
+          {
+            method:
+              "POST",
+
+            credentials:
+              "include",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              entity_type:
+                entityType,
+
+              name:
+                trimmedName,
+
+              description:
+                description.trim() ||
+                null,
+
+              confidence_score:
+                Number(
+                  confidence,
+                ),
+
+              verification_status:
+                "unverified",
+            }),
           },
-          body: JSON.stringify({
-            entity_type: entityType,
-            name: trimmedName,
-            description:
-              description.trim() || null,
-            confidence_score: Number(
-              confidence,
-            ),
-            verification_status:
-              "unverified",
-          }),
-        },
-      )
+        )
 
       const result =
         (await response.json()) as
@@ -384,7 +696,8 @@ export default function InvestigationGraphPage() {
 
       if (!response.ok) {
         throw new Error(
-          "error" in result && result.error
+          "error" in result &&
+            result.error
             ? result.error
             : "Entity creation failed",
         )
@@ -393,7 +706,10 @@ export default function InvestigationGraphPage() {
       setEntityName("")
       setDescription("")
       setConfidence(50)
-      setShowEntityPanel(false)
+      setEntityType("PERSON")
+      setShowEntityPanel(
+        false,
+      )
 
       await loadGraph(true)
     } catch (err) {
@@ -403,7 +719,9 @@ export default function InvestigationGraphPage() {
           : "Entity creation failed",
       )
     } finally {
-      setCreatingEntity(false)
+      setCreatingEntity(
+        false,
+      )
     }
   }
 
@@ -426,38 +744,57 @@ export default function InvestigationGraphPage() {
       return
     }
 
-    if (creatingRelationship) {
+    if (
+      creatingRelationship
+    ) {
       return
     }
 
     try {
-      setCreatingRelationship(true)
+      setCreatingRelationship(
+        true,
+      )
+
       setActionError(null)
 
-      const response = await fetch(
-        `/api/cases/${encodeURIComponent(
-          caseId,
-        )}/graph/relationships`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
+      const response =
+        await fetch(
+          `/api/cases/${encodeURIComponent(
+            caseId,
+          )}/graph/relationships`,
+          {
+            method:
+              "POST",
+
+            credentials:
+              "include",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              source_entity_id:
+                source,
+
+              target_entity_id:
+                target,
+
+              relationship_type:
+                relationshipType,
+
+              description:
+                relationshipDescription.trim() ||
+                null,
+
+              confidence_score: 50,
+
+              verification_status:
+                "unverified",
+            }),
           },
-          body: JSON.stringify({
-            source_entity_id: source,
-            target_entity_id: target,
-            relationship_type:
-              relationshipType,
-            description:
-              relationshipDescription.trim() ||
-              null,
-            confidence_score: 50,
-            verification_status:
-              "unverified",
-          }),
-        },
-      )
+        )
 
       const result =
         (await response.json()) as
@@ -466,7 +803,8 @@ export default function InvestigationGraphPage() {
 
       if (!response.ok) {
         throw new Error(
-          "error" in result && result.error
+          "error" in result &&
+            result.error
             ? result.error
             : "Relationship creation failed",
         )
@@ -476,7 +814,9 @@ export default function InvestigationGraphPage() {
       setTarget("")
       setRelationshipType("")
       setRelationshipDescription("")
-      setShowRelationshipPanel(false)
+      setShowRelationshipPanel(
+        false,
+      )
 
       await loadGraph(true)
     } catch (err) {
@@ -486,7 +826,9 @@ export default function InvestigationGraphPage() {
           : "Relationship creation failed",
       )
     } finally {
-      setCreatingRelationship(false)
+      setCreatingRelationship(
+        false,
+      )
     }
   }
 
@@ -500,11 +842,16 @@ export default function InvestigationGraphPage() {
   }
 
   function closeRelationshipPanel() {
-    if (creatingRelationship) {
+    if (
+      creatingRelationship
+    ) {
       return
     }
 
-    setShowRelationshipPanel(false)
+    setShowRelationshipPanel(
+      false,
+    )
+
     setActionError(null)
   }
 
@@ -524,7 +871,7 @@ export default function InvestigationGraphPage() {
       <header className="flex flex-col gap-4 border-b border-[#123a2d] p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <GitBranch className="h-5 w-5 text-[#20dc73]" />
+            <Network className="h-5 w-5 text-[#20dc73]" />
 
             <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#20dc73]">
               Investigation Intelligence
@@ -543,7 +890,9 @@ export default function InvestigationGraphPage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => loadGraph(true)}
+            onClick={() =>
+              loadGraph(true)
+            }
             disabled={refreshing}
             className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-3 py-2 text-sm font-medium text-white/65 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -554,6 +903,7 @@ export default function InvestigationGraphPage() {
                   : ""
               }`}
             />
+
             Refresh
           </button>
 
@@ -561,8 +911,12 @@ export default function InvestigationGraphPage() {
             type="button"
             onClick={() => {
               setActionError(null)
-              setShowEntityPanel(true)
-              setShowRelationshipPanel(false)
+              setShowEntityPanel(
+                true,
+              )
+              setShowRelationshipPanel(
+                false,
+              )
             }}
             className="inline-flex items-center gap-2 rounded-md bg-[#20dc73] px-4 py-2 text-sm font-bold text-black transition hover:bg-[#3aee89]"
           >
@@ -574,8 +928,12 @@ export default function InvestigationGraphPage() {
             type="button"
             onClick={() => {
               setActionError(null)
-              setShowRelationshipPanel(true)
-              setShowEntityPanel(false)
+              setShowRelationshipPanel(
+                true,
+              )
+              setShowEntityPanel(
+                false,
+              )
             }}
             className="inline-flex items-center gap-2 rounded-md border border-[#20dc73] px-4 py-2 text-sm font-semibold text-[#20dc73] transition hover:bg-[#20dc73]/5"
           >
@@ -591,13 +949,16 @@ export default function InvestigationGraphPage() {
 
           <div className="min-w-0">
             <p className="text-sm text-[#ff8989]">
-              {actionError || error}
+              {actionError ||
+                error}
             </p>
 
             {error ? (
               <button
                 type="button"
-                onClick={() => loadGraph()}
+                onClick={() =>
+                  loadGraph()
+                }
                 className="mt-2 text-xs font-semibold text-[#ffb0b0] underline underline-offset-2"
               >
                 Retry
@@ -646,7 +1007,7 @@ export default function InvestigationGraphPage() {
       </div>
 
       {showEntityPanel ? (
-        <div className="absolute right-5 top-24 z-20 w-[min(24rem,calc(100vw-2.5rem))] rounded-xl border border-[#123a2d] bg-[#06110f] p-5 shadow-2xl shadow-black/50">
+        <div className="absolute right-5 top-24 z-20 w-[min(28rem,calc(100vw-2.5rem))] rounded-xl border border-[#123a2d] bg-[#06110f] p-5 shadow-2xl shadow-black/50">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -664,8 +1025,12 @@ export default function InvestigationGraphPage() {
 
             <button
               type="button"
-              onClick={closeEntityPanel}
-              disabled={creatingEntity}
+              onClick={
+                closeEntityPanel
+              }
+              disabled={
+                creatingEntity
+              }
               className="rounded-md p-2 text-white/35 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
               aria-label="Close entity panel"
             >
@@ -682,7 +1047,9 @@ export default function InvestigationGraphPage() {
                 )
               }
               placeholder="Entity name"
-              disabled={creatingEntity}
+              disabled={
+                creatingEntity
+              }
               className="h-11 w-full rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60"
             />
 
@@ -693,67 +1060,76 @@ export default function InvestigationGraphPage() {
                   event.target.value,
                 )
               }
-              disabled={creatingEntity}
+              disabled={
+                creatingEntity
+              }
               className="h-11 w-full rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60"
             >
-              <option value="PERSON">
-                PERSON
-              </option>
-              <option value="ORGANIZATION">
-                ORGANIZATION
-              </option>
-              <option value="LOCATION">
-                LOCATION
-              </option>
-              <option value="EMAIL">
-                EMAIL
-              </option>
-              <option value="PHONE">
-                PHONE
-              </option>
-              <option value="USERNAME">
-                USERNAME
-              </option>
-              <option value="DOCUMENT">
-                DOCUMENT
-              </option>
+              {ENTITY_TYPES.map(
+                (type) => (
+                  <option
+                    key={
+                      type.value
+                    }
+                    value={
+                      type.value
+                    }
+                  >
+                    {type.label}
+                  </option>
+                ),
+              )}
             </select>
 
             <textarea
-              value={description}
+              value={
+                description
+              }
               onChange={(event) =>
                 setDescription(
                   event.target.value,
                 )
               }
               placeholder="Description or reasoning"
-              disabled={creatingEntity}
+              disabled={
+                creatingEntity
+              }
               className="min-h-28 w-full resize-y rounded-md border border-[#143b28] bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60"
             />
 
             <div>
               <label className="mb-2 block text-xs text-white/40">
-                Confidence: {confidence}%
+                Confidence:{" "}
+                {confidence}%
               </label>
 
               <input
                 type="range"
                 min="0"
                 max="100"
-                value={confidence}
+                value={
+                  confidence
+                }
                 onChange={(event) =>
                   setConfidence(
-                    Number(event.target.value),
+                    Number(
+                      event.target
+                        .value,
+                    ),
                   )
                 }
-                disabled={creatingEntity}
+                disabled={
+                  creatingEntity
+                }
                 className="w-full accent-[#20dc73]"
               />
             </div>
 
             <button
               type="button"
-              onClick={createEntity}
+              onClick={
+                createEntity
+              }
               disabled={
                 creatingEntity ||
                 !entityName.trim()
@@ -777,7 +1153,7 @@ export default function InvestigationGraphPage() {
       ) : null}
 
       {showRelationshipPanel ? (
-        <div className="absolute right-5 top-24 z-20 w-[min(24rem,calc(100vw-2.5rem))] rounded-xl border border-[#123a2d] bg-[#06110f] p-5 shadow-2xl shadow-black/50">
+        <div className="absolute right-5 top-24 z-20 w-[min(28rem,calc(100vw-2.5rem))] rounded-xl border border-[#123a2d] bg-[#06110f] p-5 shadow-2xl shadow-black/50">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -795,8 +1171,12 @@ export default function InvestigationGraphPage() {
 
             <button
               type="button"
-              onClick={closeRelationshipPanel}
-              disabled={creatingRelationship}
+              onClick={
+                closeRelationshipPanel
+              }
+              disabled={
+                creatingRelationship
+              }
               className="rounded-md p-2 text-white/35 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
               aria-label="Close relationship panel"
             >
@@ -812,7 +1192,9 @@ export default function InvestigationGraphPage() {
                   event.target.value,
                 )
               }
-              disabled={creatingRelationship}
+              disabled={
+                creatingRelationship
+              }
               className="h-11 w-full rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60"
             >
               <option value="">
@@ -838,7 +1220,9 @@ export default function InvestigationGraphPage() {
                   event.target.value,
                 )
               }
-              disabled={creatingRelationship}
+              disabled={
+                creatingRelationship
+              }
               className="h-11 w-full rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60"
             >
               <option value="">
@@ -858,50 +1242,52 @@ export default function InvestigationGraphPage() {
             </select>
 
             <select
-              value={relationshipType}
+              value={
+                relationshipType
+              }
               onChange={(event) =>
                 setRelationshipType(
                   event.target.value,
                 )
               }
-              disabled={creatingRelationship}
+              disabled={
+                creatingRelationship
+              }
               className="h-11 w-full rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60"
             >
               <option value="">
                 Relationship
               </option>
-              <option value="works_for">
-                works_for
-              </option>
-              <option value="owns">
-                owns
-              </option>
-              <option value="associated_with">
-                associated_with
-              </option>
-              <option value="communicated_with">
-                communicated_with
-              </option>
-              <option value="financial_connection">
-                financial_connection
-              </option>
-              <option value="located_at">
-                located_at
-              </option>
-              <option value="alias_of">
-                alias_of
-              </option>
+
+              {RELATIONSHIP_TYPES.map(
+                (type) => (
+                  <option
+                    key={
+                      type.value
+                    }
+                    value={
+                      type.value
+                    }
+                  >
+                    {type.label}
+                  </option>
+                ),
+              )}
             </select>
 
             <textarea
-              value={relationshipDescription}
+              value={
+                relationshipDescription
+              }
               onChange={(event) =>
                 setRelationshipDescription(
                   event.target.value,
                 )
               }
               placeholder="Analyst reasoning or notes"
-              disabled={creatingRelationship}
+              disabled={
+                creatingRelationship
+              }
               className="min-h-24 w-full resize-y rounded-md border border-[#143b28] bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60"
             />
 

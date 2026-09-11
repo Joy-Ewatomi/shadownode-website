@@ -193,15 +193,60 @@ function priorityTone(
   return "text-[#7ce7a7]"
 }
 
+const investigationTasks = [
+  {
+    number: "01",
+    title: "Identity & Company Affiliation",
+  },
+  {
+    number: "02",
+    title: "Role & Appointment History",
+  },
+  {
+    number: "03",
+    title: "Residence & Date of Birth",
+  },
+  {
+    number: "04",
+    title: "Company Registration",
+  },
+  {
+    number: "05",
+    title: "Previous Company Name",
+  },
+  {
+    number: "06",
+    title: "Company Status",
+  },
+  {
+    number: "07",
+    title: "Historical Corporate Record",
+  },
+  {
+    number: "08",
+    title: "LinkedIn Identity",
+  },
+  {
+    number: "09",
+    title: "Corporate Email Intelligence",
+  },
+  {
+    number: "10",
+    title: "Historical Website Contact",
+  },
+  {
+    number: "11",
+    title: "Domain & DNS Intelligence",
+  },
+]
+
 export default function CaseDashboard() {
   const params = useParams()
 
   const caseId = String(params.id || "")
 
   const [data, setData] =
-    useState<DashboardResponse | null>(
-      null,
-    )
+    useState<DashboardResponse | null>(null)
 
   const [loading, setLoading] =
     useState(true)
@@ -224,7 +269,9 @@ export default function CaseDashboard() {
         setError(null)
 
         const response = await fetch(
-          `/api/cases/${encodeURIComponent(caseId)}/dashboard`,
+          `/api/cases/${encodeURIComponent(
+            caseId,
+          )}/dashboard`,
           {
             method: "GET",
             credentials: "include",
@@ -369,9 +416,10 @@ export default function CaseDashboard() {
     <main className="min-h-screen bg-[#020604] text-white">
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-7xl space-y-6">
+
           {/* =================================================
               CASE HEADER
-              ================================================= */}
+          ================================================= */}
 
           <section className="overflow-hidden rounded-xl border border-[#143b28] bg-[#06110f]">
             <div className="border-b border-[#143b28] bg-[radial-gradient(circle_at_top_right,rgba(32,220,115,0.10),transparent_35%)] p-5 sm:p-6">
@@ -387,9 +435,7 @@ export default function CaseDashboard() {
                         status,
                       )}`}
                     >
-                      {formatStatus(
-                        status,
-                      )}
+                      {formatStatus(status)}
                     </span>
                   </div>
 
@@ -422,20 +468,17 @@ export default function CaseDashboard() {
                         priority,
                       )}
                     >
-                      {formatStatus(
-                        priority,
-                      )}{" "}
-                      Priority
+                      {formatStatus(priority)} Priority
                     </span>
                   </div>
                 </div>
 
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <Link
-                    href={`/cases/${caseId}/workspace`}
+                    href={`/dashboard/cases/${caseId}/team`}
                     className="inline-flex items-center gap-2 rounded-md bg-[#20dc73] px-4 py-2.5 text-sm font-bold text-black transition hover:bg-[#39ed86]"
                   >
-                    Open Workspace
+                    Manage Case
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
@@ -443,6 +486,7 @@ export default function CaseDashboard() {
             </div>
 
             {/* Progress */}
+
             <div className="px-5 py-5 sm:px-6">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -451,8 +495,7 @@ export default function CaseDashboard() {
                   </p>
 
                   <p className="mt-1 text-sm text-white/60">
-                    Operational progress across
-                    the current case.
+                    Operational progress across the current case.
                   </p>
                 </div>
 
@@ -474,7 +517,7 @@ export default function CaseDashboard() {
 
           {/* =================================================
               STATISTICS
-              ================================================= */}
+          ================================================= */}
 
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
             <MetricCard
@@ -483,54 +526,55 @@ export default function CaseDashboard() {
               value={
                 stats.assigned_investigators
               }
-              href={`/cases/${caseId}/team`}
+              href={`/dashboard/cases/${caseId}/team`}
             />
 
             <MetricCard
               icon={Fingerprint}
               label="Entities"
               value={stats.entities}
-              href={`/cases/${caseId}/graph`}
+              href={`/dashboard/cases/${caseId}/graph`}
             />
 
             <MetricCard
               icon={GitBranch}
               label="Relationships"
-              value={
-                stats.relationships
-              }
-              href={`/cases/${caseId}/graph`}
+              value={stats.relationships}
+              href={`/dashboard/cases/${caseId}/graph`}
             />
 
             <MetricCard
               icon={FolderOpen}
               label="Evidence"
               value={stats.evidence}
-              href={`/cases/${caseId}/evidence`}
+              href={`/dashboard/cases/${caseId}/evidence`}
             />
 
             <MetricCard
               icon={Activity}
               label="Updates"
               value={stats.updates}
-              href={`/cases/${caseId}/updates`}
+              href={`/dashboard/cases/${caseId}/timeline`}
             />
 
             <MetricCard
               icon={FileText}
-              label="Notes"
-              value={stats.notes}
-              href={`/cases/${caseId}/timeline`}
+              label="Reports"
+              value={stats.reports ?? 0}
+              href={`/dashboard/cases/${caseId}/reports`}
             />
           </section>
 
           {/* =================================================
               MAIN CONTENT
-              ================================================= */}
+          ================================================= */}
 
           <section className="grid gap-6 xl:grid-cols-[1fr_22rem]">
+
             <div className="space-y-6">
-              {/* Summary */}
+
+              {/* CASE SUMMARY */}
+
               <section className="rounded-xl border border-[#143b28] bg-[#06110f]">
                 <div className="flex items-center justify-between border-b border-[#143b28] px-5 py-4 sm:px-6">
                   <div>
@@ -556,70 +600,133 @@ export default function CaseDashboard() {
                 </div>
               </section>
 
-              {/* Quick navigation */}
+              {/* =================================================
+                  CASE WORKSPACE
+              ================================================= */}
+
               <section className="rounded-xl border border-[#143b28] bg-[#06110f]">
                 <div className="border-b border-[#143b28] px-5 py-4 sm:px-6">
                   <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#20dc73]">
-                    Operations
+                    Operational Workspace
                   </p>
 
                   <h2 className="mt-1 text-lg font-semibold">
                     Case Workspace
                   </h2>
+
+                  <p className="mt-1 text-sm leading-6 text-white/40">
+                    Access the operational systems attached to this investigation.
+                  </p>
                 </div>
 
                 <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
+
                   <WorkspaceLink
-                    href={`/cases/${caseId}/workspace`}
-                    icon={Network}
-                    title="Operations Workspace"
-                    description="Central investigation workspace."
+                    href={`/dashboard/cases/${caseId}/team`}
+                    icon={Users}
+                    title="Team"
+                    description="Assignments and investigation personnel."
                   />
 
                   <WorkspaceLink
-                    href={`/cases/${caseId}/graph`}
-                    icon={GitBranch}
-                    title="Investigation Graph"
-                    description="Entities, relationships and connections."
-                  />
-
-                  <WorkspaceLink
-                    href={`/cases/${caseId}/evidence`}
+                    href={`/dashboard/cases/${caseId}/evidence`}
                     icon={FolderOpen}
                     title="Evidence"
-                    description="Review and manage case evidence."
+                    description="Case files, hashes and custody."
                   />
 
                   <WorkspaceLink
-                    href={`/cases/${caseId}/timeline`}
-                    icon={CalendarDays}
-                    title="Timeline"
-                    description="Chronology of investigation activity."
+                    href={`/dashboard/cases/${caseId}/messages`}
+                    icon={MessageSquare}
+                    title="Messages"
+                    description="Secure case communication."
                   />
 
                   <WorkspaceLink
-                    href={`/cases/${caseId}/updates`}
-                    icon={Activity}
-                    title="Updates"
-                    description="Case activity and operational updates."
-                  />
-
-                  <WorkspaceLink
-                    href={`/cases/${caseId}/reports`}
+                    href={`/dashboard/cases/${caseId}/reports`}
                     icon={FileText}
                     title="Reports"
                     description="Investigation reports and findings."
                   />
+
+                  <WorkspaceLink
+                    href={`/dashboard/cases/${caseId}/timeline`}
+                    icon={CalendarDays}
+                    title="Timeline"
+                    description="Chronological case activity."
+                  />
+
+                  <WorkspaceLink
+                    href={`/dashboard/cases/${caseId}/graph`}
+                    icon={Network}
+                    title="Investigation Graph"
+                    description="Entities, links and relationships."
+                  />
+
                 </div>
               </section>
+
+              {/* =================================================
+                  INVESTIGATION WORKSTREAMS
+              ================================================= */}
+
+              <section className="rounded-xl border border-[#143b28] bg-[#06110f]">
+                <div className="border-b border-[#143b28] px-5 py-4 sm:px-6">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#20dc73]">
+                    Intelligence Workstreams
+                  </p>
+
+                  <h2 className="mt-1 text-lg font-semibold">
+                    Investigation Tasks
+                  </h2>
+
+                  <p className="mt-1 text-sm leading-6 text-white/40">
+                    Investigation objectives attached to this case.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 p-5 sm:p-6 md:grid-cols-2">
+
+                  {investigationTasks.map(
+                    (task) => (
+                      <div
+                        key={task.number}
+                        className="group flex items-center gap-4 rounded-lg border border-[#123a2d] bg-black/20 p-4 transition hover:border-[#206344] hover:bg-[#071610]"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#20dc73]/20 bg-[#20dc73]/10 font-mono text-xs font-bold text-[#20dc73]">
+                          {task.number}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold leading-5 text-white">
+                            {task.title}
+                          </p>
+
+                          <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-white/20">
+                            Investigation Task
+                          </p>
+                        </div>
+
+                        <span className="text-xs text-white/20 transition group-hover:text-[#20dc73]">
+                          →
+                        </span>
+                      </div>
+                    ),
+                  )}
+
+                </div>
+              </section>
+
             </div>
 
             {/* =================================================
                 SIDEBAR
-                ================================================= */}
+            ================================================= */}
 
             <aside className="space-y-6">
-              {/* Team */}
+
+              {/* TEAM */}
+
               <section className="rounded-xl border border-[#143b28] bg-[#06110f]">
                 <div className="flex items-center justify-between border-b border-[#143b28] px-5 py-4">
                   <div>
@@ -633,7 +740,7 @@ export default function CaseDashboard() {
                   </div>
 
                   <Link
-                    href={`/cases/${caseId}/team`}
+                    href={`/dashboard/cases/${caseId}/team`}
                     className="text-xs font-semibold text-[#20dc73] hover:underline"
                   >
                     Manage
@@ -687,7 +794,7 @@ export default function CaseDashboard() {
                       {activeTeam.length >
                         5 ? (
                         <Link
-                          href={`/cases/${caseId}/team`}
+                          href={`/dashboard/cases/${caseId}/team`}
                           className="block text-center text-xs text-[#20dc73] hover:underline"
                         >
                           View{" "}
@@ -706,7 +813,7 @@ export default function CaseDashboard() {
                       </p>
 
                       <Link
-                        href={`/cases/${caseId}/team`}
+                        href={`/dashboard/cases/${caseId}/team`}
                         className="mt-3 inline-flex text-xs font-semibold text-[#20dc73] hover:underline"
                       >
                         Review Assignments
@@ -716,7 +823,8 @@ export default function CaseDashboard() {
                 </div>
               </section>
 
-              {/* Case details */}
+              {/* CASE DETAILS */}
+
               <section className="rounded-xl border border-[#143b28] bg-[#06110f]">
                 <div className="border-b border-[#143b28] px-5 py-4">
                   <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#20dc73]">
@@ -786,7 +894,8 @@ export default function CaseDashboard() {
                 </div>
               </section>
 
-              {/* Progress status */}
+              {/* PROGRESS STATUS */}
+
               <section className="rounded-xl border border-[#143b28] bg-[#06110f] p-5">
                 <div className="flex items-start gap-3">
                   {progress >= 100 ? (
@@ -810,12 +919,11 @@ export default function CaseDashboard() {
                   </div>
                 </div>
               </section>
+
             </aside>
           </section>
 
-          {/* =================================================
-              FOOTER METADATA
-              ================================================= */}
+          {/* FOOTER */}
 
           <div className="flex flex-col gap-2 border-t border-[#143b28] pt-4 text-[10px] uppercase tracking-[0.12em] text-white/25 sm:flex-row sm:items-center sm:justify-between">
             <span>
@@ -826,6 +934,7 @@ export default function CaseDashboard() {
               Case ID: {caseId}
             </span>
           </div>
+
         </div>
       </div>
     </main>

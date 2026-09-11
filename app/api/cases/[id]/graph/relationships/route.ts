@@ -52,7 +52,23 @@ type EntityRow = {
   case_id: string
 }
 
+type RelationshipRow = {
+  id: string
+  case_id: string
+  source_entity_id: string
+  target_entity_id: string
+  relationship_type: string
+  description: string | null
+  verification_status: string | null
+  confidence_score: number | string | null
+  created_at: string
+  created_by: string | null
+}
+
+// ============================================================
 // GET RELATIONSHIPS FOR A CASE
+// ============================================================
+
 export async function GET(
   request: NextRequest,
   context: {
@@ -81,28 +97,29 @@ export async function GET(
       )
     }
 
-    const result = await query(
-      `
-        SELECT
-          id,
-          case_id,
-          source_entity_id,
-          target_entity_id,
-          relationship_type,
-          description,
-          verification_status,
-          confidence_score,
-          created_at,
-          updated_at
+    const result =
+      await query<RelationshipRow>(
+        `
+          SELECT
+            id,
+            case_id,
+            source_entity_id,
+            target_entity_id,
+            relationship_type,
+            description,
+            verification_status,
+            confidence_score,
+            created_at,
+            created_by
 
-        FROM entity_relationships
+          FROM entity_relationships
 
-        WHERE case_id = $1
+          WHERE case_id = $1
 
-        ORDER BY created_at DESC
-      `,
-      [access.caseId],
-    )
+          ORDER BY created_at DESC
+        `,
+        [access.caseId],
+      )
 
     return NextResponse.json(
       result.rows,
@@ -128,7 +145,10 @@ export async function GET(
   }
 }
 
+// ============================================================
 // CREATE RELATIONSHIP
+// ============================================================
+
 export async function POST(
   request: NextRequest,
   context: {
@@ -251,8 +271,7 @@ export async function POST(
 
           FROM investigation_entities
 
-          WHERE
-            id IN ($1, $2)
+          WHERE id IN ($1, $2)
 
           LIMIT 2
         `,
@@ -263,7 +282,8 @@ export async function POST(
       )
 
     if (
-      entityResult.rows.length !== 2
+      entityResult.rows.length !==
+      2
     ) {
       return NextResponse.json(
         {
@@ -337,8 +357,20 @@ export async function POST(
         access.user.id,
       )
 
+    if (!actorProfileId) {
+      return NextResponse.json(
+        {
+          error:
+            "User profile missing",
+        },
+        {
+          status: 500,
+        },
+      )
+    }
+
     const result =
-      await query(
+      await query<RelationshipRow>(
         `
           INSERT INTO entity_relationships (
             case_id,
@@ -372,7 +404,7 @@ export async function POST(
             verification_status,
             confidence_score,
             created_at,
-            updated_at
+            created_by
         `,
         [
           access.caseId,
@@ -419,6 +451,8 @@ export async function POST(
           relationshipType,
         confidence_score:
           confidenceScore,
+        verification_status:
+          verificationStatus,
       },
     })
 

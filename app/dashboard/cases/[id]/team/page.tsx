@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation"
+
 import { getCurrentUser } from "@/lib/auth"
 import CaseAssignment from "@/components/cases/CaseAssignment"
 import {
@@ -44,8 +45,11 @@ export default async function CaseTeamPage({
     redirect("/403")
   }
 
+  const isSuperAdmin =
+    isSuperAdminRole(user.role)
+
   const canAssign =
-    isSuperAdminRole(user.role) ||
+    isSuperAdmin ||
     user.role === "administrator"
 
   return (
@@ -68,6 +72,7 @@ export default async function CaseTeamPage({
       <CaseAssignment
         caseId={caseId}
         canAssign={canAssign}
+        canApprove={isSuperAdmin}
       />
     </main>
   )

@@ -305,6 +305,13 @@ CREATE TABLE public.case_assignments (
   assigned_by uuid,
   assigned_at timestamp with time zone DEFAULT now(),
   removed_at timestamp with time zone,
+  assignment_role character varying,
+  status character varying DEFAULT 'assigned'::character varying,
+  deadline date,
+  notes text,
+  accepted_at timestamp with time zone,
+  rejected_at timestamp with time zone,
+  rejection_reason text,
   CONSTRAINT case_assignments_pkey PRIMARY KEY (id),
   CONSTRAINT case_assignments_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
   CONSTRAINT case_assignments_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.user_profiles(id)
@@ -961,4 +968,40 @@ CREATE TABLE public.training_engagement_trainers (
   CONSTRAINT training_engagement_trainers_assigned_by_fk FOREIGN KEY (assigned_by) REFERENCES public.user_profiles(id),
   CONSTRAINT training_engagement_trainers_requested_by_fk FOREIGN KEY (approval_requested_by) REFERENCES public.user_profiles(id),
   CONSTRAINT training_engagement_trainers_approved_by_fk FOREIGN KEY (approved_by) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.case_report_sections (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  report_id uuid NOT NULL,
+  section_type character varying,
+  title character varying,
+  content text,
+  order_index integer NOT NULL DEFAULT 0,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT case_report_sections_pkey PRIMARY KEY (id),
+  CONSTRAINT case_report_sections_report_fk FOREIGN KEY (report_id) REFERENCES public.case_reports(id),
+  CONSTRAINT case_report_sections_created_by_fk FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.case_report_evidence (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  report_id uuid NOT NULL,
+  forensic_file_id uuid NOT NULL,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT case_report_evidence_pkey PRIMARY KEY (id),
+  CONSTRAINT case_report_evidence_report_fk FOREIGN KEY (report_id) REFERENCES public.case_reports(id),
+  CONSTRAINT case_report_evidence_file_fk FOREIGN KEY (forensic_file_id) REFERENCES public.forensic_files(id),
+  CONSTRAINT case_report_evidence_created_by_fk FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.case_report_entities (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  report_id uuid NOT NULL,
+  entity_id uuid NOT NULL,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT case_report_entities_pkey PRIMARY KEY (id),
+  CONSTRAINT case_report_entities_report_fk FOREIGN KEY (report_id) REFERENCES public.case_reports(id),
+  CONSTRAINT case_report_entities_entity_fk FOREIGN KEY (entity_id) REFERENCES public.investigation_entities(id),
+  CONSTRAINT case_report_entities_created_by_fk FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
 );

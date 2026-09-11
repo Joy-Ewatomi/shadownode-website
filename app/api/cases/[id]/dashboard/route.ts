@@ -53,10 +53,22 @@ type TeamRow = {
   assigned_by: string | null
   assigned_at: string | null
   removed_at: string | null
+
   user_id: string
   username: string | null
+  full_name: string | null
   email: string | null
   role: string | null
+
+  assignment_role: string | null
+  status: string | null
+  deadline: string | null
+  notes: string | null
+
+  accepted_at: string | null
+  rejected_at: string | null
+  rejection_reason: string | null
+
   assigned_by_username: string | null
 }
 
@@ -104,9 +116,6 @@ export async function GET(
      * ============================================================
      * AUTHORIZATION
      * ============================================================
-     *
-     * Reuse the existing case-workspace authorization system.
-     * The browser-supplied case ID never grants access by itself.
      */
 
     const access =
@@ -187,6 +196,15 @@ export async function GET(
      * ============================================================
      * LOAD STATISTICS + TEAM
      * ============================================================
+     *
+     * IMPORTANT:
+     *
+     * Active team count only includes active/approved
+     * assignments.
+     *
+     * Pending assignments are returned separately so the
+     * frontend can display "Pending Approval" rather than
+     * incorrectly presenting them as active personnel.
      */
 
     const [
@@ -195,7 +213,10 @@ export async function GET(
       evidenceResult,
       updatesResult,
       notesResult,
-      assignmentsResult,
+      reportsResult,
+      activeAssignmentsResult,
+      pendingAssignmentsResult,
+      rejectedAssignmentsResult,
       teamResult,
     ] = await Promise.all([
       query<{ count: number }>(
@@ -246,14 +267,71 @@ export async function GET(
       query<{ count: number }>(
         `
           SELECT COUNT(*)::int AS count
-          FROM case_assignments
+          FROM case_reports
           WHERE case_id = $1
-            AND removed_at IS NULL
-            AND COALESCE(status, 'assigned') <> 'removed'
         `,
         [access.caseId],
       ),
 
+      /*
+       * ACTIVE TEAM
+       */
+      query<{ count: number }>(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM case_assignments
+          WHERE case_id = $1
+            AND removed_at IS NULL
+            AND COALESCE(
+              status,
+              'assigned'
+            ) IN (
+              'assigned',
+              'approved',
+              'active',
+              'accepted'
+            )
+        `,
+        [access.caseId],
+      ),
+
+      /*
+       * PENDING APPROVAL
+       */
+      query<{ count: number }>(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM case_assignments
+          WHERE case_id = $1
+            AND removed_at IS NULL
+            AND status = 'pending'
+        `,
+        [access.caseId],
+      ),
+
+      /*
+       * REJECTED
+       */
+      query<{ count: number }>(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM case_assignments
+          WHERE case_id = $1
+            AND status = 'rejected'
+        `,
+        [access.caseId],
+      ),
+
+      /*
+       * Return assignment records with their real state.
+       *
+       * This allows the UI to distinguish:
+       *
+       * approved/active
+       * pending
+       * rejected
+       * removed
+       */
       query<TeamRow>(
         `
           SELECT
@@ -266,8 +344,23 @@ export async function GET(
 
             au.id AS user_id,
             au.username,
+            up.full_name,
             au.email,
             au.role,
+
+            ca.assignment_role,
+
+            COALESCE(
+              ca.status,
+              'assigned'
+            ) AS status,
+
+            ca.deadline,
+            ca.notes,
+
+            ca.accepted_at,
+            ca.rejected_at,
+            ca.rejection_reason,
 
             assigned_by_user.username
               AS assigned_by_username
@@ -281,7 +374,8 @@ export async function GET(
             ON au.id = up.user_id
 
           LEFT JOIN user_profiles assigned_by_profile
-            ON assigned_by_profile.id = ca.assigned_by
+            ON assigned_by_profile.id =
+               ca.assigned_by
 
           LEFT JOIN app_users assigned_by_user
             ON assigned_by_user.id =
@@ -290,7 +384,29 @@ export async function GET(
           WHERE ca.case_id = $1
 
           ORDER BY
-            ca.removed_at NULLS FIRST,
+            CASE
+              WHEN ca.removed_at IS NULL
+                AND COALESCE(
+                  ca.status,
+                  'assigned'
+                ) IN (
+                  'assigned',
+                  'approved',
+                  'active',
+                  'accepted'
+                )
+                THEN 1
+
+              WHEN ca.removed_at IS NULL
+                AND ca.status = 'pending'
+                THEN 2
+
+              WHEN ca.status = 'rejected'
+                THEN 3
+
+              ELSE 4
+            END,
+
             ca.assigned_at DESC
         `,
         [access.caseId],
@@ -299,14 +415,53 @@ export async function GET(
 
     /*
      * ============================================================
+     * BUILD TEAM GROUPS
+     * ============================================================
+     */
+
+    const allTeam =
+      teamResult.rows
+
+    const activeTeam =
+      allTeam.filter(
+        (member) =>
+          !member.removed_at &&
+          [
+            "assigned",
+            "approved",
+            "active",
+            "accepted",
+          ].includes(
+            member.status ||
+              "assigned",
+          ),
+      )
+
+    const pendingTeam =
+      allTeam.filter(
+        (member) =>
+          !member.removed_at &&
+          member.status ===
+            "pending",
+      )
+
+    const rejectedTeam =
+      allTeam.filter(
+        (member) =>
+          member.status ===
+          "rejected",
+      )
+
+    const removedTeam =
+      allTeam.filter(
+        (member) =>
+          Boolean(member.removed_at),
+      )
+
+    /*
+     * ============================================================
      * RETURN DASHBOARD CONTRACT
      * ============================================================
-     *
-     * This matches what app/cases/[id]/page.tsx currently reads:
-     *
-     *   data.case
-     *   data.stats
-     *   data.team
      */
 
     return NextResponse.json({
@@ -324,26 +479,41 @@ export async function GET(
           caseRow.status,
         priority:
           caseRow.priority,
+
         progress:
-          caseRow.progress !== null
-            ? Number(caseRow.progress)
+          caseRow.progress !==
+          null
+            ? Number(
+                caseRow.progress,
+              )
             : 0,
+
         budget:
-          caseRow.budget !== null
-            ? Number(caseRow.budget)
+          caseRow.budget !==
+          null
+            ? Number(
+                caseRow.budget,
+              )
             : null,
+
         payment_status:
           caseRow.payment_status,
+
         estimated_completion:
           caseRow.estimated_completion,
+
         started_at:
           caseRow.started_at,
+
         completed_at:
           caseRow.completed_at,
+
         created_at:
           caseRow.created_at,
+
         updated_at:
           caseRow.updated_at,
+
         investigator_username:
           caseRow.investigator_username,
       },
@@ -351,37 +521,86 @@ export async function GET(
       stats: {
         entities:
           Number(
-            entitiesResult.rows[0]?.count ?? 0,
+            entitiesResult.rows[0]
+              ?.count ?? 0,
           ),
 
         relationships:
           Number(
-            relationshipsResult.rows[0]?.count ?? 0,
+            relationshipsResult
+              .rows[0]?.count ?? 0,
           ),
 
         evidence:
           Number(
-            evidenceResult.rows[0]?.count ?? 0,
+            evidenceResult.rows[0]
+              ?.count ?? 0,
           ),
 
         updates:
           Number(
-            updatesResult.rows[0]?.count ?? 0,
+            updatesResult.rows[0]
+              ?.count ?? 0,
           ),
 
         notes:
           Number(
-            notesResult.rows[0]?.count ?? 0,
+            notesResult.rows[0]
+              ?.count ?? 0,
           ),
 
+        reports:
+          Number(
+            reportsResult.rows[0]
+              ?.count ?? 0,
+          ),
+
+        /*
+         * ONLY ACTIVE TEAM
+         */
         assigned_investigators:
           Number(
-            assignmentsResult.rows[0]?.count ?? 0,
+            activeAssignmentsResult
+              .rows[0]?.count ?? 0,
+          ),
+
+        /*
+         * Operational assignment state
+         */
+        pending_assignments:
+          Number(
+            pendingAssignmentsResult
+              .rows[0]?.count ?? 0,
+          ),
+
+        rejected_assignments:
+          Number(
+            rejectedAssignmentsResult
+              .rows[0]?.count ?? 0,
           ),
       },
 
-      team:
-        teamResult.rows,
+      /*
+       * Keep the complete assignment list
+       * for the case workspace.
+       */
+      team: allTeam,
+
+      /*
+       * Explicit grouped collections make the
+       * distinction available to the UI.
+       */
+      active_team:
+        activeTeam,
+
+      pending_team:
+        pendingTeam,
+
+      rejected_team:
+        rejectedTeam,
+
+      removed_team:
+        removedTeam,
     })
   } catch (error) {
     console.error(
