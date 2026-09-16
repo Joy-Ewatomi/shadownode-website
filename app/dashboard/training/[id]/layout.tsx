@@ -6,6 +6,7 @@ import { query } from "@/lib/db"
 
 import TrainingShell from "@/components/training/TrainingShell"
 import { getUserProfileId } from "@/lib/services/training-operations-service"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type TrainingEngagementLayoutProps = {
   children: React.ReactNode
@@ -127,7 +128,11 @@ export default async function TrainingEngagementLayout({
   // Only approved trainers can access training operations for this engagement.
   let isAssignedTrainer = false
 
-  if (user.role === "investigator" || user.role === "analyst") {
+  if (
+    user.role === "staff" ||
+    user.role === "investigator" ||
+    user.role === "analyst"
+  ) {
     const profileId = await getUserProfileId(user.id)
     if (
       profileId &&
@@ -257,6 +262,10 @@ export default async function TrainingEngagementLayout({
       status={status}
       isAssignedTrainer={isAssignedTrainer}
     >
+      <MarkResourceNotificationsRead
+        resourceType="training"
+        resourceId={engagement.id}
+      />
       {children}
     </TrainingShell>
   )

@@ -3,6 +3,7 @@
 import { RefreshCcw, Search } from "lucide-react"
 import { useEffect, useState } from "react"
 import MarkNotificationRead from "@/components/notifications/MarkNotificationRead"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 import RequestServiceSelector from "@/components/client/requests/RequestServiceSelector"
 
@@ -31,6 +32,7 @@ export default function ClientRequestsPage() {
   const [requests, setRequests] = useState<ClientRequest[]>([])
   const [loading, setLoading] = useState(false)
   const [showSelector, setShowSelector] = useState(false)
+  const { getUnreadForResource } = useClientNotifications()
 
   async function load() {
     try {
@@ -195,17 +197,32 @@ export default function ClientRequestsPage() {
               </button>
             </div>
           )}
-{requests.map((request) => (
+{requests.map((request) => {
+  const unread = getUnreadForResource("request", request.id)
+
+  return (
   <a
     key={request.id}
     href={`/dashboard/client/requests/${request.id}`}
-    className="group block px-5 py-5 transition hover:bg-[#20dc73]/5"
+    className={`group block px-5 py-5 transition hover:bg-[#20dc73]/5 ${
+      unread > 0
+        ? "border-l-2 border-[#20dc73]/40 bg-[#20dc73]/5"
+        : ""
+    }`}
   >
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <h3 className="break-words text-sm font-semibold text-white transition group-hover:text-[#20dc73]">
-          {request.title || "Investigation request"}
-        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="break-words text-sm font-semibold text-white transition group-hover:text-[#20dc73]">
+            {request.title || "Investigation request"}
+          </h3>
+          {unread > 0 && (
+            <span className="inline-flex items-center gap-1 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#20dc73]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
+              NEW{unread > 1 ? ` ${unread}` : ""}
+            </span>
+          )}
+        </div>
 
         <p className="mt-1 text-xs text-white/40">
           {request.case_number || "No reference"}
@@ -219,7 +236,7 @@ export default function ClientRequestsPage() {
       </span>
     </div>
   </a>
-))}
+)})}
         </div>
       </section>
     </div>

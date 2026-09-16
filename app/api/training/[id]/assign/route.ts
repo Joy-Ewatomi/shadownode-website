@@ -6,6 +6,10 @@ import {
   assignTrainer,
   getUserProfileId,
 } from "@/lib/services/training-operations-service"
+import {
+  isTrainingAssignmentFunction,
+  type TrainingAssignmentFunction,
+} from "@/lib/role-access"
 
 type RouteContext = {
   params: Promise<{
@@ -16,6 +20,7 @@ type RouteContext = {
 type RequestBody = {
   action?: string
   trainerProfileId?: string
+  trainingRole?: string
   reason?: string
 }
 
@@ -68,6 +73,7 @@ function isAllowedTrainerRole(
   return [
     "investigator",
     "analyst",
+    "staff",
     "administrator",
     "super_administrator",
     "super-administrator",
@@ -602,6 +608,30 @@ WHERE id = $2
         ? body.reason.trim()
         : ""
 
+    const trainingRoleRaw =
+      typeof body.trainingRole === "string"
+        ? body.trainingRole.trim()
+        : "trainer"
+
+    if (
+      !isTrainingAssignmentFunction(
+        trainingRoleRaw,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid training assignment role",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
+    const trainingRole: TrainingAssignmentFunction =
+      trainingRoleRaw
+
     if (!trainerProfileId) {
       return NextResponse.json(
         {
@@ -762,6 +792,7 @@ WHERE id = $2
         trainerProfileId,
         actorProfileId,
         user.role,
+        trainingRole,
       )
 
       /*
@@ -826,6 +857,7 @@ WHERE id = $2
         trainerProfileId,
         actorProfileId,
         user.role,
+        trainingRole,
       )
 
       /*

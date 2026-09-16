@@ -10,6 +10,10 @@ import {
   syncTrainingSessionToGoogle,
   cancelTrainingSessionCalendarEvent,
 } from "@/lib/services/calendar-service"
+import {
+  isTrainingAssignmentFunction,
+  type TrainingAssignmentFunction,
+} from "@/lib/role-access"
 
 export {
   syncTrainingSessionToGoogle,
@@ -49,6 +53,7 @@ function isTrainerCapableRole(
   return [
     "investigator",
     "analyst",
+    "staff",
     "administrator",
     "super_administrator",
     "super-administrator",
@@ -556,7 +561,12 @@ export async function assignTrainer(
   trainerProfileId: string,
   actorProfileId: string | null,
   actorRole?: string | null,
+  trainingRole: TrainingAssignmentFunction = "trainer",
 ) {
+  if (!isTrainingAssignmentFunction(trainingRole)) {
+    throw new Error("Invalid training role")
+  }
+
   const engagement =
     await getEngagementTrainerState(
       engagementId,
@@ -646,6 +656,7 @@ export async function assignTrainer(
           UPDATE training_engagement_trainers
           SET
             assignment_status = $1,
+            training_role = $4,
             assigned_by = $2,
             approved_by = $2,
 
@@ -673,6 +684,7 @@ export async function assignTrainer(
           TRAINER_APPROVAL_APPROVED,
           actorProfileId,
           existingAssignment.rows[0].id,
+          trainingRole,
         ],
       )
     } else {
@@ -681,6 +693,7 @@ export async function assignTrainer(
           INSERT INTO training_engagement_trainers (
             training_engagement_id,
             trainer_profile_id,
+            training_role,
             assignment_status,
             assigned_by,
             approval_requested_by,
@@ -694,6 +707,7 @@ export async function assignTrainer(
           VALUES (
             $1,
             $2,
+            $5,
             $3,
             $4,
             $4,
@@ -709,6 +723,7 @@ export async function assignTrainer(
           trainerProfileId,
           TRAINER_APPROVAL_APPROVED,
           actorProfileId,
+          trainingRole,
         ],
       )
     }
@@ -785,6 +800,7 @@ export async function assignTrainer(
 
         SET
           assignment_status = $1,
+          training_role = $4,
           assigned_by = $2,
           approval_requested_by = $2,
           approved_by = NULL,
@@ -800,6 +816,7 @@ export async function assignTrainer(
         TRAINER_APPROVAL_PENDING,
         actorProfileId,
         existing.id,
+        trainingRole,
       ],
     )
   } else {
@@ -808,6 +825,7 @@ export async function assignTrainer(
         INSERT INTO training_engagement_trainers (
           training_engagement_id,
           trainer_profile_id,
+          training_role,
           assignment_status,
           assigned_by,
           approval_requested_by,
@@ -818,6 +836,7 @@ export async function assignTrainer(
         VALUES (
           $1,
           $2,
+          $5,
           $3,
           $4,
           $4,
@@ -830,6 +849,7 @@ export async function assignTrainer(
         trainerProfileId,
         TRAINER_APPROVAL_PENDING,
         actorProfileId,
+        trainingRole,
       ],
     )
   }
@@ -1014,6 +1034,7 @@ export async function ensureAccess(
   }
 
   if (
+    user.role === "staff" ||
     user.role === "investigator" ||
     user.role === "analyst"
   ) {

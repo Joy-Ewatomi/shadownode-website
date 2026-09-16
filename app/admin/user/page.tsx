@@ -1,671 +1,405 @@
 "use client"
 
-import {useEffect, useState} from "react"
-
+import { useEffect, useMemo, useState } from "react"
 
 type User = {
-
-id:string
-username:string
-email:string
-role:string
-status:string
-display_name?:string
-created_at:string
-
+  id: string
+  username: string
+  email: string
+  role: string
+  status: string
+  display_name?: string
+  created_at: string
 }
 
-
-
-export default function UsersAdminPage(){
-
-
-const [users,setUsers]=useState<User[]>([])
-
-const [loading,setLoading]=useState(true)
-
-
-const [form,setForm]=useState({
-
-username:"",
-email:"",
-password:"",
-role:"investigator"
-
-})
-
-
-
-
-
-async function loadUsers(){
-
-
-try{
-
-
-const res =
-await fetch(
-"/api/admin/users"
-)
-
-
-const data =
-await res.json()
-
-
-setUsers(data)
-
-
-
-}catch(error){
-
-console.error(error)
-
+type CurrentUser = {
+  id: string
+  username: string
+  email: string
+  role: string
 }
 
-finally{
+const STATUS_OPTIONS = [
+  "active",
+  "inactive",
+  "disabled",
+  "suspended",
+]
 
-setLoading(false)
-
+function isSuperAdminRole(role: string | null | undefined) {
+  return (
+    role === "super_administrator" ||
+    role === "super-administrator"
+  )
 }
 
-
+function isProtectedRole(role: string) {
+  return [
+    "client",
+    "super_administrator",
+    "super-administrator",
+    "investigator",
+    "analyst",
+  ].includes(role)
 }
 
-
-
-
-
-useEffect(()=>{
-
-loadUsers()
-
-},[])
-
-
-
-
-
-
-
-async function createUser(){
-
-
-
-const res =
-await fetch(
-"/api/admin/users",
-{
-
-method:"POST",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify(form)
-
+function roleLabel(role: string) {
+  return role
+    .replace(/_/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-)
-
-
-
-
-const data =
-await res.json()
-
-
-
-if(!res.ok){
-
-alert(data.error)
-
-return
-
-}
-
-
-
-alert(
-"Employee created"
-)
-
-
-
-setForm({
-
-username:"",
-email:"",
-password:"",
-role:"investigator"
-
-})
-
-
-
-loadUsers()
-
-
-}
-
-
-
-
-
-
-
-
-async function updateUser(
-id:string,
-role:string,
-status:string
-){
-
-
-await fetch(
-"/api/admin/users",
-{
-
-method:"PATCH",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify({
-
-user_id:id,
-role,
-status
-
-})
-
-}
-
-)
-
-
-loadUsers()
-
-
-}
-
-
-
-
-
-
-
-if(loading){
-
-return (
-
-<div className="
-min-h-screen
-bg-[#020604]
-text-[#20dc73]
-flex
-items-center
-justify-center
-">
-
-Loading Users...
-
-</div>
-
-)
-
-}
-
-
-
-
-
-return (
-
-<div className="
-min-h-screen
-bg-[#020604]
-text-white
-p-8
-">
-
-
-
-<h1 className="
-text-3xl
-font-bold
-text-[#20dc73]
-">
-
-Employee Management
-
-</h1>
-
-
-<p className="
-text-white/50
-mt-2
-">
-
-Create and manage ShadowNode personnel
-
-</p>
-
-
-
-
-
-
-<div className="
-mt-8
-border
-border-[#143b28]
-bg-[#06110f]
-rounded-xl
-p-6
-">
-
-
-<h2 className="
-text-xl
-font-bold
-mb-5
-">
-
-Create Employee
-
-</h2>
-
-
-
-<div className="
-grid
-grid-cols-4
-gap-4
-">
-
-
-
-<input
-
-placeholder="Username"
-
-className="
-bg-black
-border
-border-[#143b28]
-p-3
-rounded
-"
-
-value={form.username}
-
-onChange={
-e=>setForm({
-...form,
-username:e.target.value
-})
-}
-
-/>
-
-
-
-
-<input
-
-placeholder="Email"
-
-className="
-bg-black
-border
-border-[#143b28]
-p-3
-rounded
-"
-
-value={form.email}
-
-onChange={
-e=>setForm({
-...form,
-email:e.target.value
-})
-}
-
-/>
-
-
-
-
-
-
-<input
-
-placeholder="Password"
-
-type="password"
-
-className="
-bg-black
-border
-border-[#143b28]
-p-3
-rounded
-"
-
-value={form.password}
-
-onChange={
-e=>setForm({
-...form,
-password:e.target.value
-})
-}
-
-/>
-
-
-
-
-
-
-<select
-
-className="
-bg-black
-border
-border-[#143b28]
-p-3
-rounded
-"
-
-value={form.role}
-
-onChange={
-e=>setForm({
-...form,
-role:e.target.value
-})
-}
-
->
-
-
-<option value="investigator">
-Investigator
-</option>
-
-
-<option value="analyst">
-Analyst
-</option>
-
-
-<option value="administrator">
-Administrator
-</option>
-
-
-<option value="super_administrator">
-Super Administrator
-</option>
-
-
-</select>
-
-
-
-</div>
-
-
-
-
-
-<button
-
-onClick={createUser}
-
-className="
-mt-5
-bg-[#20dc73]
-text-black
-font-bold
-px-6
-py-3
-rounded
-"
-
->
-
-Create Employee
-
-</button>
-
-
-
-
-</div>
-
-
-
-
-
-
-
-
-
-<div className="
-mt-8
-space-y-4
-">
-
-
-{
-
-users.map(user=>(
-
-
-<div
-
-key={user.id}
-
-className="
-border
-border-[#143b28]
-bg-[#06110f]
-rounded-xl
-p-5
-flex
-justify-between
-items-center
-"
-
-
->
-
-
-
-<div>
-
-
-<h3 className="
-font-bold
-text-[#20dc73]
-">
-
-{user.username}
-
-</h3>
-
-
-<p className="
-text-white/50
-">
-
-{user.email}
-
-</p>
-
-
-<p className="
-text-sm
-mt-2
-">
-
-Role: {user.role}
-
-</p>
-
-
-<p className="
-text-sm
-">
-
-Status: {user.status}
-
-</p>
-
-
-</div>
-
-
-
-
-
-
-
-<div className="
-flex
-gap-3
-">
-
-
-<select
-
-className="
-bg-black
-border
-border-[#143b28]
-p-2
-rounded
-"
-
-defaultValue={user.role}
-
-onChange={
-e=>
-updateUser(
-user.id,
-e.target.value,
-user.status
-)
-}
-
->
-
-<option value="client">
-Client
-</option>
-
-
-<option value="investigator">
-Investigator
-</option>
-
-
-<option value="analyst">
-Analyst
-</option>
-
-
-<option value="administrator">
-Administrator
-</option>
-
-
-<option value="super_administrator">
-Super Admin
-</option>
-
-
-</select>
-
-
-
-
-
-<select
-
-className="
-bg-black
-border
-border-[#143b28]
-p-2
-rounded
-"
-
-defaultValue={user.status}
-
-onChange={
-e=>
-updateUser(
-user.id,
-user.role,
-e.target.value
-)
-}
-
->
-
-
-<option>
-active
-</option>
-
-
-<option>
-suspended
-</option>
-
-
-<option>
-deleted
-</option>
-
-
-</select>
-
-
-
-</div>
-
-
-
-
-
-
-</div>
-
-
-))
-
-
-}
-
-
-</div>
-
-
-
-
-
-
-</div>
-
-)
-
+export default function UsersAdminPage() {
+  const [users, setUsers] = useState<User[]>([])
+  const [currentUser, setCurrentUser] =
+    useState<CurrentUser | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+    role: "staff",
+  })
+
+  const callerIsSuperAdmin =
+    isSuperAdminRole(currentUser?.role)
+
+  const createRoleOptions = useMemo(
+    () =>
+      callerIsSuperAdmin
+        ? [
+            { value: "staff", label: "Staff" },
+            {
+              value: "administrator",
+              label: "Administrator",
+            },
+          ]
+        : [{ value: "staff", label: "Staff" }],
+    [callerIsSuperAdmin],
+  )
+
+  async function loadCurrentUser() {
+    const res = await fetch("/api/auth/me")
+    const data = await res.json()
+
+    if (!res.ok) {
+      throw new Error(data.error || "Unable to load current user")
+    }
+
+    setCurrentUser(data.user)
+  }
+
+  async function loadUsers() {
+    try {
+      setError(null)
+
+      const res = await fetch("/api/admin/user")
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed loading users")
+      }
+
+      setUsers(data)
+    } catch (loadError) {
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed loading users"
+      setError(message)
+    }
+  }
+
+  useEffect(() => {
+    async function load() {
+      try {
+        await loadCurrentUser()
+        await loadUsers()
+      } catch (loadError) {
+        const message =
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load employee management"
+        setError(message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
+  }, [])
+
+  useEffect(() => {
+    if (
+      !createRoleOptions.some(
+        (option) => option.value === form.role,
+      )
+    ) {
+      setForm((current) => ({
+        ...current,
+        role: createRoleOptions[0]?.value || "staff",
+      }))
+    }
+  }, [createRoleOptions, form.role])
+
+  function getEditableRoleOptions(user: User) {
+    if (!currentUser) return []
+    if (user.id === currentUser.id) return []
+    if (isProtectedRole(user.role)) return []
+    if (user.role === "administrator" && !callerIsSuperAdmin) return []
+
+    return callerIsSuperAdmin
+      ? [
+          { value: "staff", label: "Staff" },
+          {
+            value: "administrator",
+            label: "Administrator",
+          },
+        ]
+      : [{ value: "staff", label: "Staff" }]
+  }
+
+  function canEditUser(user: User) {
+    return getEditableRoleOptions(user).length > 0
+  }
+
+  async function createUser() {
+    setError(null)
+
+    const res = await fetch("/api/admin/user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(form),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      setError(data.error || "Failed creating employee")
+      return
+    }
+
+    setForm({
+      username: "",
+      email: "",
+      password: "",
+      role: createRoleOptions[0]?.value || "staff",
+    })
+
+    await loadUsers()
+  }
+
+  async function updateUser(
+    id: string,
+    role: string,
+    status: string,
+  ) {
+    setError(null)
+
+    const res = await fetch("/api/admin/user", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: id,
+        role,
+        status,
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      setError(data.error || "Failed updating employee")
+      await loadUsers()
+      return
+    }
+
+    await loadUsers()
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#020604] text-[#20dc73]">
+        Loading Users...
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#020604] p-8 text-white">
+      <h1 className="text-3xl font-bold text-[#20dc73]">
+        Employee Management
+      </h1>
+
+      <p className="mt-2 text-white/50">
+        Create and manage ShadowNode personnel
+      </p>
+
+      {error ? (
+        <div className="mt-5 rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="mt-8 rounded-xl border border-[#143b28] bg-[#06110f] p-6">
+        <h2 className="mb-5 text-xl font-bold">
+          Create Employee
+        </h2>
+
+        <div className="grid gap-4 lg:grid-cols-4">
+          <input
+            placeholder="Username"
+            className="rounded border border-[#143b28] bg-black p-3"
+            value={form.username}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                username: event.target.value,
+              })
+            }
+          />
+
+          <input
+            placeholder="Email"
+            className="rounded border border-[#143b28] bg-black p-3"
+            value={form.email}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                email: event.target.value,
+              })
+            }
+          />
+
+          <input
+            placeholder="Password"
+            type="password"
+            className="rounded border border-[#143b28] bg-black p-3"
+            value={form.password}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                password: event.target.value,
+              })
+            }
+          />
+
+          <select
+            className="rounded border border-[#143b28] bg-black p-3"
+            value={form.role}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                role: event.target.value,
+              })
+            }
+          >
+            {createRoleOptions.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          onClick={createUser}
+          className="mt-5 rounded bg-[#20dc73] px-6 py-3 font-bold text-black"
+        >
+          Create Employee
+        </button>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        {users.map((user) => {
+          const roleOptions = getEditableRoleOptions(user)
+          const editable = canEditUser(user)
+
+          return (
+            <div
+              key={user.id}
+              className="flex items-center justify-between rounded-xl border border-[#143b28] bg-[#06110f] p-5"
+            >
+              <div>
+                <h3 className="font-bold text-[#20dc73]">
+                  {user.username}
+                </h3>
+
+                <p className="text-white/50">
+                  {user.email}
+                </p>
+
+                <p className="mt-2 text-sm">
+                  Role: {roleLabel(user.role)}
+                </p>
+
+                <p className="text-sm">
+                  Status: {user.status}
+                </p>
+              </div>
+
+              {editable ? (
+                <div className="flex gap-3">
+                  <select
+                    className="rounded border border-[#143b28] bg-black p-2"
+                    value={user.role}
+                    onChange={(event) =>
+                      updateUser(
+                        user.id,
+                        event.target.value,
+                        user.status,
+                      )
+                    }
+                  >
+                    {roleOptions.map((option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="rounded border border-[#143b28] bg-black p-2"
+                    value={user.status}
+                    onChange={(event) =>
+                      updateUser(
+                        user.id,
+                        user.role,
+                        event.target.value,
+                      )
+                    }
+                  >
+                    {STATUS_OPTIONS.map((status) => (
+                      <option
+                        key={status}
+                        value={status}
+                      >
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="max-w-xs rounded border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/45">
+                  Protected account
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }

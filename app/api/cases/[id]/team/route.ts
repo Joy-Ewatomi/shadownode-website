@@ -5,7 +5,7 @@ import {
 } from "@/lib/db"
 
 import {
-  requireInvestigationWorkspace,
+  requireCaseReadAccess,
 } from "@/lib/investigation-workspace"
 
 export async function GET(
@@ -20,7 +20,7 @@ export async function GET(
     const { id } = await params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseReadAccess(
         request,
         id,
       )

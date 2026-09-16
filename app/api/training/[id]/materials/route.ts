@@ -40,6 +40,7 @@ function isTrainerCapableRole(
   return (
     role === "investigator" ||
     role === "analyst" ||
+    role === "staff" ||
     role === "administrator" ||
     isSuperAdministrator(role)
   )

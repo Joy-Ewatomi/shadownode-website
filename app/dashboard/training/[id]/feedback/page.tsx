@@ -23,6 +23,19 @@ type EngagementRow = {
   progress: number | string | null
   training_goal: string | null
   client_profile_id: string | null
+  training_client_type: string | null
+  training_organization_name: string | null
+  participant_count: number | string | null
+}
+
+type ParticipantRow = {
+  id: string
+  full_name: string
+  email: string | null
+  certificate_name: string
+  organization_name: string | null
+  status: string | null
+  certificate_eligible: boolean | null
 }
 
 function normalizeStatus(
@@ -112,7 +125,10 @@ export default async function FeedbackPage({
           status,
           progress,
           training_goal,
-          client_profile_id
+          client_profile_id,
+          training_client_type,
+          training_organization_name,
+          participant_count
         FROM training_engagements
         WHERE id = $1
         LIMIT 1
@@ -215,6 +231,35 @@ export default async function FeedbackPage({
 
   const feedbackSubmitted =
     feedbacks.length > 0
+
+  let participants: ParticipantRow[] = []
+
+  if (engagement.client_profile_id) {
+    const participantResult =
+      await query<ParticipantRow>(
+        `
+          SELECT
+            id,
+            full_name,
+            email,
+            certificate_name,
+            organization_name,
+            status,
+            certificate_eligible
+          FROM training_participants
+          WHERE training_engagement_id = $1
+            AND client_profile_id = $2
+          ORDER BY created_at ASC
+        `,
+        [
+          id,
+          engagement.client_profile_id,
+        ],
+      )
+
+    participants =
+      participantResult.rows
+  }
 
   /*
    * ============================================================
@@ -406,6 +451,21 @@ export default async function FeedbackPage({
                 userRole={user.role}
                 currentUserId={
                   user.id
+                }
+                clientType={
+                  engagement.training_client_type
+                }
+                organizationName={
+                  engagement.training_organization_name
+                }
+                participantCount={
+                  Number(
+                    engagement.participant_count ||
+                      1,
+                  )
+                }
+                initialParticipants={
+                  participants
                 }
               />
             </section>

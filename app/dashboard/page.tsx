@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
+import { normalizePermanentRole } from "@/lib/role-access"
 
 export default async function DashboardPage(){
 
@@ -10,16 +11,13 @@ export default async function DashboardPage(){
  }
 
 
- switch(user.role){
+ switch(normalizePermanentRole(user.role)){
 
   case "client":
     redirect("/dashboard/client")
 
-  case "investigator":
-    redirect("/dashboard/investigator")
-
-  case "analyst":
-    redirect("/dashboard/analyst")
+  case "staff":
+    redirect("/dashboard/staff")
 
   case "administrator":
     redirect("/dashboard/administrator")

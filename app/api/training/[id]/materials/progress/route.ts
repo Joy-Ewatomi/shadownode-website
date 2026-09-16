@@ -34,6 +34,7 @@ function isTrainerOrAdminRole(
   return [
     "investigator",
     "analyst",
+    "staff",
     "administrator",
   ].includes(role || "")
 }

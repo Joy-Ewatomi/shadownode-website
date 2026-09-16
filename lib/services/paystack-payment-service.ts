@@ -7,6 +7,7 @@ import {
   notifySuperAdmins,
   notifyUser,
 } from "@/lib/services/notification-service"
+import { transitionCaseStatus } from "@/lib/services/case-status-service"
 
 type PaystackTransaction = {
   id?: number
@@ -523,11 +524,6 @@ export async function verifyAndCompletePaystackPayment(
               UPDATE cases
               SET
                 payment_status = 'paid',
-                status = 'active',
-                started_at = COALESCE(
-                  started_at,
-                  NOW()
-                ),
                 updated_at = NOW()
               WHERE id = $1
               `,
@@ -536,6 +532,15 @@ export async function verifyAndCompletePaystackPayment(
               ],
             )
 
+            await transitionCaseStatus({
+              caseId: current.case_id,
+              to: "awaiting_assignment",
+              actor: "system",
+              reason: `Payment confirmed through Paystack. Reference: ${cleanReference}.`,
+              sourceAction: "paystack_payment_verified",
+              executor: client,
+            })
+
             if (
               current.request_id
             ) {
@@ -543,7 +548,7 @@ export async function verifyAndCompletePaystackPayment(
                 `
                 UPDATE requests
                 SET
-                  status = 'active',
+                  status = 'awaiting_assignment',
                   updated_at = NOW()
                 WHERE id = $1
                 `,
@@ -572,7 +577,7 @@ export async function verifyAndCompletePaystackPayment(
               `,
               [
                 current.case_id,
-                `Payment confirmed through Paystack. Reference: ${cleanReference}. Investigation activated.`,
+                `Payment confirmed through Paystack. Reference: ${cleanReference}. Case is awaiting assignment.`,
               ],
             )
           }
@@ -736,6 +741,10 @@ export async function verifyAndCompletePaystackPayment(
                 completedPayment.case_id,
               payment_id:
                 completedPayment.id,
+              resource_type:
+                "case",
+              resource_id:
+                completedPayment.case_id,
               target_page:
                 "case",
               action:
@@ -762,6 +771,12 @@ export async function verifyAndCompletePaystackPayment(
             completedPayment.case_id,
           payment_id:
             completedPayment.id,
+          resource_type:
+            "case",
+          resource_id:
+            completedPayment.case_id,
+          audience:
+            "super_administrator",
           target_page:
             "case_assignment",
           action:
@@ -837,6 +852,10 @@ export async function verifyAndCompletePaystackPayment(
                 completedPayment.training_engagement_id,
               payment_id:
                 completedPayment.id,
+              resource_type:
+                "training",
+              resource_id:
+                completedPayment.training_engagement_id,
               engagement_number:
                 trainingRow.engagement_number ||
                 undefined,
@@ -866,6 +885,12 @@ export async function verifyAndCompletePaystackPayment(
             completedPayment.training_engagement_id,
           payment_id:
             completedPayment.id,
+          resource_type:
+            "training",
+          resource_id:
+            completedPayment.training_engagement_id,
+          audience:
+            "super_administrator",
           target_page:
             "training_assignment",
           action:

@@ -17,6 +17,8 @@ type TrainingEngagementRow = {
   progress: number | string | null
   status: string | null
   client_profile_id: string | null
+  training_client_type?: string | null
+  training_organization_name?: string | null
 }
 
 type FeedbackRow = {
@@ -55,6 +57,7 @@ function isOperationalRole(
   return (
     role === "investigator" ||
     role === "analyst" ||
+    role === "staff" ||
     role === "administrator" ||
     isSuperAdminRole(role)
   )
@@ -70,7 +73,9 @@ async function getTrainingEngagement(
           id,
           progress,
           status,
-          client_profile_id
+          client_profile_id,
+          training_client_type,
+          training_organization_name
         FROM training_engagements
         WHERE id = $1
         LIMIT 1
@@ -211,6 +216,29 @@ export async function GET(
           success: true,
           feedback:
             result.rows,
+          participants:
+            (
+              await query(
+                `
+                  SELECT
+                    id,
+                    full_name,
+                    email,
+                    certificate_name,
+                    organization_name,
+                    status,
+                    certificate_eligible
+                  FROM training_participants
+                  WHERE training_engagement_id = $1
+                    AND client_profile_id = $2
+                  ORDER BY created_at ASC
+                `,
+                [
+                  id,
+                  clientProfileId,
+                ],
+              )
+            ).rows,
           progress: Number(
             engagement.progress || 0,
           ),
@@ -531,12 +559,85 @@ export async function POST(
      * - client profile nickname
      */
 
+    const rawRecipients =
+      Array.isArray(
+        body.certificate_recipients,
+      )
+        ? body.certificate_recipients
+        : []
+
+    const certificateRecipients =
+      rawRecipients
+        .map((item: unknown) => {
+          if (typeof item === "string") {
+            return {
+              full_name: item.trim(),
+              certificate_name:
+                item.trim(),
+              email: null,
+            }
+          }
+
+          if (
+            item &&
+            typeof item === "object"
+          ) {
+            const record =
+              item as Record<
+                string,
+                unknown
+              >
+            const fullName =
+              typeof record.full_name ===
+              "string"
+                ? record.full_name.trim()
+                : ""
+            const certificateName =
+              typeof record.certificate_name ===
+              "string"
+                ? record.certificate_name.trim()
+                : fullName
+            const email =
+              typeof record.email === "string"
+                ? record.email.trim()
+                : null
+
+            return {
+              full_name:
+                fullName ||
+                certificateName,
+              certificate_name:
+                certificateName ||
+                fullName,
+              email:
+                email || null,
+            }
+          }
+
+          return null
+        })
+        .filter(
+          (
+            item,
+          ): item is {
+            full_name: string
+            certificate_name: string
+            email: string | null
+          } =>
+            Boolean(
+              item &&
+                item.full_name &&
+                item.certificate_name,
+            ),
+        )
+
     const certificateRecipientName =
       typeof body
         .certificate_recipient_name ===
       "string"
         ? body.certificate_recipient_name.trim()
-        : ""
+        : certificateRecipients[0]
+            ?.certificate_name || ""
 
     if (
       !certificateRecipientName
@@ -565,6 +666,25 @@ export async function POST(
           status: 400,
         },
       )
+    }
+
+    for (const recipient of certificateRecipients) {
+      if (
+        recipient.certificate_name.length >
+          160 ||
+        recipient.full_name.length >
+          160
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Each certificate recipient name must be 160 characters or fewer.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
     }
 
     /*
@@ -714,6 +834,82 @@ export async function POST(
 
     const submitted =
       result.rows[0]
+
+    const recipientsToStore =
+      certificateRecipients.length > 0
+        ? certificateRecipients
+        : [
+            {
+              full_name:
+                certificateRecipientName,
+              certificate_name:
+                certificateRecipientName,
+              email: null,
+            },
+          ]
+
+    for (const recipient of recipientsToStore) {
+      await query(
+        `
+          INSERT INTO training_participants (
+            training_engagement_id,
+            client_profile_id,
+            full_name,
+            email,
+            certificate_name,
+            organization_name,
+            status,
+            certificate_eligible,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            NULLIF($4, ''),
+            $5,
+            $6,
+            CASE
+              WHEN $7::varchar = 'completed'
+                AND $8::int >= 100
+              THEN 'eligible'
+              ELSE 'pending'
+            END,
+            (
+              $7::varchar = 'completed'
+              AND $8::int >= 100
+            ),
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT (
+            training_engagement_id,
+            lower(certificate_name)
+          )
+          DO UPDATE SET
+            full_name = EXCLUDED.full_name,
+            email = EXCLUDED.email,
+            organization_name = EXCLUDED.organization_name,
+            updated_at = NOW()
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM training_certificates
+            WHERE training_certificates.training_participant_id = training_participants.id
+          )
+        `,
+        [
+          id,
+          access.profileId,
+          recipient.full_name,
+          recipient.email,
+          recipient.certificate_name,
+          engagement.training_organization_name,
+          engagement.status || "",
+          Number(engagement.progress || 0),
+        ],
+      )
+    }
 
     /*
      * --------------------------------------------------------

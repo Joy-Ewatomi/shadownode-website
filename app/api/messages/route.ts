@@ -4,8 +4,16 @@ import {
 } from "next/server"
 
 import { getCurrentUser } from "@/lib/auth"
-import { query } from "@/lib/db"
+import { query, withTransaction, type DatabasePoolClient } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
+import {
+  createMessageReceipts,
+  markMessageReceiptReadForUser,
+  markConversationReceiptsReadForUser,
+  syncConversationParticipants,
+} from "@/lib/services/message-receipts-service"
+import { createCaseMessageNotifications } from "@/lib/services/message-notifications-service"
+import { canCaseFunctionMessage } from "@/lib/role-access"
 
 type CasePermission = {
   case_id: string
@@ -16,6 +24,7 @@ type CasePermission = {
   is_super_admin: boolean
   can_view: boolean
   can_reply: boolean
+  assignment_role: string | null
 }
 
 type ConversationRow = {
@@ -81,6 +90,7 @@ async function getCasePermission(
     client_profile_id: string | null
     client_user_id: string | null
     is_assigned: boolean
+    assignment_role: string | null
   }>(
     `
     SELECT
@@ -95,7 +105,18 @@ async function getCasePermission(
           AND ca.assigned_to = $2
           AND ca.removed_at IS NULL
           AND ca.status IN ('assigned', 'approved')
-      ) AS is_assigned
+      ) AS is_assigned,
+
+      (
+        SELECT ca.assignment_role
+        FROM case_assignments ca
+        WHERE ca.case_id = c.id
+          AND ca.assigned_to = $2
+          AND ca.removed_at IS NULL
+          AND ca.status IN ('assigned', 'approved')
+        ORDER BY ca.assigned_at DESC
+        LIMIT 1
+      ) AS assignment_role
 
     FROM cases c
 
@@ -120,6 +141,9 @@ async function getCasePermission(
     row.client_profile_id === profileId
 
   const assigned = Boolean(row.is_assigned)
+  const canMessage =
+    assigned &&
+    canCaseFunctionMessage(row.assignment_role)
 
   const superAdmin = isSuperAdmin(role)
 
@@ -131,13 +155,13 @@ async function getCasePermission(
     canReply = clientOwnsCase
   } else if (superAdmin) {
     canView = true
-    canReply = assigned
+    canReply = canMessage
   } else if (role === "administrator") {
     canView = assigned
-    canReply = assigned
+    canReply = canMessage
   } else {
     canView = assigned
-    canReply = assigned
+    canReply = canMessage
   }
 
   return {
@@ -149,6 +173,7 @@ async function getCasePermission(
     is_super_admin: superAdmin,
     can_view: canView,
     can_reply: canReply,
+    assignment_role: row.assignment_role,
   }
 }
 
@@ -181,8 +206,9 @@ async function getConversation(
 async function getOrCreateCaseConversation(
   caseId: string,
   senderUserId: string,
+  executor: Pick<DatabasePoolClient, "query"> = { query },
 ) {
-  const existing = await query<{
+  const existing = await executor.query<{
     id: string
   }>(
     `
@@ -198,7 +224,7 @@ async function getOrCreateCaseConversation(
   let conversationId = existing.rows[0]?.id
 
   if (!conversationId) {
-    const created = await query<{
+    const created = await executor.query<{
       id: string
     }>(
       `
@@ -206,6 +232,9 @@ async function getOrCreateCaseConversation(
         case_id
       )
       VALUES ($1)
+      ON CONFLICT (case_id)
+      WHERE case_id IS NOT NULL
+      DO UPDATE SET case_id = EXCLUDED.case_id
       RETURNING id
       `,
       [caseId],
@@ -218,7 +247,7 @@ async function getOrCreateCaseConversation(
    * Always ensure the sender belongs to
    * the conversation.
    */
-  await query(
+  await executor.query(
     `
     INSERT INTO conversation_members (
       conversation_id,
@@ -233,7 +262,7 @@ async function getOrCreateCaseConversation(
   /**
    * Add the case client.
    */
-  await query(
+  await executor.query(
     `
     INSERT INTO conversation_members (
       conversation_id,
@@ -261,7 +290,7 @@ async function getOrCreateCaseConversation(
    * Pending, rejected and removed assignments
    * must not receive case messages.
    */
-  await query(
+  await executor.query(
     `
     INSERT INTO conversation_members (
       conversation_id,
@@ -351,10 +380,16 @@ export async function GET() {
 
         (
           SELECT COUNT(*)::int
-          FROM messages m
-          WHERE m.conversation_id = c.id
-            AND m.sender_id <> $2
-            AND m.read_at IS NULL
+          FROM message_receipts mr
+          JOIN messages unread_message
+            ON unread_message.id = mr.message_id
+          WHERE mr.conversation_id = c.id
+            AND mr.user_id = $1
+            AND mr.read_at IS NULL
+            AND (
+              unread_message.sender_id IS NULL
+              OR unread_message.sender_id <> $2
+            )
         ) AS unread_count,
 
         COALESCE(
@@ -387,7 +422,7 @@ export async function GET() {
               m.created_at,
 
               'read_at',
-              m.read_at
+              mr.read_at
             )
             ORDER BY m.created_at ASC
           ) FILTER (
@@ -403,6 +438,10 @@ export async function GET() {
 
       LEFT JOIN messages m
         ON m.conversation_id = c.id
+
+      LEFT JOIN message_receipts mr
+        ON mr.message_id = m.id
+        AND mr.user_id = $1
 
       LEFT JOIN user_profiles sender_profile
         ON sender_profile.id = m.sender_id
@@ -670,48 +709,41 @@ export async function POST(
     // Find/create case conversation
     // ----------------------------------------------------------
 
-    if (!resolvedConversationId) {
-      resolvedConversationId =
-        await getOrCreateCaseConversation(
-          caseId,
-          user.id,
+    const insertedMessage = await withTransaction(async (client) => {
+      if (!resolvedConversationId) {
+        resolvedConversationId =
+          await getOrCreateCaseConversation(
+            caseId,
+            user.id,
+            client,
+          )
+      } else {
+        await client.query(
+          `
+          INSERT INTO conversation_members (
+            conversation_id,
+            user_id
+          )
+          VALUES ($1, $2)
+          ON CONFLICT DO NOTHING
+          `,
+          [
+            resolvedConversationId,
+            user.id,
+          ],
         )
-    } else {
-      /**
-       * Make sure this specific sender belongs
-       * to the requested conversation.
-       */
-      await query(
-        `
-        INSERT INTO conversation_members (
-          conversation_id,
-          user_id
-        )
-        VALUES ($1, $2)
-        ON CONFLICT DO NOTHING
-        `,
-        [
+
+        await syncConversationParticipants(
           resolvedConversationId,
-          user.id,
-        ],
-      )
+          caseId,
+          client,
+        )
+      }
 
-      /**
-       * Also synchronize active case participants.
-       */
-      await getOrCreateCaseConversation(
-        caseId,
-        user.id,
-      )
-    }
-
-    // ----------------------------------------------------------
-    // Insert message
-    // ----------------------------------------------------------
-
-    const inserted = await query<{
+      const inserted = await client.query<{
       id: string
       conversation_id: string
+      case_id: string
       sender_id: string
       message: string
       created_at: string
@@ -737,6 +769,7 @@ export async function POST(
       RETURNING
         id,
         conversation_id,
+        case_id,
         sender_id,
         message,
         created_at,
@@ -749,10 +782,33 @@ export async function POST(
         user.role,
         message,
       ],
-    )
+      )
 
-    const insertedMessage =
-      inserted.rows[0]
+      const row = inserted.rows[0]
+
+      await createMessageReceipts(
+        {
+          messageId: row.id,
+          conversationId: row.conversation_id,
+          caseId,
+          senderProfileId: profileId,
+        },
+        client,
+      )
+
+      await createCaseMessageNotifications(
+        {
+          messageId: row.id,
+          conversationId: row.conversation_id,
+          caseId,
+          senderUserId: user.id,
+          senderRole: user.role,
+        },
+        client,
+      )
+
+      return row
+    })
 
     // ----------------------------------------------------------
     // Sender identity
@@ -966,38 +1022,36 @@ export async function PATCH(
       )
     }
 
-    // ----------------------------------------------------------
-    // Mark target messages read
-    // ----------------------------------------------------------
-
-    await query(
-      `
-      UPDATE messages
-
-      SET read_at =
-        COALESCE(
-          read_at,
-          NOW()
-        )
-
-      WHERE sender_id <> $1
-
-        AND (
-          $2::uuid IS NULL
-          OR conversation_id = $2::uuid
-        )
-
-        AND (
-          $3::uuid IS NULL
-          OR id = $3::uuid
-        )
-      `,
-      [
-        profileId,
+    if (conversationId) {
+      await markConversationReceiptsReadForUser({
         conversationId,
-        messageId,
-      ],
-    )
+        userId: user.id,
+        profileId,
+      })
+    } else if (messageId) {
+      const message = await query<{
+        conversation_id: string
+      }>(
+        `
+        SELECT conversation_id
+        FROM messages
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [messageId],
+      )
+
+      const targetConversationId =
+        message.rows[0]?.conversation_id
+
+      if (targetConversationId) {
+        await markMessageReceiptReadForUser({
+          messageId,
+          userId: user.id,
+          profileId,
+        })
+      }
+    }
 
     return NextResponse.json(
       {

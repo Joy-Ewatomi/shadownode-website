@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser, isAdminRole } from "@/lib/auth"
-import { query } from "@/lib/db"
+import { query, withTransaction } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
 import { notifyUser } from "@/lib/services/notification-service"
+import { createBacklogReceiptsForUser } from "@/lib/services/message-receipts-service"
+import { isAssignablePermanentRole } from "@/lib/role-access"
+import { transitionCaseStatus } from "@/lib/services/case-status-service"
 
 type AssignmentInput = {
   case_id?: string
@@ -125,8 +128,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Assignee profile not found" }, { status: 404 })
     }
 
-    if (!["investigator", "analyst"].includes(assignee.role)) {
-      return NextResponse.json({ error: "Cases can only be assigned to investigators or analysts" }, { status: 400 })
+    if (!isAssignablePermanentRole(assignee.role)) {
+      return NextResponse.json({ error: "Cases can only be assigned to staff or administrators" }, { status: 400 })
     }
 
     const caseResult = await query<{ id: string; title: string | null; case_number: string | null }>(
@@ -142,53 +145,90 @@ export async function POST(request: NextRequest) {
     const caseRow = caseResult.rows[0]
     if (!caseRow) return NextResponse.json({ error: "Case not found" }, { status: 404 })
 
-    await query("BEGIN")
-
     try {
-      await query(
-        `
-        UPDATE case_assignments
-        SET removed_at = NOW()
-        WHERE case_id = $1
-          AND assigned_to = $2
-          AND removed_at IS NULL
-        `,
-        [caseId, assignee.profile_id],
-      )
-
-      const inserted = await query(
-        `
-        INSERT INTO case_assignments (case_id, assigned_to, assigned_by)
-        VALUES ($1, $2, $3)
-        RETURNING id, case_id, assigned_to, assigned_by, assigned_at, removed_at
-        `,
-        [caseId, assignee.profile_id, assignedBy],
-      )
-
-      if (assignee.role === "investigator") {
-        await query(
+      const inserted = await withTransaction(async (client) => {
+        const lockedCase = await client.query<{ status: string | null }>(
           `
-          UPDATE cases
-          SET assigned_to = $2, status = CASE WHEN status = 'awaiting_assignment' THEN 'assigned' ELSE status END, updated_at = NOW()
+          SELECT status
+          FROM cases
           WHERE id = $1
+          FOR UPDATE
+          `,
+          [caseId],
+        )
+
+        if (!lockedCase.rows[0]) {
+          throw new Error("Case not found")
+        }
+
+        await client.query(
+          `
+          UPDATE case_assignments
+          SET removed_at = NOW()
+          WHERE case_id = $1
+            AND assigned_to = $2
+            AND removed_at IS NULL
           `,
           [caseId, assignee.profile_id],
         )
-      }
 
-      await query(
-        `
-        INSERT INTO case_updates (case_id, updated_by, update_type, title, content)
-        VALUES ($1, $2, 'assignment', 'Case Assigned', $3)
-        `,
-        [
-          caseId,
-          assignedBy,
-          `${assignee.username} was assigned to this case as ${assignee.role}.`,
-        ],
-      )
+        const inserted = await client.query(
+          `
+          INSERT INTO case_assignments (case_id, assigned_to, assigned_by, assignment_role)
+          VALUES ($1, $2, $3, 'investigator')
+          RETURNING id, case_id, assigned_to, assigned_by, assigned_at, removed_at
+          `,
+          [caseId, assignee.profile_id, assignedBy],
+        )
 
-      await query("COMMIT")
+        if (assignee.role === "staff" || assignee.role === "administrator") {
+          await client.query(
+            `
+            UPDATE cases
+            SET assigned_to = $2, updated_at = NOW()
+            WHERE id = $1
+            `,
+            [caseId, assignee.profile_id],
+          )
+
+          if (lockedCase.rows[0].status === "awaiting_assignment") {
+            await transitionCaseStatus({
+              caseId,
+              to: "active",
+              actor: "assignment_workflow",
+              actorUserId: user.id,
+              actorProfileId: assignedBy,
+              reason: "Approved operational assignment activated the case.",
+              sourceAction: "legacy_case_assignment_created",
+              executor: client,
+            })
+          }
+        }
+
+        await client.query(
+          `
+          INSERT INTO case_updates (case_id, updated_by, update_type, title, content)
+          VALUES ($1, $2, 'assignment', 'Case Assigned', $3)
+          `,
+          [
+            caseId,
+            assignedBy,
+            `${assignee.username} was assigned to this case as ${assignee.role}.`,
+          ],
+        )
+
+        return inserted
+      })
+
+      await createBacklogReceiptsForUser({
+        caseId,
+        userId: assignee.user_id,
+      }).catch((error) => {
+        console.error(
+          "LEGACY ASSIGNMENT MESSAGE RECEIPT BACKLOG ERROR",
+          error,
+        )
+      })
 
       await notifyUser(assignee.user_id, {
         caseId,
@@ -197,14 +237,16 @@ export async function POST(request: NextRequest) {
         message: `You have been assigned to ${caseRow.case_number || caseRow.title || "a case"}.`,
         metadata: {
           case_id: caseId,
-          target_page: "case",
+          assignment_id: inserted.rows[0]?.id,
+          resource_type: "assignment",
+          resource_id: caseId,
+          target_page: "case_assignment",
           action: "open_case",
         },
       })
 
       return NextResponse.json(inserted.rows[0], { status: 201 })
     } catch (error) {
-      await query("ROLLBACK")
       throw error
     }
   } catch (error) {

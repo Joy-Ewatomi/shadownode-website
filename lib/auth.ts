@@ -3,6 +3,10 @@ import bcrypt from "bcryptjs"
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
+import {
+  isAdminLikeRole,
+  normalizePermanentRole,
+} from "@/lib/role-access"
 
 const SESSION_COOKIE = "shadownode_session"
 const TWO_FACTOR_COOKIE = "shadownode_2fa"
@@ -16,6 +20,7 @@ const TWO_FACTOR_MINUTES = 10
 
 export type AuthRole =
   | "client"
+  | "staff"
   | "investigator"
   | "analyst"
   | "administrator"
@@ -38,14 +43,7 @@ export type AppUser = {
 export function isAuthRole(
   role: string | null | undefined
 ): role is AuthRole {
-  return (
-    role === "client" ||
-    role === "investigator" ||
-    role === "analyst" ||
-    role === "administrator" ||
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
+  return normalizePermanentRole(role) !== null
 }
 
 // ===============================
@@ -802,9 +800,5 @@ export async function auditLog(
 export function isAdminRole(
   role?: string | null
 ) {
-  return (
-    role === "administrator" ||
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
+  return isAdminLikeRole(role)
 }

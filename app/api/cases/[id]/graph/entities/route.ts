@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import {
   optionalText,
+  requireCaseReadAccess,
   requireInvestigationWorkspace,
 } from "@/lib/investigation-workspace"
 
@@ -21,6 +22,7 @@ function canManageGraph(
   return (
     isSuperAdminRole(role) ||
     role === "administrator" ||
+    role === "staff" ||
     role === "investigator" ||
     role === "analyst"
   )
@@ -68,7 +70,7 @@ export async function GET(
     const { id } = await context.params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseReadAccess(
         request,
         id,
       )

@@ -11,6 +11,7 @@ type TrainerSearchRow = {
 }
 
 const TRAINER_ROLES = [
+  "staff",
   "investigator",
   "analyst",
   "administrator",
@@ -72,6 +73,7 @@ export async function GET(req: NextRequest) {
           ON au.id = up.user_id
         WHERE au.status = 'active'
           AND au.role IN (
+            'staff',
             'investigator',
             'analyst',
             'administrator',

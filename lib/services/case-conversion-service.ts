@@ -1,19 +1,26 @@
-import { query } from "@/lib/db"
+import { randomUUID } from "crypto"
+
+import { withTransaction } from "@/lib/db"
 import { notifyUser } from "@/lib/services/notification-service"
+import { isTrainingRequest } from "@/lib/services/request-engagement-classification"
 import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
+
+const CONVERTIBLE_REQUEST_STATUSES = [
+  "quote_sent",
+  "revised_quote_sent",
+  "client_decision_pending",
+  "awaiting_client_acceptance",
+]
 
 export async function convertAcceptedRequestToCase(
   requestId: string,
   actorUserId: string,
 ) {
-  try {
-    await query("BEGIN")
+  let notifyClientUserId: string | null = null
+  let convertedCaseId: string | null = null
 
-    // ---------------------------------------------------------
-    // 1. LOAD REQUEST
-    // ---------------------------------------------------------
-
-    const current = await query<{
+  convertedCaseId = await withTransaction(async (client) => {
+    const current = await client.query<{
       id: string
       case_number: string | null
       user_id: string | null
@@ -22,10 +29,16 @@ export async function convertAcceptedRequestToCase(
       service_type: string | null
       ai_suggested_priority: string | null
       approved_quote_amount: number | string | null
+      approved_quote_currency: string | null
       approved_estimated_completion: string | null
       preferred_deadline: string | null
       converted_case_id: string | null
+      converted_training_engagement_id: string | null
       status: string | null
+      training_goal: string | null
+      training_topics: string | null
+      training_participant_count: number | string | null
+      training_details: unknown
     }>(
       `
       SELECT
@@ -37,10 +50,16 @@ export async function convertAcceptedRequestToCase(
         service_type,
         ai_suggested_priority,
         approved_quote_amount,
+        approved_quote_currency,
         approved_estimated_completion,
         preferred_deadline,
         converted_case_id,
-        status
+        converted_training_engagement_id,
+        status,
+        training_goal,
+        training_topics,
+        training_participant_count,
+        training_details
       FROM requests
       WHERE id = $1
         AND user_id = $2
@@ -51,57 +70,44 @@ export async function convertAcceptedRequestToCase(
     )
 
     const item = current.rows[0]
+    if (!item) throw new Error("Request not found")
 
-    if (!item) {
-      throw new Error("Request not found")
+    if (item.converted_training_engagement_id) {
+      throw new Error("Request was already converted to a training engagement")
     }
 
-    // ---------------------------------------------------------
-    // 2. PREVENT DUPLICATE CASE CREATION
-    // ---------------------------------------------------------
-
     if (item.converted_case_id) {
-      await query("COMMIT")
       return item.converted_case_id
     }
 
-    // ---------------------------------------------------------
-    // 3. VERIFY REQUEST CAN BE CONVERTED
-    // ---------------------------------------------------------
+    if (isTrainingRequest(item)) {
+      throw new Error("Training requests cannot be converted to investigation cases")
+    }
 
-    if (
-      item.status === "active" ||
-      item.status === "awaiting_payment"
-    ) {
-      throw new Error(
-        "Request already converted or awaiting payment",
-      )
+    if (!item.status || !CONVERTIBLE_REQUEST_STATUSES.includes(item.status)) {
+      throw new Error(`Request cannot be converted from status: ${item.status || "unknown"}`)
     }
 
     if (!item.user_id) {
-      throw new Error(
-        "Request has no associated client user",
-      )
+      throw new Error("Request has no associated client user")
     }
 
-    // ---------------------------------------------------------
-    // 4. LOAD CLIENT PROFILE
-    //
-    // IMPORTANT:
-    // cases.client_profile_id and cases.case_user_id both
-    // reference user_profiles.id — NOT users.id.
-    // ---------------------------------------------------------
+    const quoteAmount = Number(item.approved_quote_amount)
+    if (!Number.isFinite(quoteAmount) || quoteAmount <= 0) {
+      throw new Error("The approved quote amount is invalid")
+    }
 
-    const profile = await query<{
+    if (!String(item.approved_quote_currency || "").trim()) {
+      throw new Error("The approved quote currency is missing")
+    }
+
+    const profile = await client.query<{
       id: string
       user_id: string
       organization_id: string | null
     }>(
       `
-      SELECT
-        id,
-        user_id,
-        organization_id
+      SELECT id, user_id, organization_id
       FROM user_profiles
       WHERE user_id = $1
       LIMIT 1
@@ -110,36 +116,14 @@ export async function convertAcceptedRequestToCase(
     )
 
     const clientProfile = profile.rows[0]
-
-    if (!clientProfile) {
-      throw new Error(
-        "Client profile not found for request user",
-      )
-    }
-
-    // Defensive check: make absolutely sure this profile belongs
-    // to the request owner.
+    if (!clientProfile) throw new Error("Client profile not found for request user")
     if (clientProfile.user_id !== item.user_id) {
-      throw new Error(
-        "Client profile does not belong to request user",
-      )
+      throw new Error("Client profile does not belong to request user")
     }
 
-    // ---------------------------------------------------------
-    // 5. ORGANIZATION
-    //
-    // cases.organization_id is NOT NULL.
-    // Prefer the client's organization.
-    // If they do not have one, use the earliest organization.
-    // ---------------------------------------------------------
-
-    let organizationId =
-      clientProfile.organization_id
-
+    let organizationId = clientProfile.organization_id
     if (!organizationId) {
-      const organization = await query<{
-        id: string
-      }>(
+      const organization = await client.query<{ id: string }>(
         `
         SELECT id
         FROM organizations
@@ -147,82 +131,20 @@ export async function convertAcceptedRequestToCase(
         LIMIT 1
         `,
       )
-
-      organizationId =
-        organization.rows[0]?.id || null
+      organizationId = organization.rows[0]?.id || null
     }
 
-    if (!organizationId) {
-      throw new Error(
-        "No organization available for case",
-      )
-    }
-
-    // ---------------------------------------------------------
-    // 6. GENERATE CASE NUMBER
-    // ---------------------------------------------------------
+    if (!organizationId) throw new Error("No organization available for case")
 
     const caseNumber =
-      `SOB-CASE-${new Date().getFullYear()}-${Date.now()}`
+      item.case_number ||
+      `SOB-CASE-${new Date().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`
 
-    const existingCase = await query<{
-      id: string
-    }>(
-      `
-      SELECT id
-      FROM cases
-      WHERE case_number = $1
-      LIMIT 1
-      `,
-      [caseNumber],
-    )
-
-    if (existingCase.rows[0]) {
-      await query("ROLLBACK")
-      return existingCase.rows[0].id
-    }
-
-    // ---------------------------------------------------------
-    // 7. NORMALIZE CASE DATA
-    // ---------------------------------------------------------
-
-    const serviceType =
-      item.service_type || "osint"
-
-    const priority =
-      item.ai_suggested_priority || "normal"
-
-    const budget =
-      item.approved_quote_amount !== null
-        ? Number(item.approved_quote_amount)
-        : null
-
-    const estimatedCompletion =
-      item.approved_estimated_completion ||
-      item.preferred_deadline ||
-      null
-
-    // ---------------------------------------------------------
-    // 8. CREATE CASE
-    //
-    // IMPORTANT:
-    //
-    // $3 = clientProfile.id
-    //
-    // NOT item.user_id.
-    //
-    // This satisfies:
-    //
-    // cases.client_profile_id → user_profiles.id
-    // cases.case_user_id      → user_profiles.id
-    // ---------------------------------------------------------
-
-    const created = await query<{
-      id: string
-    }>(
+    const created = await client.query<{ id: string }>(
       `
       INSERT INTO cases (
         organization_id,
+        request_id,
         case_number,
         client_profile_id,
         case_user_id,
@@ -244,15 +166,16 @@ export async function convertAcceptedRequestToCase(
         $1,
         $2,
         $3,
-        $3,
+        $4,
         $4,
         $5,
         $6,
-        'awaiting_payment',
         $7,
-        NULL,
+        'awaiting_payment',
         $8,
+        NULL,
         $9,
+        $10,
         0,
         'pending',
         NULL,
@@ -263,39 +186,22 @@ export async function convertAcceptedRequestToCase(
       `,
       [
         organizationId,
+        requestId,
         caseNumber,
-
-        // BOTH FK columns point to user_profiles.id
         clientProfile.id,
-
-        item.title ||
-          "Investigation Request",
-
+        item.title || "Investigation Request",
         item.description,
-
-        serviceType,
-
-        priority,
-
-        budget,
-
-        estimatedCompletion,
+        item.service_type || "osint",
+        item.ai_suggested_priority || "normal",
+        quoteAmount,
+        item.approved_estimated_completion || item.preferred_deadline || null,
       ],
     )
 
     const caseId = created.rows[0]?.id
+    if (!caseId) throw new Error("Case creation returned no case ID")
 
-    if (!caseId) {
-      throw new Error(
-        "Case creation returned no case ID",
-      )
-    }
-
-    // ---------------------------------------------------------
-    // 9. UPDATE REQUEST
-    // ---------------------------------------------------------
-
-    await query(
+    const linkedRequest = await client.query(
       `
       UPDATE requests
       SET
@@ -304,18 +210,17 @@ export async function convertAcceptedRequestToCase(
         client_decision_at = NOW(),
         updated_at = NOW()
       WHERE id = $1
+        AND converted_case_id IS NULL
+        AND converted_training_engagement_id IS NULL
       `,
-      [
-        requestId,
-        caseId,
-      ],
+      [requestId, caseId],
     )
 
-    // ---------------------------------------------------------
-    // 10. CASE TIMELINE
-    // ---------------------------------------------------------
+    if (linkedRequest.rowCount !== 1) {
+      throw new Error("Request-to-case linkage failed")
+    }
 
-    await query(
+    await client.query(
       `
       INSERT INTO case_updates (
         case_id,
@@ -332,70 +237,39 @@ export async function convertAcceptedRequestToCase(
         'Client accepted the quote. Payment is pending before the investigation begins.'
       )
       `,
-      [
-        caseId,
-        clientProfile.id,
-      ],
+      [caseId, clientProfile.id],
     )
-
-    // ---------------------------------------------------------
-    // 11. AUDIT
-    // ---------------------------------------------------------
 
     await recordRequestAudit(
       requestId,
       actorUserId,
       "client_accepted_quote_awaiting_payment",
-      {
-        case_id: caseId,
-      },
+      { case_id: caseId },
+      client,
+      { strict: true },
     )
 
-    // ---------------------------------------------------------
-    // 12. COMMIT
-    // ---------------------------------------------------------
-
-    await query("COMMIT")
-
-    // ---------------------------------------------------------
-    // 13. NOTIFY CLIENT
-    // ---------------------------------------------------------
-
-    if (item.user_id) {
-      await notifyUser(
-        item.user_id,
-        {
-          caseId,
-          type: "payment_required",
-          title: "Payment Required",
-          message:
-            "Your quote has been accepted. Complete payment to begin your investigation.",
-          metadata: {
-            request_id: requestId,
-            case_id: caseId,
-            target_page: "client_request",
-            action: "pay_now",
-          },
-        },
-      )
-    }
-
+    notifyClientUserId = item.user_id
     return caseId
-  } catch (error) {
-    try {
-      await query("ROLLBACK")
-    } catch (rollbackError) {
-      console.error(
-        "CASE CONVERSION ROLLBACK ERROR",
-        rollbackError,
-      )
-    }
+  })
 
-    console.error(
-      "CASE CONVERSION ERROR",
-      error,
-    )
-
-    throw error
+  if (notifyClientUserId && convertedCaseId) {
+    await notifyUser(notifyClientUserId, {
+      caseId: convertedCaseId,
+      type: "payment_required",
+      title: "Payment Required",
+      message:
+        "Your quote has been accepted. Complete payment to begin your investigation.",
+      metadata: {
+        request_id: requestId,
+        case_id: convertedCaseId,
+        resource_type: "request",
+        resource_id: requestId,
+        target_page: "client_request",
+        action: "pay_now",
+      },
+    })
   }
+
+  return convertedCaseId
 }

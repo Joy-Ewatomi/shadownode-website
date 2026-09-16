@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type CaseData = {
   id: string
@@ -409,6 +410,11 @@ export default function CaseDashboard() {
 
   return (
     <main className="min-h-screen bg-[#020604] text-white">
+      <MarkResourceNotificationsRead
+        resourceType="case"
+        resourceId={caseId}
+      />
+
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-7xl space-y-6">
 

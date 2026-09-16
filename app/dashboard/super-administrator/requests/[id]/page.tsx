@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import SuperAdminRequestReviewCard from "@/components/requests/SuperAdminRequestReviewCard"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type RequestData = {
   id: string
@@ -388,6 +389,11 @@ export default async function SuperAdministratorRequestDetailPage({
 
   return (
     <div className="space-y-8">
+      <MarkResourceNotificationsRead
+        resourceType="request"
+        resourceId={id}
+      />
+
       {/* Header */}
 
       <div className="mb-8">

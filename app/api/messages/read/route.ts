@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
+import {
+  markConversationReceiptsReadForUser,
+  markMessageReceiptReadForUser,
+} from "@/lib/services/message-receipts-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,12 +24,43 @@ export async function POST(request: NextRequest) {
     if (conversationId) {
       const allowed = await query(
         `
-        SELECT 1
-        FROM conversation_members
-        WHERE conversation_id = $1 AND user_id = $2
+        SELECT c.id, c.case_id
+        FROM conversations c
+        LEFT JOIN conversation_members cm
+          ON cm.conversation_id = c.id
+          AND cm.user_id = $2
+        WHERE c.id = $1
+          AND (
+            cm.user_id IS NOT NULL
+            OR EXISTS (
+              SELECT 1
+              FROM case_assignments ca
+              WHERE ca.case_id = c.case_id
+                AND ca.assigned_to = $3
+                AND ca.removed_at IS NULL
+                AND COALESCE(ca.status, 'assigned') IN ('assigned', 'approved')
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM cases own_case
+              LEFT JOIN user_profiles client_profile
+                ON client_profile.id = own_case.client_profile_id
+              WHERE own_case.id = c.case_id
+                AND (
+                  client_profile.user_id = $2
+                  OR own_case.client_profile_id = $3
+                )
+            )
+            OR $4 IN ('super_administrator', 'super-administrator')
+          )
         LIMIT 1
         `,
-        [conversationId, user.id],
+        [
+          conversationId,
+          user.id,
+          profileId,
+          user.role,
+        ],
       )
 
       if (!allowed.rows.length) {
@@ -33,16 +68,70 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await query(
-      `
-      UPDATE messages
-      SET read_at = COALESCE(read_at, NOW())
-      WHERE ($1::uuid IS NULL OR sender_id <> $1::uuid)
-        AND ($2::uuid IS NULL OR conversation_id = $2::uuid)
-        AND ($3::uuid IS NULL OR id = $3::uuid)
-      `,
-      [profileId, conversationId, messageId],
-    )
+    if (messageId && !conversationId) {
+      const allowed = await query(
+        `
+        SELECT m.id
+        FROM messages m
+        JOIN conversations c
+          ON c.id = m.conversation_id
+        LEFT JOIN conversation_members cm
+          ON cm.conversation_id = c.id
+          AND cm.user_id = $2
+        WHERE m.id = $1
+          AND (
+            cm.user_id IS NOT NULL
+            OR EXISTS (
+              SELECT 1
+              FROM case_assignments ca
+              WHERE ca.case_id = c.case_id
+                AND ca.assigned_to = $3
+                AND ca.removed_at IS NULL
+                AND COALESCE(ca.status, 'assigned') IN ('assigned', 'approved')
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM cases own_case
+              LEFT JOIN user_profiles client_profile
+                ON client_profile.id = own_case.client_profile_id
+              WHERE own_case.id = c.case_id
+                AND (
+                  client_profile.user_id = $2
+                  OR own_case.client_profile_id = $3
+                )
+            )
+            OR $4 IN ('super_administrator', 'super-administrator')
+          )
+        LIMIT 1
+        `,
+        [
+          messageId,
+          user.id,
+          profileId,
+          user.role,
+        ],
+      )
+
+      if (!allowed.rows.length) {
+        return NextResponse.json({ error: "Message not found" }, { status: 404 })
+      }
+    }
+
+    if (conversationId) {
+      await markConversationReceiptsReadForUser({
+        conversationId,
+        userId: user.id,
+        profileId,
+      })
+    }
+
+    if (messageId) {
+      await markMessageReceiptReadForUser({
+        messageId,
+        userId: user.id,
+        profileId,
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

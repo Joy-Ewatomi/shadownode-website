@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
-import { requireInvestigationWorkspace } from "@/lib/investigation-workspace"
+import { requireCaseReadAccess } from "@/lib/investigation-workspace"
 
 
 export async function GET(
@@ -18,7 +18,7 @@ export async function GET(
 
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseReadAccess(
         request,
         id
       )

@@ -240,12 +240,15 @@ const router = useRouter()
             </p>
 
             <h1 className="mt-2 text-2xl font-semibold text-white">
-              Notifications
+              {isSuperAdministrator
+                ? "Bureau Notification Audit"
+                : "Notifications"}
             </h1>
 
             <p className="mt-2 text-sm text-white/50">
-              Operational notifications across the
-              bureau network.
+              {isSuperAdministrator
+                ? "Oversight stream across the bureau network. Your bell remains personal."
+                : "Operational notifications assigned to your account."}
             </p>
           </div>
 
@@ -259,7 +262,9 @@ const router = useRouter()
             </p>
 
             <p className="mt-1 text-sm font-semibold text-white">
-              View Only
+              {isSuperAdministrator
+                ? "Oversight Stream"
+                : "Personal Stream"}
             </p>
 
             <p className="mt-1 text-xs text-white/40">

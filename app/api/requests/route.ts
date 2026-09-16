@@ -1072,11 +1072,14 @@ export async function POST(request: NextRequest) {
     ======================================================== */
 
     await notifyAdmins({
-      type: "new_request",
+      type: "client_request",
       title: "New client request",
       message: `${title} requires review.`,
       metadata: {
         request_id: id,
+        resource_type: "request",
+        resource_id: id,
+        audience: "administrator",
         target_page: "admin_request_review",
         action: "view_request",
       },

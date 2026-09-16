@@ -3,7 +3,16 @@ import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { getUserProfileId } from "@/lib/services/training-operations-service"
 import { query } from "@/lib/db"
-import Link from "next/link"
+import TrainingNotificationList from "./TrainingNotificationList"
+
+type ClientTrainingRow = {
+  id: string
+  engagement_number: string | null
+  training_organization_name: string | null
+  status: string | null
+  progress: number | string | null
+  created_at: string | null
+}
 
 export default async function ClientTrainingIndexPage() {
   const user = await getCurrentUser()
@@ -27,7 +36,7 @@ export default async function ClientTrainingIndexPage() {
     )
   }
 
-  const res = await query(
+  const res = await query<ClientTrainingRow>(
     `SELECT id, engagement_number, training_organization_name, status, progress, created_at FROM training_engagements WHERE client_profile_id = $1 ORDER BY created_at DESC`,
     [profileId],
   )
@@ -41,27 +50,7 @@ export default async function ClientTrainingIndexPage() {
         <p className="mt-2 text-sm text-white/60">Training engagements associated with your account.</p>
       </header>
 
-      <div className="space-y-3">
-        {rows.length === 0 && (
-          <div className="rounded-md border border-white/10 bg-[#020806]/90 p-4 text-sm text-white/60">No trainings found.</div>
-        )}
-
-        {rows.map((r: any) => (
-          <Link key={r.id} href={`/dashboard/training/${r.id}`} className="block rounded-md border border-white/10 bg-[#020806]/150 p-4 hover:border-[#20dc73]/30">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-white">{r.engagement_number || r.training_organization_name || r.id}</p>
-                <p className="text-sm text-white/60">{r.training_organization_name || ""}</p>
-              </div>
-
-              <div className="text-sm text-white/60">
-                <div>Progress: {r.progress ?? 0}%</div>
-                <div className="mt-1">{r.status || "unknown"}</div>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <TrainingNotificationList rows={rows} />
     </div>
   )
 }

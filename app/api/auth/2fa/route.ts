@@ -19,6 +19,7 @@ type TwoFactorUser = {
   email: string
   role:
     | "client"
+    | "staff"
     | "investigator"
     | "analyst"
     | "administrator"

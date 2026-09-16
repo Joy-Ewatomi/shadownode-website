@@ -5,6 +5,7 @@ import {
   optionalText,
   profileIdForUser,
   recordInvestigationTimeline,
+  requireCaseReadAccess,
   requireInvestigationWorkspace,
 } from "@/lib/investigation-workspace"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
@@ -24,6 +25,7 @@ function canManageGraph(
   return (
     isSuperAdminRole(role) ||
     role === "administrator" ||
+    role === "staff" ||
     role === "investigator" ||
     role === "analyst"
   )
@@ -81,7 +83,7 @@ export async function GET(
     const { id } = await context.params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseReadAccess(
         request,
         id,
       )

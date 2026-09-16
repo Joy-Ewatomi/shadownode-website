@@ -324,13 +324,15 @@ const adminQuoteResult = await query<{
 
     if (row.user_id) {
       await notifyUser(row.user_id, {
-        type: "quote_rejected",
+        type: "request_declined",
         title: "Quote review completed",
         message:
           "Your request was not approved at the final review stage.",
         metadata: {
           request_id:
             input.requestId,
+          resource_type: "request",
+          resource_id: input.requestId,
           target_page:
             "client_request",
           action:

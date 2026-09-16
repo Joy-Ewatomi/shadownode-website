@@ -1,7 +1,9 @@
 "use client"
 
 import { FileText, RefreshCcw, Shield } from "lucide-react"
+import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 type ClientReport = {
   id: string
@@ -16,6 +18,7 @@ export default function ClientReportsPage() {
   const [reports, setReports] = useState<ClientReport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const { getUnreadForResource } = useClientNotifications()
 
   async function load() {
     setLoading(true)
@@ -77,15 +80,30 @@ export default function ClientReportsPage() {
 
       {!loading && reports.length ? (
         <section className="grid gap-4 md:grid-cols-2">
-          {reports.map((report) => (
+          {reports.map((report) => {
+            const unread = getUnreadForResource("report", report.id)
+
+            return (
             <div
               key={report.id}
-              className="rounded-md border border-[#143b28] bg-[#06110f] p-5"
+              className={`rounded-md border bg-[#06110f] p-5 ${
+                unread > 0
+                  ? "border-[#20dc73]/40 bg-[#20dc73]/5"
+                  : "border-[#143b28]"
+              }`}
             >
               <div className="flex items-start gap-3">
                 <FileText className="mt-0.5 h-5 w-5 text-[#20dc73]" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-white">{report.title || "Untitled Report"}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-white">{report.title || "Untitled Report"}</p>
+                    {unread > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#20dc73]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
+                        NEW{unread > 1 ? ` ${unread}` : ""}
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-1 text-xs text-white/40">Case: {report.case_number}</p>
                 </div>
               </div>
@@ -98,20 +116,16 @@ export default function ClientReportsPage() {
                 <span className="text-xs text-white/35">
                   Published {new Date(report.created_at).toLocaleDateString()}
                 </span>
-                {report.file_url ? (
-                  <a
-                    href={report.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <Link
+                    href={`/dashboard/client/reports/${report.id}`}
                     className="inline-flex items-center gap-2 rounded border border-[#20dc73]/40 px-3 py-1.5 text-xs text-[#20dc73] transition hover:bg-[#20dc73]/10"
                   >
                     <Shield className="h-3.5 w-3.5" />
                     View Report
-                  </a>
-                ) : null}
+                  </Link>
               </div>
             </div>
-          ))}
+          )})}
         </section>
       ) : null}
     </div>

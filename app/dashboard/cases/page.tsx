@@ -33,6 +33,7 @@ type CaseRow = {
 
   evidence_count: number
   report_count: number
+  unread_notification_count: number
 }
 
 function formatStatus(value: string | null) {
@@ -63,6 +64,9 @@ function getStatusClass(value: string | null) {
     case "awaiting_assignment":
     case "pending_assignment":
     case "awaiting_client":
+    case "waiting_client":
+    case "waiting_evidence":
+    case "report_review":
       return "border-amber-400/25 bg-amber-400/10 text-amber-300"
 
     case "archived":
@@ -162,7 +166,23 @@ export default async function CasesPage() {
 
         COUNT(
           DISTINCT cr.id
-        )::int AS report_count
+        )::int AS report_count,
+
+        (
+          SELECT COUNT(*)::int
+          FROM notifications n
+          WHERE n.user_id = $3
+            AND n.is_read = false
+            AND (
+              n.case_id::text = c.id::text
+              OR n.metadata->>'case_id' = c.id::text
+              OR n.metadata->>'caseId' = c.id::text
+              OR (
+                COALESCE(n.metadata->>'resource_type', n.metadata->>'resourceType') = 'case'
+                AND COALESCE(n.metadata->>'resource_id', n.metadata->>'resourceId') = c.id::text
+              )
+            )
+        ) AS unread_notification_count
 
       FROM cases c
 
@@ -222,7 +242,7 @@ export default async function CasesPage() {
         c.updated_at DESC,
         c.created_at DESC
     `,
-    [isAdmin, profileId],
+    [isAdmin, profileId, user.id],
   )
 
   const metrics = {
@@ -243,6 +263,8 @@ export default async function CasesPage() {
         "awaiting_assignment",
         "pending_assignment",
         "awaiting_client",
+        "waiting_client",
+        "waiting_evidence",
       ].includes(item.status || ""),
     ).length,
 
@@ -357,7 +379,12 @@ export default async function CasesPage() {
           <Link
             key={item.id}
             href={`/dashboard/cases/${item.id}`}
-            className="group block rounded-md border border-[#143b28] bg-[#06110f] p-5 transition hover:border-[#20dc73]/55 hover:bg-[#071510]"
+            className={[
+              "group block rounded-md border p-5 transition hover:border-[#20dc73]/55 hover:bg-[#071510]",
+              item.unread_notification_count > 0
+                ? "border-[#20dc73]/40 bg-[#20dc73]/5"
+                : "border-[#143b28] bg-[#06110f]",
+            ].join(" ")}
           >
             {/* =====================================================
                 HEADER
@@ -372,6 +399,16 @@ export default async function CasesPage() {
                 <h2 className="mt-2 break-words text-lg font-semibold text-white">
                   {item.title}
                 </h2>
+
+                {item.unread_notification_count > 0 ? (
+                  <span className="mt-2 inline-flex items-center gap-1.5 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#20dc73]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
+                    NEW
+                    {item.unread_notification_count > 1
+                      ? ` ${item.unread_notification_count}`
+                      : ""}
+                  </span>
+                ) : null}
 
                 {item.investigation_objective ? (
                   <div className="mt-3 rounded border border-[#20dc73]/10 bg-[#20dc73]/[0.025] p-3">

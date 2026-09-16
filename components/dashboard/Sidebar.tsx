@@ -3,6 +3,7 @@
 import type { AppUser } from "@/lib/auth"
 import { hasPermission } from "@/lib/permission"
 import { getNavigation } from "@/components/dashboard/navigation"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 import { BarChart3, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -10,6 +11,7 @@ import { usePathname } from "next/navigation"
 
 const roleLabels: Record<string, string> = {
   client: "Client",
+  staff: "Staff",
   investigator: "Investigator",
   analyst: "Analyst",
   administrator: "Administrator",
@@ -28,6 +30,7 @@ export default function Sidebar({
 }) {
 
   const pathname = usePathname()
+  const { unreadByCategory } = useClientNotifications()
 
 
  const navItems = getNavigation(user.role).filter(
@@ -147,6 +150,26 @@ export default function Sidebar({
             const active = isActive(item.href)
 
             const Icon = item.icon
+            const categoryKey =
+              item.label === "Requests"
+                ? "requests"
+                : item.label === "Cases"
+                  ? "cases"
+                  : item.label === "Messages"
+                    ? "messages"
+                    : item.label === "Reports"
+                      ? "reports"
+                      : item.label === "Training"
+                        ? "training"
+                        : item.label === "Certificates"
+                          ? "certificates"
+                          : item.label === "Billing"
+                            ? "payments"
+                            : ""
+            const badge =
+              categoryKey
+                ? unreadByCategory[categoryKey] || 0
+                : 0
 
 
             return (
@@ -164,7 +187,15 @@ export default function Sidebar({
 
                 <Icon className="h-4 w-4"/>
 
-                {item.label}
+                <span className="min-w-0 flex-1">
+                  {item.label}
+                </span>
+
+                {badge > 0 && (
+                  <span className="inline-flex min-w-5 justify-center rounded-full border border-[#20dc73]/40 bg-[#20dc73]/10 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-[#20dc73]">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
 
 
               </Link>

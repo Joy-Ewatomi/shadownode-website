@@ -5,6 +5,7 @@ import { query } from "@/lib/db"
 import AdminRequestReviewCard from "@/components/requests/AdminRequestReviewCard"
 import SuperAdminRequestReviewCard from "@/components/requests/SuperAdminRequestReviewCard"
 import RequestReviewCard from "@/components/requests/RequestReviewCard"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type RequestData = {
   id: string
@@ -1148,6 +1149,10 @@ workflowHistory =
 
   return (
     <div className="min-w-0 space-y-6">
+      <MarkResourceNotificationsRead
+        resourceType="request"
+        resourceId={id}
+      />
 
       {/* =================================================
           HEADER

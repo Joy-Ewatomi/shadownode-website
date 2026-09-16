@@ -7,6 +7,7 @@ type CertificateRow = {
   id: string
   certificate_number: string | null
   recipient_name: string | null
+  organization_name: string | null
   training_title: string | null
   training_type: string | null
   trainer_name: string | null
@@ -78,6 +79,7 @@ export default async function CertificateVerificationPage({
         id,
         certificate_number,
         recipient_name,
+        organization_name,
         training_title,
         training_type,
         trainer_name,
@@ -171,6 +173,11 @@ export default async function CertificateVerificationPage({
         rawCertificate.recipient_name,
       ),
 
+    organization_name:
+      toNullableString(
+        rawCertificate.organization_name,
+      ),
+
     training_title:
       toNullableString(
         rawCertificate.training_title,
@@ -227,6 +234,9 @@ export default async function CertificateVerificationPage({
   const recipientName =
     certificate.recipient_name ||
     "Certificate Recipient"
+
+  const organizationName =
+    certificate.organization_name
 
   const trainingTitle =
     certificate.training_title ||
@@ -384,6 +394,15 @@ export default async function CertificateVerificationPage({
               <h2 className="mt-4 break-words font-serif text-3xl italic text-white sm:text-4xl">
                 {recipientName}
               </h2>
+
+              {organizationName && (
+                <p className="mt-3 text-sm text-white/45">
+                  of{" "}
+                  <span className="font-medium text-white/70">
+                    {organizationName}
+                  </span>
+                </p>
+              )}
 
               <p className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-white/45">
                 The ShadowNode Operations Bureau confirms

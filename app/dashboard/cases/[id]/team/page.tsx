@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation"
 
 import { getCurrentUser } from "@/lib/auth"
 import CaseAssignment from "@/components/cases/CaseAssignment"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 import {
   canUseInvestigationWorkspace,
   resolveCaseId,
@@ -54,6 +55,11 @@ export default async function CaseTeamPage({
 
   return (
     <main className="space-y-6">
+      <MarkResourceNotificationsRead
+        resourceType="assignment"
+        resourceId={caseId}
+      />
+
       <header className="border-b border-[#143b28] pb-6">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#20dc73]">
           Case Operations

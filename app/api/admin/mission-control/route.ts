@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   )
 `),
       count("SELECT COUNT(*) AS total FROM case_reports"),
-      count("SELECT COUNT(*) AS total FROM app_users WHERE role='investigator' AND status='active'"),
+      count("SELECT COUNT(*) AS total FROM app_users WHERE role IN ('staff', 'investigator', 'analyst') AND status='active'"),
       count("SELECT COUNT(*) AS total FROM forensic_files WHERE created_at >= CURRENT_DATE"),
       query(
         `
@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
         FROM user_profiles up
         JOIN app_users au ON au.id = up.user_id
         LEFT JOIN case_assignments ca ON ca.assigned_to = up.id AND ca.removed_at IS NULL
-        WHERE au.role IN ('investigator', 'analyst')
+        WHERE au.role IN ('staff', 'investigator', 'analyst')
           AND au.status = 'active'
         GROUP BY up.id, up.full_name, au.username, au.role
         ORDER BY current_workload DESC, name ASC
@@ -183,10 +183,12 @@ export async function GET(request: NextRequest) {
         `
         SELECT id, case_id, type, title, message, is_read, created_at
         FROM notifications
-        WHERE is_read = false
+        WHERE user_id = $1
+          AND is_read = false
         ORDER BY created_at DESC
         LIMIT 10
         `,
+        [user.id],
       ),
       query(
         `

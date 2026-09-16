@@ -24,6 +24,7 @@ type OAuthUser = {
   email: string
   role:
     | "client"
+    | "staff"
     | "investigator"
     | "analyst"
     | "administrator"
@@ -479,6 +480,7 @@ export async function GET(
             username,
 
             email,
+            role: "client",
 
             password_hash:
               await hashPassword(

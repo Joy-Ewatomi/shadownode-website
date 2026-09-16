@@ -6,9 +6,14 @@ import {
   optionalText,
   profileIdForUser,
   recordInvestigationTimeline,
-  requireInvestigationWorkspace,
+  requireCaseOperationalAccess,
+  requireCaseReadAccess,
 } from "@/lib/investigation-workspace"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
+import {
+  notifySuperAdmins,
+  notifyUser,
+} from "@/lib/services/notification-service"
 
 const REPORT_STATUSES = [
   "draft",
@@ -67,6 +72,7 @@ function canManageReports(
   return (
     isSuperAdminRole(role) ||
     role === "administrator" ||
+    role === "staff" ||
     role === "investigator" ||
     role === "analyst"
   )
@@ -1610,7 +1616,7 @@ export async function GET(
       await params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseReadAccess(
         request,
         id,
       )
@@ -1803,7 +1809,7 @@ export async function POST(
       await params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseOperationalAccess(
         request,
         id,
       )
@@ -2454,7 +2460,7 @@ export async function PATCH(
       await params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseOperationalAccess(
         request,
         id,
       )
@@ -4024,7 +4030,87 @@ export async function PATCH(
         "string" &&
       updatedReport.title.trim()
         ? updatedReport.title.trim()
-        : "Case report"
+      : "Case report"
+
+    if (nextStatus === "review") {
+      await notifySuperAdmins({
+        caseId:
+          access.caseId,
+        type:
+          "report_pending_approval",
+        title:
+          "Report pending approval",
+        message: `${finalTitle} is ready for review.`,
+        metadata: {
+          report_id:
+            reportId,
+          case_id:
+            access.caseId,
+          resource_type:
+            "report",
+          resource_id:
+            reportId,
+          target_page:
+            "report_review",
+          audience:
+            "super_administrator",
+          action:
+            "review_report",
+        },
+      })
+    }
+
+    if (nextStatus === "approved") {
+      const author =
+        await query<{
+          user_id: string | null
+        }>(
+          `
+            SELECT user_id
+            FROM user_profiles
+            WHERE id = $1
+            LIMIT 1
+          `,
+          [
+            updatedReport.created_by,
+          ],
+        )
+
+      const authorUserId =
+        author.rows[0]?.user_id || null
+
+      if (
+        authorUserId &&
+        authorUserId !==
+          access.user.id
+      ) {
+        await notifyUser(authorUserId, {
+          caseId:
+            access.caseId,
+          type:
+            "report_approved",
+          title:
+            "Report approved",
+          message: `${finalTitle} has been approved.`,
+          metadata: {
+            report_id:
+              reportId,
+            case_id:
+              access.caseId,
+            resource_type:
+              "report",
+            resource_id:
+              reportId,
+            target_page:
+              "report_review",
+            audience:
+              "staff",
+            action:
+              "view_report",
+          },
+        })
+      }
+    }
 
     /*
      * ==========================================================
@@ -4177,4 +4263,3 @@ export async function PATCH(
 function formatLabel(nextStatus: string) {
   throw new Error("Function not implemented.")
 }
-

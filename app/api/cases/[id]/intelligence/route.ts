@@ -4,7 +4,8 @@ import {
   aliasesJson,
   optionalText,
   recordInvestigationTimeline,
-  requireInvestigationWorkspace,
+  requireCaseOperationalAccess,
+  requireCaseReadAccess,
   toScore,
 } from "@/lib/investigation-workspace"
 import { query } from "@/lib/db"
@@ -25,7 +26,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const access = await requireInvestigationWorkspace(request, id)
+    const access = await requireCaseReadAccess(request, id)
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
     const [entities, relationships, sources, observations] = await Promise.all([
@@ -140,7 +141,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const access = await requireInvestigationWorkspace(request, id)
+    const access = await requireCaseOperationalAccess(request, id)
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
     const body = await request.json()
@@ -300,7 +301,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
-    const access = await requireInvestigationWorkspace(request, id)
+    const access = await requireCaseOperationalAccess(request, id)
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
     const body = await request.json()
@@ -471,7 +472,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const access = await requireInvestigationWorkspace(request, id)
+    const access = await requireCaseOperationalAccess(request, id)
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
     const body = await request.json()

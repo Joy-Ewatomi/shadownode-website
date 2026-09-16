@@ -10,6 +10,7 @@ import {
 } from "@/lib/services/training-operations-service"
 import AssignTrainerForm from "@/components/training/AssignTrainerForm"
 import TrainerApprovalActions from "@/components/training/TrainerApprovalActions"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type TrainingEngagementPageProps = {
   params: Promise<{
@@ -294,6 +295,7 @@ export default async function TrainingEngagementPage({
       notFound()
     }
   } else if (
+    user.role === "staff" ||
     user.role === "investigator" ||
     user.role === "analyst"
   ) {
@@ -610,6 +612,11 @@ export default async function TrainingEngagementPage({
 
   return (
     <div className="space-y-6">
+      <MarkResourceNotificationsRead
+        resourceType="training"
+        resourceId={id}
+      />
+
       {/* ======================================================
           ENGAGEMENT SUMMARY
       ====================================================== */}

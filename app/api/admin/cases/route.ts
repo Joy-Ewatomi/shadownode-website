@@ -4,37 +4,35 @@ import {
   getCurrentUser,
   isAdminRole,
 } from "@/lib/auth"
-import { query } from "@/lib/db"
+import { query, withTransaction } from "@/lib/db"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
-
-type AssignmentRole =
-  | "investigator"
-  | "analyst"
-  | "administrator"
-  | "super_administrator"
-
-const ASSIGNMENT_ROLES: AssignmentRole[] = [
-  "investigator",
-  "analyst",
-  "administrator",
-  "super_administrator",
-]
+import {
+  notifySuperAdmins,
+  notifyUser,
+} from "@/lib/services/notification-service"
+import { createBacklogReceiptsForUser } from "@/lib/services/message-receipts-service"
+import {
+  canCaseFunctionMessage,
+  isAssignablePermanentRole,
+  isCaseAssignmentFunction,
+  isSuperAdministratorRole,
+  type CaseAssignmentFunction,
+} from "@/lib/role-access"
+import {
+  normalizeCaseStatusForQuery,
+  transitionCaseStatus,
+} from "@/lib/services/case-status-service"
 
 function isSuperAdministrator(
   role?: string | null,
 ) {
-  return (
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
+  return isSuperAdministratorRole(role)
 }
 
 function isValidAssignmentRole(
   role: string,
-): role is AssignmentRole {
-  return ASSIGNMENT_ROLES.includes(
-    role as AssignmentRole,
-  )
+): role is CaseAssignmentFunction {
+  return isCaseAssignmentFunction(role)
 }
 
 async function requireAdmin() {
@@ -360,6 +358,7 @@ export async function GET() {
 
       WHERE
         au.role IN (
+          'staff',
           'investigator',
           'analyst',
           'administrator',
@@ -371,6 +370,7 @@ export async function GET() {
 
       ORDER BY
         CASE au.role
+          WHEN 'staff' THEN 1
           WHEN 'investigator' THEN 1
           WHEN 'analyst' THEN 2
           WHEN 'administrator' THEN 3
@@ -561,20 +561,11 @@ export async function POST(
       )
     }
 
-    const roleMatches =
-      assignmentRole === "super_administrator"
-        ? assignee.role ===
-            "super_administrator" ||
-          assignee.role ===
-            "super-administrator"
-        : assignee.role ===
-          assignmentRole
-
-    if (!roleMatches) {
+    if (!isAssignablePermanentRole(assignee.role)) {
       return NextResponse.json(
         {
           error:
-            "Selected user's role does not match the assignment role",
+            "Selected user is not eligible for operational case assignment",
         },
         {
           status: 400,
@@ -610,48 +601,6 @@ export async function POST(
       )
     }
 
-    const duplicate = await query<{
-      id: string
-      status: string | null
-    }>(
-      `
-        SELECT
-          id,
-          status
-        FROM case_assignments
-        WHERE
-          case_id = $1
-          AND assigned_to = $2
-          AND removed_at IS NULL
-          AND COALESCE(
-            status,
-            'assigned'
-          ) NOT IN (
-            'rejected',
-            'removed'
-          )
-        ORDER BY
-          assigned_at DESC
-        LIMIT 1
-      `,
-      [
-        caseId,
-        assignee.profile_id,
-      ],
-    )
-
-    if (duplicate.rows.length) {
-      return NextResponse.json(
-        {
-          error:
-            "This user already has an active or pending assignment for this case",
-        },
-        {
-          status: 409,
-        },
-      )
-    }
-
     const directAssignment =
       isSuperAdministrator(
         auth.user?.role,
@@ -662,9 +611,59 @@ export async function POST(
         ? "approved"
         : "pending"
 
-    await query("BEGIN")
-
     try {
+      const assignment = await withTransaction(async (client) => {
+        const lockedCase = await client.query<{ status: string | null }>(
+          `
+            SELECT status
+            FROM cases
+            WHERE id = $1
+            FOR UPDATE
+          `,
+          [caseId],
+        )
+
+        if (!lockedCase.rows[0]) {
+          throw new Error("Case not found")
+        }
+
+        const duplicate = await client.query<{
+          id: string
+          status: string | null
+        }>(
+          `
+            SELECT
+              id,
+              status
+            FROM case_assignments
+            WHERE
+              case_id = $1
+              AND assigned_to = $2
+              AND removed_at IS NULL
+              AND COALESCE(
+                status,
+                'assigned'
+              ) NOT IN (
+                'rejected',
+                'removed'
+              )
+            ORDER BY
+              assigned_at DESC
+            LIMIT 1
+            FOR UPDATE
+          `,
+          [
+            caseId,
+            assignee.profile_id,
+          ],
+        )
+
+        if (duplicate.rows.length) {
+          throw new Error(
+            "This user already has an active or pending assignment for this case",
+          )
+        }
+
       /*
        * IMPORTANT:
        *
@@ -674,8 +673,8 @@ export async function POST(
        * This fixes PostgreSQL 42P08:
        * "inconsistent types deduced for parameter $5"
        */
-      const assignment =
-        await query<{
+      const created =
+        await client.query<{
           id: string
           case_id: string
           assigned_to: string
@@ -742,27 +741,22 @@ export async function POST(
         )
 
       const assignmentRow =
-        assignment.rows[0]
+        created.rows[0]
 
       if (
         directAssignment &&
-        assignmentRole ===
-          "investigator"
+        (
+          assignmentRole ===
+            "lead_investigator" ||
+          assignmentRole ===
+            "investigator"
+        )
       ) {
-        await query(
+        await client.query(
           `
             UPDATE cases
             SET
               assigned_to = $2,
-              status = CASE
-                WHEN status IN (
-                  'awaiting_assignment',
-                  'case_created',
-                  'priority_assigned'
-                )
-                THEN 'assigned'
-                ELSE status
-              END,
               updated_at = NOW()
             WHERE id = $1
           `,
@@ -771,9 +765,26 @@ export async function POST(
             assignee.profile_id,
           ],
         )
+
+        if (lockedCase.rows[0].status === "awaiting_assignment") {
+          await transitionCaseStatus({
+            caseId,
+            to: "active",
+            actor: "assignment_workflow",
+            actorUserId:
+              auth.user?.id ?? null,
+            actorProfileId:
+              assignerProfileId,
+            reason:
+              "Direct approved operational assignment activated the case.",
+            sourceAction:
+              "case_assignment_created",
+            executor: client,
+          })
+        }
       }
 
-      await query(
+      await client.query(
         `
           INSERT INTO case_updates (
             case_id,
@@ -798,14 +809,18 @@ export async function POST(
             : "Assignment awaiting approval",
 
           directAssignment
-            ? `${assignee.username} was assigned as ${assignmentRole}.`
-            : `${assignee.username} was proposed as ${assignmentRole}. Super Administrator approval is required.`,
+            ? `${assignee.username} was assigned as ${assignmentRole.replace(/_/g, " ")}.`
+            : `${assignee.username} was proposed as ${assignmentRole.replace(/_/g, " ")}. Super Administrator approval is required.`,
 
           assignerProfileId,
         ],
       )
 
-      await query("COMMIT")
+        return created
+      })
+
+      const assignmentRow =
+        assignment.rows[0]
 
       await emitCaseWorkspaceEvent({
         type: "case.updated",
@@ -829,139 +844,65 @@ export async function POST(
         },
       })
 
+      if (
+        directAssignment &&
+        canCaseFunctionMessage(assignmentRole)
+      ) {
+        await createBacklogReceiptsForUser({
+          caseId,
+          userId: assignee.user_id,
+        }).catch((error) => {
+          console.error(
+            "ASSIGNMENT MESSAGE RECEIPT BACKLOG ERROR",
+            error,
+          )
+        })
+      }
+
       if (directAssignment) {
-        await query(
-          `
-            INSERT INTO notifications (
-              user_id,
-              case_id,
-              type,
-              title,
-              message,
-              metadata
-            )
-            VALUES (
-              $1,
-              $2,
-              'case_assignment',
-              'New case assignment',
-              $3,
-              $4::jsonb
-            )
-          `,
-          [
-            assignee.user_id,
-            caseId,
-
-            `You have been assigned ${caseRow.case_number} as ${assignmentRole}.`,
-
-            JSON.stringify({
-              case_id: caseId,
-              assignment_id:
-                assignmentRow.id,
-              assignment_role:
-                assignmentRole,
-              status: "approved",
-            }),
-          ],
-        ).catch(() => undefined)
+        await notifyUser(assignee.user_id, {
+          caseId,
+          type: "case_assignment",
+          title: "New case assignment",
+          message: `You have been assigned ${caseRow.case_number} as ${assignmentRole.replace(/_/g, " ")}.`,
+          metadata: {
+            case_id: caseId,
+            assignment_id:
+              assignmentRow.id,
+            assignment_role:
+              assignmentRole,
+            status: "approved",
+            resource_type: "assignment",
+            resource_id: caseId,
+            target_page:
+              "case_assignment",
+            audience: "staff",
+          },
+        })
       } else {
-        await query(
-          `
-            INSERT INTO notifications (
-              user_id,
-              case_id,
-              type,
-              title,
-              message,
-              metadata
-            )
-            VALUES (
-              $1,
-              $2,
-              'case_assignment_pending',
-              'Case assignment pending approval',
-              $3,
-              $4::jsonb
-            )
-          `,
-          [
-            assignee.user_id,
-            caseId,
-
-            `You have been proposed for ${caseRow.case_number} as ${assignmentRole}.`,
-
-            JSON.stringify({
-              case_id: caseId,
-              assignment_id:
-                assignmentRow.id,
-              assignment_role:
-                assignmentRole,
-              status: "pending",
-            }),
-          ],
-        ).catch(() => undefined)
-
-        const superAdmins =
-          await query<{
-            id: string
-          }>(
-            `
-              SELECT id
-              FROM app_users
-              WHERE
-                role IN (
-                  'super_administrator',
-                  'super-administrator'
-                )
-                AND status = 'active'
-            `,
-          )
-
-        for (
-          const superAdmin of
-            superAdmins.rows
-        ) {
-          await query(
-            `
-              INSERT INTO notifications (
-                user_id,
-                case_id,
-                type,
-                title,
-                message,
-                metadata
-              )
-              VALUES (
-                $1,
-                $2,
-                'case_assignment_approval',
-                'Case assignment requires approval',
-                $3,
-                $4::jsonb
-              )
-            `,
-            [
-              superAdmin.id,
-              caseId,
-
-              `${assignee.username} was proposed as ${assignmentRole} for ${caseRow.case_number}.`,
-
-              JSON.stringify({
-                case_id: caseId,
-                assignment_id:
-                  assignmentRow.id,
-                assigned_user_id:
-                  assignee.user_id,
-                assignment_role:
-                  assignmentRole,
-                status: "pending",
-              }),
-            ],
-          ).catch(
-            () => undefined,
-          )
-        }
+        await notifySuperAdmins({
+          caseId,
+          type: "case_assignment_approval",
+          title:
+            "Case assignment requires approval",
+          message: `${assignee.username} was proposed as ${assignmentRole} for ${caseRow.case_number}.`,
+          metadata: {
+            case_id: caseId,
+            assignment_id:
+              assignmentRow.id,
+            assigned_user_id:
+              assignee.user_id,
+            assignment_role:
+              assignmentRole,
+            status: "pending",
+            resource_type: "assignment",
+            resource_id: caseId,
+            target_page:
+              "case_assignment",
+            audience:
+              "super_administrator",
+          },
+        })
       }
 
       await auditLog(
@@ -1001,7 +942,6 @@ export async function POST(
         },
       )
     } catch (error) {
-      await query("ROLLBACK")
       throw error
     }
   } catch (error) {
@@ -1114,137 +1054,218 @@ export async function PATCH(
         )
       }
 
-      const assignment =
-        await query<{
-          id: string
-          case_id: string
-          assigned_to: string
-          assignment_role:
-            | string
-            | null
-          status:
-            | string
-            | null
-        }>(
-          `
-            SELECT
-              id,
-              case_id,
-              assigned_to,
-              assignment_role,
-              status
-            FROM case_assignments
-            WHERE id = $1
-            LIMIT 1
-          `,
-          [assignmentId],
-        )
-
-      const row =
-        assignment.rows[0]
-
-      if (!row) {
-        return NextResponse.json(
-          {
-            error:
-              "Assignment not found",
-          },
-          {
-            status: 404,
-          },
-        )
-      }
-
-      if (
-        row.status !==
-        "pending"
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "This assignment is not pending approval",
-          },
-          {
-            status: 409,
-          },
-        )
-      }
-
-      await query("BEGIN")
-
       try {
-        const approved =
-          await query(
+        const result = await withTransaction(async (client) => {
+          const assignment =
+            await client.query<{
+              id: string
+              case_id: string
+              assigned_to: string
+              assigned_by: string | null
+              assigned_to_user_id: string | null
+              assigned_to_username: string | null
+              proposed_by_user_id: string | null
+              case_number: string | null
+              assignment_role:
+                | string
+                | null
+              status:
+                | string
+                | null
+            }>(
+              `
+                SELECT
+                  ca.id,
+                  ca.case_id,
+                  ca.assigned_to,
+                  ca.assigned_by,
+                  ca.assignment_role,
+                  ca.status,
+                  assignee_user.id AS assigned_to_user_id,
+                  assignee_user.username AS assigned_to_username,
+                  proposer_user.id AS proposed_by_user_id,
+                  c.case_number
+                FROM case_assignments ca
+                LEFT JOIN user_profiles assignee_profile
+                  ON assignee_profile.id = ca.assigned_to
+                LEFT JOIN app_users assignee_user
+                  ON assignee_user.id = assignee_profile.user_id
+                LEFT JOIN user_profiles proposer_profile
+                  ON proposer_profile.id = ca.assigned_by
+                LEFT JOIN app_users proposer_user
+                  ON proposer_user.id = proposer_profile.user_id
+                LEFT JOIN cases c
+                  ON c.id = ca.case_id
+                WHERE ca.id = $1
+                LIMIT 1
+                FOR UPDATE OF ca
+              `,
+              [assignmentId],
+            )
+
+          const row =
+            assignment.rows[0]
+
+          if (!row) {
+            return {
+              kind: "missing" as const,
+            }
+          }
+
+          if (row.status === "approved") {
+            return {
+              kind: "already_approved" as const,
+              row,
+              approved: null,
+            }
+          }
+
+          if (row.status !== "pending") {
+            return {
+              kind: "not_pending" as const,
+              row,
+              approved: null,
+            }
+          }
+
+          const lockedCase = await client.query<{ status: string | null }>(
             `
-              UPDATE case_assignments
-              SET
-                status = 'approved',
-                accepted_at =
-                  COALESCE(
-                    accepted_at,
-                    NOW()
-                  )
+              SELECT status
+              FROM cases
               WHERE id = $1
-              RETURNING *
+              FOR UPDATE
             `,
-            [assignmentId],
+            [row.case_id],
           )
 
-        if (
-          row.assignment_role ===
-          "investigator"
-        ) {
-          await query(
+          if (!lockedCase.rows[0]) {
+            throw new Error("Case not found")
+          }
+
+          const approved =
+            await client.query(
+              `
+                UPDATE case_assignments
+                SET
+                  status = 'approved',
+                  accepted_at =
+                    COALESCE(
+                      accepted_at,
+                      NOW()
+                    )
+                WHERE id = $1
+                RETURNING *
+              `,
+              [assignmentId],
+            )
+
+          if (
+            row.assignment_role ===
+              "lead_investigator" ||
+            row.assignment_role ===
+              "investigator"
+          ) {
+            await client.query(
+              `
+                UPDATE cases
+                SET
+                  assigned_to = $2,
+                  updated_at = NOW()
+
+                WHERE id = $1
+              `,
+              [
+                row.case_id,
+                row.assigned_to,
+              ],
+            )
+
+            if (
+              lockedCase.rows[0].status ===
+              "awaiting_assignment"
+            ) {
+              await transitionCaseStatus({
+                caseId: row.case_id,
+                to: "active",
+                actor: "assignment_workflow",
+                actorUserId:
+                  auth.user?.id ?? null,
+                actorProfileId:
+                  reviewerProfileId,
+                reason:
+                  "First approved operational assignment activated the case.",
+                sourceAction:
+                  "case_assignment_approved",
+                executor: client,
+              })
+            }
+          }
+
+          await client.query(
             `
-              UPDATE cases
-              SET
-                assigned_to = $2,
-
-                status = CASE
-                  WHEN status IN (
-                    'awaiting_assignment',
-                    'case_created',
-                    'priority_assigned'
-                  )
-                  THEN 'assigned'
-                  ELSE status
-                END,
-
-                updated_at = NOW()
-
-              WHERE id = $1
+              INSERT INTO case_updates (
+                case_id,
+                update_type,
+                title,
+                content,
+                updated_by
+              )
+              VALUES (
+                $1,
+                'assignment',
+                'Assignment approved',
+                'Super Administrator approved the case assignment.',
+                $2
+              )
             `,
             [
               row.case_id,
-              row.assigned_to,
+              reviewerProfileId,
             ],
+          )
+
+          return {
+            kind: "approved" as const,
+            row,
+            approved,
+          }
+        })
+
+        if (result.kind === "missing") {
+          return NextResponse.json(
+            {
+              error:
+                "Assignment not found",
+            },
+            {
+              status: 404,
+            },
           )
         }
 
-        await query(
-          `
-            INSERT INTO case_updates (
-              case_id,
-              update_type,
-              title,
-              content,
-              updated_by
-            )
-            VALUES (
-              $1,
-              'assignment',
-              'Assignment approved',
-              'Super Administrator approved the case assignment.',
-              $2
-            )
-          `,
-          [
-            row.case_id,
-            reviewerProfileId,
-          ],
-        )
+        if (result.kind === "already_approved") {
+          return NextResponse.json({
+            message:
+              "Assignment already approved",
+            assignment:
+              result.row,
+          })
+        }
 
-        await query("COMMIT")
+        if (result.kind === "not_pending") {
+          return NextResponse.json(
+            {
+              error:
+                "This assignment is not pending approval",
+            },
+            {
+              status: 409,
+            },
+          )
+        }
+
+        const row = result.row
+        const approved = result.approved
 
         await emitCaseWorkspaceEvent({
           type: "case.updated",
@@ -1276,6 +1297,82 @@ export async function PATCH(
           },
         )
 
+        const assignmentMetadata = {
+          case_id: row.case_id,
+          assignment_id:
+            assignmentId,
+          assigned_user_id:
+            row.assigned_to_user_id,
+          assignment_role:
+            row.assignment_role,
+          status: "approved",
+          resource_type: "assignment",
+          resource_id:
+            row.case_id,
+          target_page:
+            "case_assignment",
+          audience: "staff",
+        }
+
+        if (
+          row.proposed_by_user_id &&
+          row.proposed_by_user_id !==
+            auth.user?.id
+        ) {
+          await notifyUser(
+            row.proposed_by_user_id,
+            {
+              caseId:
+                row.case_id,
+              type:
+                "case_assignment_approved",
+              title:
+                "Assignment approved",
+              message: `Your proposed ${row.assignment_role || "case"} assignment for ${row.case_number || "this case"} was approved.`,
+              metadata: {
+                ...assignmentMetadata,
+                audience:
+                  "administrator",
+              },
+            },
+          )
+        }
+
+        if (row.assigned_to_user_id) {
+          if (
+            canCaseFunctionMessage(
+              row.assignment_role,
+            )
+          ) {
+            await createBacklogReceiptsForUser({
+              caseId:
+                row.case_id,
+              userId:
+                row.assigned_to_user_id,
+            }).catch((error) => {
+              console.error(
+                "ASSIGNMENT APPROVAL MESSAGE RECEIPT BACKLOG ERROR",
+                error,
+              )
+            })
+          }
+
+          await notifyUser(
+            row.assigned_to_user_id,
+            {
+              caseId:
+                row.case_id,
+              type:
+                "case_assignment",
+              title:
+                "New case assignment",
+              message: `You have been assigned ${row.case_number || "a case"} as ${row.assignment_role || "case staff"}.`,
+              metadata:
+                assignmentMetadata,
+            },
+          )
+        }
+
         return NextResponse.json({
           message:
             "Assignment approved",
@@ -1283,7 +1380,6 @@ export async function PATCH(
             approved.rows[0],
         })
       } catch (error) {
-        await query("ROLLBACK")
         throw error
       }
     }
@@ -1348,32 +1444,114 @@ export async function PATCH(
         )
       }
 
-      const assignment =
-        await query<{
-          id: string
-          case_id: string
-          assigned_to: string
-          status:
-            | string
-            | null
-        }>(
+      const result = await withTransaction(async (client) => {
+        const assignment =
+          await client.query<{
+            id: string
+            case_id: string
+            assigned_to: string
+            assigned_to_user_id: string | null
+            proposed_by_user_id: string | null
+            assignment_role: string | null
+            case_number: string | null
+            status:
+              | string
+              | null
+          }>(
+            `
+              SELECT
+                ca.id,
+                ca.case_id,
+                ca.assigned_to,
+                ca.assignment_role,
+                ca.status,
+                assignee_user.id AS assigned_to_user_id,
+                proposer_user.id AS proposed_by_user_id,
+                c.case_number
+              FROM case_assignments ca
+              LEFT JOIN user_profiles assignee_profile
+                ON assignee_profile.id = ca.assigned_to
+              LEFT JOIN app_users assignee_user
+                ON assignee_user.id = assignee_profile.user_id
+              LEFT JOIN user_profiles proposer_profile
+                ON proposer_profile.id = ca.assigned_by
+              LEFT JOIN app_users proposer_user
+                ON proposer_user.id = proposer_profile.user_id
+              LEFT JOIN cases c
+                ON c.id = ca.case_id
+              WHERE ca.id = $1
+              LIMIT 1
+              FOR UPDATE OF ca
+            `,
+            [assignmentId],
+          )
+
+        const row =
+          assignment.rows[0]
+
+        if (!row) {
+          return {
+            kind: "missing" as const,
+          }
+        }
+
+        if (row.status === "rejected") {
+          return {
+            kind: "already_rejected" as const,
+            row,
+          }
+        }
+
+        if (row.status !== "pending") {
+          return {
+            kind: "not_pending" as const,
+            row,
+          }
+        }
+
+        await client.query(
           `
-            SELECT
-              id,
-              case_id,
-              assigned_to,
-              status
-            FROM case_assignments
+            UPDATE case_assignments
+            SET
+              status = 'rejected',
+              rejected_at = NOW(),
+              rejection_reason = $2
             WHERE id = $1
-            LIMIT 1
           `,
-          [assignmentId],
+          [
+            assignmentId,
+            rejectionReason,
+          ],
         )
 
-      const row =
-        assignment.rows[0]
+        await client.query(
+          `
+            INSERT INTO case_updates (
+              case_id,
+              update_type,
+              title,
+              content
+            )
+            VALUES (
+              $1,
+              'assignment',
+              'Assignment rejected',
+              $2
+            )
+          `,
+          [
+            row.case_id,
+            `Super Administrator rejected assignment ${assignmentId}. Reason: ${rejectionReason}`,
+          ],
+        )
 
-      if (!row) {
+        return {
+          kind: "rejected" as const,
+          row,
+        }
+      })
+
+      if (result.kind === "missing") {
         return NextResponse.json(
           {
             error:
@@ -1385,10 +1563,14 @@ export async function PATCH(
         )
       }
 
-      if (
-        row.status !==
-        "pending"
-      ) {
+      if (result.kind === "already_rejected") {
+        return NextResponse.json({
+          message:
+            "Assignment already rejected",
+        })
+      }
+
+      if (result.kind === "not_pending") {
         return NextResponse.json(
           {
             error:
@@ -1400,41 +1582,7 @@ export async function PATCH(
         )
       }
 
-      await query(
-        `
-          UPDATE case_assignments
-          SET
-            status = 'rejected',
-            rejected_at = NOW(),
-            rejection_reason = $2
-          WHERE id = $1
-        `,
-        [
-          assignmentId,
-          rejectionReason,
-        ],
-      )
-
-      await query(
-        `
-          INSERT INTO case_updates (
-            case_id,
-            update_type,
-            title,
-            content
-          )
-          VALUES (
-            $1,
-            'assignment',
-            'Assignment rejected',
-            $2
-          )
-        `,
-        [
-          row.case_id,
-          `Super Administrator rejected assignment ${assignmentId}. Reason: ${rejectionReason}`,
-        ],
-      ).catch(() => undefined)
+      const row = result.row
 
       await auditLog(
         auth.user?.id ?? null,
@@ -1450,6 +1598,47 @@ export async function PATCH(
             rejectionReason,
         },
       )
+
+      if (
+        row.proposed_by_user_id &&
+        row.proposed_by_user_id !==
+          auth.user?.id
+      ) {
+        await notifyUser(
+          row.proposed_by_user_id,
+          {
+            caseId:
+              row.case_id,
+            type:
+              "case_assignment_rejected",
+            title:
+              "Assignment rejected",
+            message: `Your proposed ${row.assignment_role || "case"} assignment for ${row.case_number || "this case"} was rejected.`,
+            metadata: {
+              case_id:
+                row.case_id,
+              assignment_id:
+                assignmentId,
+              assigned_user_id:
+                row.assigned_to_user_id,
+              assignment_role:
+                row.assignment_role,
+              status:
+                "rejected",
+              rejection_reason:
+                rejectionReason,
+              resource_type:
+                "assignment",
+              resource_id:
+                row.case_id,
+              target_page:
+                "case_assignment",
+              audience:
+                "administrator",
+            },
+          },
+        )
+      }
 
       return NextResponse.json({
         message:
@@ -1551,6 +1740,23 @@ export async function PATCH(
         ? "closed"
         : status
 
+    const canonicalNextStatus =
+      nextStatus
+        ? normalizeCaseStatusForQuery(nextStatus)
+        : null
+
+    if (nextStatus && !canonicalNextStatus) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid case status",
+        },
+        {
+          status: 400,
+        },
+      )
+    }
+
     const updated =
       await query(
         `
@@ -1559,11 +1765,6 @@ export async function PATCH(
             title = COALESCE(
               NULLIF($2::text, ''),
               title
-            ),
-
-            status = COALESCE(
-              NULLIF($3::text, ''),
-              status
             ),
 
             priority = COALESCE(
@@ -1583,11 +1784,7 @@ export async function PATCH(
 
             completed_at =
               CASE
-                WHEN $3::text IN (
-                  'closed',
-                  'delivered',
-                  'completed'
-                )
+                WHEN $3::text IN ('closed', 'completed')
                 THEN COALESCE(
                   completed_at,
                   NOW()
@@ -1604,11 +1801,31 @@ export async function PATCH(
         [
           caseId,
           title,
-          nextStatus,
+          canonicalNextStatus,
           priority,
           estimatedCompletion,
         ],
       )
+
+    if (canonicalNextStatus) {
+      await withTransaction(async (client) => {
+        await transitionCaseStatus({
+          caseId,
+          to: canonicalNextStatus,
+          actor: isSuperAdministrator(auth.user?.role)
+            ? "super_administrator"
+            : "administrator",
+          actorUserId:
+            auth.user?.id ?? null,
+          reason:
+            note ||
+            "Administrator requested case status transition.",
+          sourceAction:
+            action || "admin_case_update",
+          executor: client,
+        })
+      })
+    }
 
     await query(
       `
@@ -1629,7 +1846,7 @@ export async function PATCH(
         caseId,
 
         `Workflow moved to ${
-          nextStatus ||
+          canonicalNextStatus ||
           current.rows[0].status ||
           "current state"
         }`,
@@ -1792,16 +2009,20 @@ export async function DELETE(
       })
     }
 
-    await query(
-      `
-        UPDATE cases
-        SET
-          status = 'archived',
-          updated_at = NOW()
-        WHERE id = $1
-      `,
-      [caseId],
-    )
+    await withTransaction(async (client) => {
+      await transitionCaseStatus({
+        caseId,
+        to: "archived",
+        actor: "super_administrator",
+        actorUserId:
+          auth.user?.id ?? null,
+        reason:
+          "Super Administrator archived the case.",
+        sourceAction:
+          "archive_case",
+        executor: client,
+      })
+    })
 
     await query(
       `

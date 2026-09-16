@@ -6,6 +6,7 @@ import {
 } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type ClientRequest = {
   [key: string]: unknown
@@ -961,6 +962,10 @@ const isCybersecurityTraining =
    */
   return (
     <main className="w-full min-w-0 max-w-full overflow-x-hidden p-4 text-white sm:p-6">
+      <MarkResourceNotificationsRead
+        resourceType="request"
+        resourceId={request.id}
+      />
 
       {/* ===================================================
           HEADER

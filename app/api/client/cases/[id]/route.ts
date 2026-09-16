@@ -403,7 +403,7 @@ export async function GET(
 
             m.message,
             m.created_at,
-            m.read_at
+            mr.read_at
 
           FROM messages m
 
@@ -418,6 +418,10 @@ export async function GET(
 
           LEFT JOIN app_users su
             ON su.id = sp.user_id
+
+          LEFT JOIN message_receipts mr
+            ON mr.message_id = m.id
+            AND mr.user_id = $2
 
           WHERE
             m.case_id = $1

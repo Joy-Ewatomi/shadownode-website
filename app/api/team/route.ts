@@ -30,15 +30,16 @@ export async function GET() {
       FROM app_users au
       LEFT JOIN user_profiles up ON up.user_id = au.id
       LEFT JOIN case_assignments ca ON ca.assigned_to = up.id
-      WHERE au.role IN ('administrator', 'super_administrator', 'super-administrator', 'investigator', 'analyst')
+      WHERE au.role IN ('administrator', 'super_administrator', 'super-administrator', 'staff', 'investigator', 'analyst')
       GROUP BY au.id, up.id
       ORDER BY
         CASE au.role
           WHEN 'super_administrator' THEN 1
           WHEN 'super-administrator' THEN 1
           WHEN 'administrator' THEN 2
+          WHEN 'staff' THEN 3
           WHEN 'investigator' THEN 3
-          WHEN 'analyst' THEN 4
+          WHEN 'analyst' THEN 3
           ELSE 5
         END,
         au.username

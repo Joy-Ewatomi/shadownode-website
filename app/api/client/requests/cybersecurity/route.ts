@@ -1582,6 +1582,12 @@ export async function POST(
       metadata: {
         request_id:
           requestId,
+        resource_type:
+          "request",
+        resource_id:
+          requestId,
+        audience:
+          "administrator",
 
         target_page:
           "admin_request_review",

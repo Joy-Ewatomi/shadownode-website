@@ -11,13 +11,29 @@ import QRCode from "qrcode"
 type CertificateData = {
   id: string
   certificate_number: string
+  training_participant_id?: string | null
   recipient_name: string | null
+  organization_name?: string | null
   training_title?: string | null
   training_type?: string | null
   trainer_name?: string | null
   completion_date?: string | null
   issued_at?: string | null
   verification_url?: string | null
+}
+
+type CertificateParticipant = {
+  id: string
+  full_name: string
+  email?: string | null
+  certificate_name: string
+  organization_name?: string | null
+  status?: string | null
+  certificate_eligible?: boolean | null
+  certificate_id?: string | null
+  certificate_number?: string | null
+  certificate_status?: string | null
+  certificate_issued_at?: string | null
 }
 
 type FeedbackData = {
@@ -58,6 +74,8 @@ type TrainingCertificateProps = {
   feedbackRating?: number | null
   feedbackComments?: string | null
   certificateRecipientName?: string | null
+  organizationName?: string | null
+  participants?: CertificateParticipant[]
 }
 
 function parseDateOnly(
@@ -313,6 +331,8 @@ export default function TrainingCertificate({
   feedbackRating = null,
   feedbackComments = null,
   certificateRecipientName = null,
+  organizationName = null,
+  participants = [],
 }: TrainingCertificateProps) {
   const [cert, setCert] =
     useState<CertificateData | null>(
@@ -519,14 +539,19 @@ export default function TrainingCertificate({
    * ============================================================
    */
 
-  async function issueCertificate() {
+  async function issueCertificate(
+    participantId?: string | null,
+    issueAll = false,
+  ) {
     if (!certificateUnlocked) {
       return
     }
 
     const confirmed =
       window.confirm(
-        "Issue this Certificate of Completion?",
+        issueAll
+          ? "Issue certificates for all eligible participants?"
+          : "Issue this Certificate of Completion?",
       )
 
     if (!confirmed) {
@@ -541,6 +566,15 @@ export default function TrainingCertificate({
           `/api/training/${engagementId}/certificate`,
           {
             method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              participant_id:
+                participantId || undefined,
+              issue_all:
+                issueAll || undefined,
+            }),
           },
         )
 
@@ -554,6 +588,23 @@ export default function TrainingCertificate({
         )
       }
 
+      if (
+        issueAll &&
+        Array.isArray(
+          payload.certificates,
+        )
+      ) {
+        window.alert(
+          `${payload.certificates.length} certificate${
+            payload.certificates.length === 1
+              ? ""
+              : "s"
+          } issued successfully.`,
+        )
+        window.location.reload()
+        return
+      }
+
       setCert({
         id:
           payload.certificate_id,
@@ -561,10 +612,20 @@ export default function TrainingCertificate({
         certificate_number:
           payload.certificate_number,
 
+        training_participant_id:
+          payload.training_participant_id ||
+          participantId ||
+          null,
+
         recipient_name:
           payload.recipient_name ||
           feedback
             ?.certificate_recipient_name ||
+          null,
+
+        organization_name:
+          payload.organization_name ||
+          organizationName ||
           null,
 
         training_title:
@@ -693,16 +754,19 @@ export default function TrainingCertificate({
     certificateRecipientName ||
     "Certificate Recipient"
 
-  const finalRating =
-    feedback?.rating
-      ? clampRating(
-          feedback.rating,
-        )
-      : 0
+  const finalOrganizationName =
+    cert?.organization_name ||
+    organizationName ||
+    null
 
-  const finalComments =
-    feedback?.comments?.trim() ||
-    ""
+  const showOrganizationName =
+    finalOrganizationName &&
+    finalOrganizationName
+      .trim()
+      .toLowerCase() !==
+      finalRecipientName
+        .trim()
+        .toLowerCase()
 
   /*
    * ============================================================
@@ -1023,9 +1087,21 @@ export default function TrainingCertificate({
                     <div className="h-px w-16 bg-[#a97918] sm:w-24" />
                   </div>
 
-                  <div className="mt-3.5 break-words px-4 font-serif text-[clamp(1.9rem,4.2vw,4.1rem)] italic leading-none text-[#10203b]">
+                  <div className="mt-3.5 break-words px-4 font-serif text-[clamp(1.55rem,3.8vw,4.1rem)] italic leading-tight text-[#10203b] [overflow-wrap:anywhere]">
                     {finalRecipientName}
                   </div>
+
+                  {showOrganizationName && (
+                    <div className="mt-2 text-center">
+                      <p className="text-[8px] uppercase tracking-[0.24em] text-[#4a5462] sm:text-[9px]">
+                        of
+                      </p>
+
+                      <p className="mt-1 break-words px-8 font-serif text-[clamp(0.82rem,1.45vw,1.25rem)] font-semibold leading-tight text-[#10203b] [overflow-wrap:anywhere]">
+                        {finalOrganizationName}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="mx-auto mt-2.5 h-px w-64 bg-[#c79b31]/70 sm:w-80" />
                 </div>
@@ -1037,7 +1113,7 @@ export default function TrainingCertificate({
                     Has successfully completed the
                   </p>
 
-                  <div className="mt-1.5 px-6 font-serif text-[clamp(1.05rem,2.2vw,1.9rem)] font-semibold uppercase tracking-wide text-[#10203b]">
+                  <div className="mt-1.5 break-words px-6 font-serif text-[clamp(0.95rem,1.85vw,1.75rem)] font-semibold uppercase leading-tight tracking-wide text-[#10203b] [overflow-wrap:anywhere]">
                     {finalTrainingTitle}
                   </div>
 
@@ -1104,7 +1180,7 @@ export default function TrainingCertificate({
                     <CertificateSeal />
                   </div>
 
-                  {/* FEEDBACK */}
+                  {/* CREDENTIAL STATEMENT */}
 
                   <div className="rounded-[14px] border border-[#c79b31] bg-[#fbf6eb]/95 px-4 py-3">
 
@@ -1112,81 +1188,23 @@ export default function TrainingCertificate({
                       <div className="h-px w-8 bg-[#c79b31]" />
 
                       <p className="text-[8.5px] font-semibold uppercase tracking-[0.2em] text-[#a97918] sm:text-[9.5px]">
-                        Participant Feedback
+                        Credential Record
                       </p>
 
                       <div className="h-px w-8 bg-[#c79b31]" />
                     </div>
 
-                    <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-[0.85fr_1.35fr]">
+                    <div className="mt-2.5 text-center">
+                      <p className="text-[8px] leading-4 text-[#293242] sm:text-[9px] sm:leading-5">
+                        This certificate is recorded in the
+                        ShadowNode training registry and may be
+                        verified using the certificate number,
+                        QR code, or verification URL shown here.
+                      </p>
 
-                      <div className="text-center sm:border-r sm:border-[#c79b31]/40 sm:pr-3">
-
-                        <p className="text-[7.5px] font-medium text-[#2b3544] sm:text-[8.5px]">
-                          How would you rate this training?
-                        </p>
-
-                        <div className="mt-1.5 flex justify-center gap-0.5">
-                          {Array.from(
-                            {
-                              length: 5,
-                            },
-                            (
-                              _,
-                              index,
-                            ) => {
-                              const starNumber =
-                                index + 1
-
-                              return (
-                                <span
-                                  key={
-                                    starNumber
-                                  }
-                                  className={
-                                    finalRating >=
-                                    starNumber
-                                      ? "text-[20px] leading-none text-[#d3a13a]"
-                                      : "text-[20px] leading-none text-[#d3a13a]/30"
-                                  }
-                                  aria-hidden="true"
-                                >
-                                  ★
-                                </span>
-                              )
-                            },
-                          )}
-                        </div>
-
-                        <p className="mt-0.5 text-[6.5px] font-semibold uppercase tracking-[0.14em] text-[#8c6a1d]">
-                          {finalRating
-                            ? `${finalRating}/5`
-                            : "Submitted"}
-                        </p>
-
-                      </div>
-
-                      <div className="min-w-0">
-
-                        <p className="text-[7.5px] font-medium text-[#2b3544] sm:text-[8.5px]">
-                          Your Feedback / Comments
-                        </p>
-
-                        <div className="mt-1">
-
-                          <div className="border-b border-[#8c8065]/40" />
-
-                          <div className="min-h-[38px] border-b border-[#8c8065]/40 py-1">
-                            <p className="max-h-[42px] overflow-hidden break-words text-[7.5px] leading-3.5 text-[#293242] sm:text-[8.5px]">
-                              {finalComments ||
-                                "Thank you for completing and participating in the training programme."}
-                            </p>
-                          </div>
-
-                          <div className="border-b border-[#8c8065]/40" />
-
-                        </div>
-                      </div>
+                      <p className="mt-2 font-mono text-[7px] uppercase tracking-[0.16em] text-[#8c6a1d] sm:text-[8px]">
+                        Status: Issued
+                      </p>
                     </div>
                   </div>
 
@@ -1435,24 +1453,120 @@ export default function TrainingCertificate({
 
             <p className="mt-2 text-sm leading-6 text-white/40">
               All certificate requirements have been
-              satisfied. Issue the official Certificate of
-              Completion for this engagement.
+              satisfied. Issue official Certificates of
+              Completion for eligible participants.
             </p>
 
-            <button
-              type="button"
-              onClick={
-                issueCertificate
-              }
-              disabled={
-                loading
-              }
-              className="mt-5 inline-flex items-center rounded-lg bg-[#20dc73] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#35e47f] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading
-                ? "Issuing Certificate..."
-                : "Issue Certificate"}
-            </button>
+            {participants.length > 0 ? (
+              <div className="mt-5 space-y-3">
+                {participants.map(
+                  (participant) => {
+                    const issued =
+                      Boolean(
+                        participant.certificate_id,
+                      )
+
+                    return (
+                      <div
+                        key={participant.id}
+                        className="flex flex-col gap-3 rounded-lg border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">
+                            {
+                              participant.certificate_name
+                            }
+                          </p>
+
+                          {participant.email && (
+                            <p className="mt-1 truncate text-xs text-white/35">
+                              {
+                                participant.email
+                              }
+                            </p>
+                          )}
+
+                          {issued && (
+                            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#20dc73]/75">
+                              Issued{" "}
+                              {
+                                participant.certificate_number
+                              }
+                            </p>
+                          )}
+                        </div>
+
+                        {issued ? (
+                          <a
+                            href={`/dashboard/training/${engagementId}/certificate?certificateId=${participant.certificate_id}`}
+                            className="inline-flex items-center justify-center rounded-lg border border-[#20dc73]/30 bg-[#20dc73]/10 px-4 py-2 text-xs font-semibold text-[#20dc73] transition hover:bg-[#20dc73]/15"
+                          >
+                            View
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              issueCertificate(
+                                participant.id,
+                              )
+                            }
+                            disabled={
+                              loading ||
+                              participant.certificate_eligible ===
+                                false
+                            }
+                            className="inline-flex items-center justify-center rounded-lg bg-[#20dc73] px-4 py-2 text-xs font-semibold text-black transition hover:bg-[#35e47f] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {loading
+                              ? "Issuing..."
+                              : "Issue"}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  },
+                )}
+
+                {participants.some(
+                  (participant) =>
+                    !participant.certificate_id &&
+                    participant.certificate_eligible !==
+                      false,
+                ) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      issueCertificate(
+                        null,
+                        true,
+                      )
+                    }
+                    disabled={loading}
+                    className="inline-flex items-center rounded-lg border border-[#20dc73]/40 bg-[#20dc73]/10 px-5 py-3 text-sm font-semibold text-[#20dc73] transition hover:bg-[#20dc73]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading
+                      ? "Issuing Certificates..."
+                      : "Issue All Eligible"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  issueCertificate()
+                }
+                disabled={
+                  loading
+                }
+                className="mt-5 inline-flex items-center rounded-lg bg-[#20dc73] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#35e47f] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading
+                  ? "Issuing Certificate..."
+                  : "Issue Certificate"}
+              </button>
+            )}
 
           </div>
         ) : (

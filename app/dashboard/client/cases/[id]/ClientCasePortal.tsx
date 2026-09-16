@@ -20,6 +20,8 @@ import {
   useMemo,
   useState,
 } from "react"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 type JsonPrimitive =
   | string
@@ -415,6 +417,8 @@ export default function ClientCasePortal({
 
   const [draft, setDraft] =
     useState("")
+  const { markResourceRead } =
+    useClientNotifications()
 
   const [sending, setSending] =
     useState(false)
@@ -514,8 +518,14 @@ export default function ClientCasePortal({
     ).catch(
       () => undefined,
     )
+
+    void markResourceRead(
+      "conversation",
+      conversationId,
+    )
   }, [
     data?.message_summary?.id,
+    markResourceRead,
   ])
 
   // ==========================================================
@@ -702,6 +712,10 @@ export default function ClientCasePortal({
 
   return (
     <main className="mx-auto max-w-6xl space-y-4 pb-8">
+      <MarkResourceNotificationsRead
+        resourceType="case"
+        resourceId={caseId}
+      />
       {/* ======================================================
           HEADER
       ====================================================== */}

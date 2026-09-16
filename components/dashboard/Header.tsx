@@ -7,6 +7,7 @@ import UserMenu from "./UserMenu"
 
 const roleLabels: Record<string, string> = {
   client: "Client",
+  staff: "Staff",
   investigator: "Investigator",
   analyst: "Analyst",
   administrator: "Administrator",
@@ -40,7 +41,7 @@ export default function Header({
           <span className="hidden rounded border border-[#20dc73]/25 bg-[#20dc73]/10 px-2 py-1 text-xs text-[#20dc73] sm:inline-flex">
             {roleLabels[user.role] || user.role}
           </span>
-          <NotificationBell />
+          <NotificationBell userRole={user.role} />
           <UserMenu user={user} />
         </div>
       </div>

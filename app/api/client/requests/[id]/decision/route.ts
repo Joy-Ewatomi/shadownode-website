@@ -23,6 +23,7 @@ import {
   recordRequestAudit,
   requestQuoteReview,
 } from "@/lib/services/quote-workflow-service"
+import { isTrainingRequest as classifyIsTrainingRequest } from "@/lib/services/request-engagement-classification"
 
 type RouteContext = {
   params: Promise<{
@@ -55,36 +56,6 @@ const REVIEW_ACTIONS = [
   "request_review",
   "negotiate",
 ]
-
-/*
- * =========================================================
- * TRAINING SERVICES
- * =========================================================
- *
- * Any request using one of these service types is converted
- * into a training_engagement rather than an investigation case.
- */
-const TRAINING_SERVICE_TYPES = [
-  "custom_training",
-  "cybersecurity_training",
-  "digital_safety",
-]
-
-/*
- * =========================================================
- * HELPER
- * =========================================================
- */
-
-function isTrainingService(
-  serviceType: string | null | undefined,
-): boolean {
-  return TRAINING_SERVICE_TYPES.includes(
-    String(serviceType ?? "")
-      .trim()
-      .toLowerCase(),
-  )
-}
 
 /*
  * =========================================================
@@ -255,6 +226,11 @@ async function handleDecision(
           currency:
             | string
             | null
+
+          training_goal: string | null
+          training_topics: string | null
+          training_participant_count: number | string | null
+          training_details: unknown
         }>(
           `
             SELECT
@@ -265,7 +241,11 @@ async function handleDecision(
               converted_training_engagement_id,
               approved_quote_amount,
               approved_quote_currency,
-              currency
+              currency,
+              training_goal,
+              training_topics,
+              training_participant_count,
+              training_details
             FROM requests
             WHERE id = $1
               AND user_id = $2
@@ -289,6 +269,36 @@ async function handleDecision(
       // ------------------------------------------------------
 
       if (!eligibleRequest) {
+        const converted = await query<{
+          converted_case_id: string | null
+          converted_training_engagement_id: string | null
+        }>(
+          `
+          SELECT converted_case_id, converted_training_engagement_id
+          FROM requests
+          WHERE id = $1
+            AND user_id = $2
+          LIMIT 1
+          `,
+          [id, user.id],
+        )
+
+        const convertedRow = converted.rows[0]
+        if (convertedRow?.converted_case_id || convertedRow?.converted_training_engagement_id) {
+          const training = Boolean(convertedRow.converted_training_engagement_id)
+          return NextResponse.json({
+            success: true,
+            decision: "accept",
+            request_id: id,
+            payment_required: true,
+            payment_status: "awaiting_payment",
+            engagement_type: training ? "training" : "investigation",
+            ...(training
+              ? { training_engagement_id: convertedRow.converted_training_engagement_id }
+              : { case_id: convertedRow.converted_case_id }),
+          })
+        }
+
         return NextResponse.json(
           {
             error:
@@ -304,10 +314,8 @@ async function handleDecision(
       // DETERMINE ENGAGEMENT TYPE
       // ------------------------------------------------------
 
-      const isTrainingRequest =
-        isTrainingService(
-          eligibleRequest.service_type,
-        )
+      const isTrainingRequestValue =
+        classifyIsTrainingRequest(eligibleRequest)
 
       // ------------------------------------------------------
       // APPROVED QUOTE AMOUNT
@@ -378,7 +386,7 @@ async function handleDecision(
         | string
         | null = null
 
-      if (isTrainingRequest) {
+      if (isTrainingRequestValue) {
         trainingEngagementId =
           await convertAcceptedRequestToTrainingEngagement(
             id,
@@ -400,7 +408,7 @@ async function handleDecision(
         id,
         user.id,
 
-        isTrainingRequest
+        isTrainingRequestValue
           ? "client_accepted_training_quote"
           : "client_accepted_quote",
 
@@ -419,7 +427,7 @@ async function handleDecision(
             : {}),
 
           engagement_type:
-            isTrainingRequest
+            isTrainingRequestValue
               ? "training"
               : "investigation",
 
@@ -438,7 +446,7 @@ async function handleDecision(
       await auditLog(
         user.id,
 
-        isTrainingRequest
+        isTrainingRequestValue
           ? "client_accepted_training_quote"
           : "client_accepted_quote",
 
@@ -461,7 +469,7 @@ async function handleDecision(
             : {}),
 
           engagement_type:
-            isTrainingRequest
+            isTrainingRequestValue
               ? "training"
               : "investigation",
 
@@ -507,12 +515,12 @@ async function handleDecision(
         currency: quoteCurrency,
 
         engagement_type:
-          isTrainingRequest
+          isTrainingRequestValue
             ? "training"
             : "investigation",
 
         message:
-          isTrainingRequest
+          isTrainingRequestValue
             ? "Training quote accepted successfully. Payment is required before the training engagement can begin."
             : "Quote accepted successfully. Payment is required before the investigation can begin.",
       })
@@ -659,9 +667,10 @@ async function handleDecision(
       // ======================================================
 
       const isTrainingRequest =
-        isTrainingService(
-          eligibleRequest.service_type,
-        )
+        classifyIsTrainingRequest({
+          service_type:
+            eligibleRequest.service_type,
+        })
 
       // ======================================================
       // CLIENT CURRENCY
@@ -909,9 +918,10 @@ async function handleDecision(
         updated.rows[0]
 
       const isTrainingRequest =
-        isTrainingService(
-          declinedRequest.service_type,
-        )
+        classifyIsTrainingRequest({
+          service_type:
+            declinedRequest.service_type,
+        })
 
       // ------------------------------------------------------
       // REQUEST AUDIT
@@ -943,7 +953,7 @@ async function handleDecision(
       try {
         await notifyAdmins({
           type:
-            "quote_rejected",
+            "quote_declined",
 
           title:
             isTrainingRequest
@@ -956,6 +966,9 @@ async function handleDecision(
 
           metadata: {
             request_id: id,
+            resource_type: "request",
+            resource_id: id,
+            audience: "administrator",
 
             engagement_type:
               isTrainingRequest

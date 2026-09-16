@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
+import { isStaffLikeRole } from "@/lib/role-access"
 
 export async function GET() {
   try {
@@ -11,7 +12,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (user.role !== "investigator") {
+    if (!isStaffLikeRole(user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

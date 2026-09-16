@@ -24,11 +24,14 @@ export async function GET(
         m.sender_type,
         m.message,
         m.created_at,
-        m.read_at
+        mr.read_at
       FROM messages m
       JOIN conversation_members cm
         ON cm.conversation_id = m.conversation_id
         AND cm.user_id = $2
+      LEFT JOIN message_receipts mr
+        ON mr.message_id = m.id
+        AND mr.user_id = $2
       LEFT JOIN user_profiles sender_profile
         ON sender_profile.id = m.sender_id
       LEFT JOIN app_users sender

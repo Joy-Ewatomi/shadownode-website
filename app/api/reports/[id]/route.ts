@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
 import {
-  canUseInvestigationWorkspace,
+  canUseCaseOperationalAccess,
+  canUseCaseOversightRead,
+  canUseCaseReviewAccess,
   profileIdForUser,
 } from "@/lib/investigation-workspace"
 import {
@@ -34,6 +36,7 @@ async function loadReport(reportId: string) {
     case_number: string | null
     case_title: string | null
     client_user_id: string | null
+    created_by_user_id: string | null
     created_by_username: string | null
     approved_by_username: string | null
   }>(
@@ -54,6 +57,7 @@ async function loadReport(reportId: string) {
       c.case_number,
       c.title AS case_title,
       client_profile.user_id AS client_user_id,
+      creator.id AS created_by_user_id,
       creator.username AS created_by_username,
       approver.username AS approved_by_username
     FROM case_reports cr
@@ -91,7 +95,9 @@ export async function GET(
       user.role === "client"
         ? report.client_user_id === user.id &&
           CLIENT_VISIBLE_REPORT_STATUSES.has(report.status || "")
-        : await canUseInvestigationWorkspace(user.id, user.role, report.case_id)
+        : (await canUseCaseOperationalAccess(user.id, user.role, report.case_id)) ||
+          (await canUseCaseReviewAccess(user.id, user.role, report.case_id)) ||
+          (await canUseCaseOversightRead(user.id, user.role, report.case_id))
 
     if (!canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -118,6 +124,10 @@ export async function PATCH(
 
     if (!current) {
       return NextResponse.json({ error: "Report not found" }, { status: 404 })
+    }
+
+    if (!(await canUseCaseReviewAccess(user.id, user.role, current.case_id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     const profileId = await profileIdForUser(user.id)
@@ -180,16 +190,41 @@ export async function PATCH(
       ],
     ).catch(() => undefined)
 
-    if (nextStatus === "approved") {
+    if (nextStatus === "review") {
       await notifySuperAdmins({
+        type: "report_pending_approval",
+        title: "Report pending approval",
+        message: `${current.title || "A report"} is ready for review for ${current.case_number || "a case"}.`,
+        metadata: {
+          report_id: id,
+          case_id: current.case_id,
+          resource_type: "report",
+          resource_id: id,
+          target_page: "report_review",
+          audience: "super_administrator",
+          action: "review_report",
+        },
+      })
+    }
+
+    if (
+      nextStatus === "approved" &&
+      current.created_by_user_id &&
+      current.created_by_user_id !== user.id
+    ) {
+      await notifyUser(current.created_by_user_id, {
+        caseId: current.case_id,
         type: "report_approved",
         title: "Report approved",
         message: `${current.title || "A report"} has been approved for ${current.case_number || "a case"}.`,
         metadata: {
           report_id: id,
           case_id: current.case_id,
-          target_page: "report",
-          action: "review_report",
+          resource_type: "report",
+          resource_id: id,
+          target_page: "report_review",
+          audience: "staff",
+          action: "view_report",
         },
       })
     }
@@ -203,6 +238,8 @@ export async function PATCH(
         metadata: {
           report_id: id,
           case_id: current.case_id,
+          resource_type: "report",
+          resource_id: id,
           target_page: "client_reports",
           action: "view_report",
         },

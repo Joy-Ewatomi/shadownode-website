@@ -15,6 +15,9 @@ import {
   requestQuoteReview,
   recordRequestAudit,
 } from "@/lib/services/quote-workflow-service"
+import { convertAcceptedRequestToCase } from "@/lib/services/case-conversion-service"
+import { convertAcceptedRequestToTrainingEngagement } from "@/lib/services/training-engagement-conversion-service"
+import { isTrainingRequest as classifyIsTrainingRequest } from "@/lib/services/request-engagement-classification"
 
 type RouteContext = {
   params: Promise<{
@@ -152,6 +155,13 @@ async function handleQuote(
       preferred_currency: string | null
       approved_quote_amount: number | null
       approved_quote_currency: string | null
+      converted_case_id: string | null
+      converted_training_engagement_id: string | null
+      service_type: string | null
+      training_goal: string | null
+      training_topics: string | null
+      training_participant_count: number | string | null
+      training_details: unknown
     }>(
       `
         SELECT
@@ -160,7 +170,14 @@ async function handleQuote(
           status,
           preferred_currency,
           approved_quote_amount,
-          approved_quote_currency
+          approved_quote_currency,
+          converted_case_id,
+          converted_training_engagement_id,
+          service_type,
+          training_goal,
+          training_topics,
+          training_participant_count,
+          training_details
         FROM requests
         WHERE id = $1
           AND user_id = $2
@@ -191,6 +208,28 @@ async function handleQuote(
     // ========================================================
 
     if (
+      action === "accept" &&
+      (
+        currentRequest.converted_case_id ||
+        currentRequest.converted_training_engagement_id
+      )
+    ) {
+      const training = Boolean(currentRequest.converted_training_engagement_id)
+      return NextResponse.json({
+        success: true,
+        decision: "accept",
+        request_id: id,
+        payment_required: true,
+        payment_status: "awaiting_payment",
+        engagement_type: training ? "training" : "investigation",
+        ...(training
+          ? { training_engagement_id: currentRequest.converted_training_engagement_id }
+          : { case_id: currentRequest.converted_case_id }),
+        next_step: "payment",
+      })
+    }
+
+    if (
       !QUOTE_STATUSES.includes(
         currentRequest.status,
       )
@@ -212,59 +251,26 @@ async function handleQuote(
     // ACCEPT
     // ========================================================
     //
-    // IMPORTANT:
-    // Acceptance does NOT convert the request into a case.
-    //
-    // Payment verification should perform the conversion.
+    // Legacy compatibility path. Acceptance delegates to the
+    // same conversion services as the canonical decision route.
     //
 
     if (action === "accept") {
-      const updated =
-        await query<{
-          id: string
-          status: string
-          client_decision_at: Date | null
-        }>(
-          `
-            UPDATE requests
-            SET
-              status = 'accepted',
-              client_decision_at = NOW(),
-              updated_at = NOW()
-            WHERE id = $1
-              AND user_id = $2
-              AND status = ANY($3::varchar[])
-              AND converted_case_id IS NULL
-            RETURNING
-              id,
-              status,
-              client_decision_at
-          `,
-          [
-            id,
-            user.id,
-            QUOTE_STATUSES,
-          ],
-        )
-
-      if (!updated.rows[0]) {
-        return NextResponse.json(
-          {
-            error:
-              "The quote could not be accepted because it is no longer active.",
-          },
-          {
-            status: 409,
-          },
-        )
-      }
+      const training = classifyIsTrainingRequest(currentRequest)
+      const convertedId = training
+        ? await convertAcceptedRequestToTrainingEngagement(id, user.id)
+        : await convertAcceptedRequestToCase(id, user.id)
 
       await recordRequestAudit(
         id,
         user.id,
-        "client_accepted_quote",
+        training ? "client_accepted_training_quote" : "client_accepted_quote",
         {
           request_id: id,
+          payment_required: true,
+          ...(training
+            ? { training_engagement_id: convertedId }
+            : { case_id: convertedId }),
         },
       )
 
@@ -277,6 +283,9 @@ async function handleQuote(
             "A client has accepted the current quote and is ready for payment.",
           metadata: {
             request_id: id,
+            resource_type: "request",
+            resource_id: id,
+            audience: "administrator",
             target_page:
               "admin_request_review",
             action:
@@ -302,7 +311,13 @@ async function handleQuote(
       return NextResponse.json({
         success: true,
         decision: "accept",
-        request: updated.rows[0],
+        request_id: id,
+        payment_required: true,
+        payment_status: "awaiting_payment",
+        engagement_type: training ? "training" : "investigation",
+        ...(training
+          ? { training_engagement_id: convertedId }
+          : { case_id: convertedId }),
         next_step: "payment",
       })
     }
@@ -387,13 +402,16 @@ async function handleQuote(
 
       try {
         await notifyAdmins({
-          type: "quote_rejected",
+          type: "quote_declined",
           title:
             "Client declined quote",
           message:
             safeReason,
           metadata: {
             request_id: id,
+            resource_type: "request",
+            resource_id: id,
+            audience: "administrator",
             target_page:
               "admin_request_review",
             action:
@@ -522,12 +540,15 @@ async function handleQuote(
 
       try {
         await notifyAdmins({
-          type: "quote_review_requested",
+          type: "quote_negotiation_requested",
           title:
             "Client requested quote review",
           message: reason,
           metadata: {
             request_id: id,
+            resource_type: "request",
+            resource_id: id,
+            audience: "administrator",
             negotiation_id:
               negotiation.id,
             requested_budget:

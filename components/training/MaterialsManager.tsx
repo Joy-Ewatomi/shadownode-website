@@ -533,7 +533,7 @@ export default function MaterialsManager({
   async function openFile(
     material: TrainingMaterial,
   ) {
-    if (!material.file_url) {
+    if (!material.file_url || !material.id) {
       return
     }
 
@@ -554,9 +554,9 @@ export default function MaterialsManager({
     )
 
     const fileUrl =
-      `/api/storage/evidence?path=${encodeURIComponent(
-        material.file_url,
-      )}`
+      `/api/training/materials/${encodeURIComponent(
+        material.id,
+      )}/download`
 
     window.open(
       fileUrl,
@@ -1541,9 +1541,13 @@ export default function MaterialsManager({
                                       controls
                                       preload="metadata"
                                       className="w-full rounded-lg"
-                                      src={`/api/storage/evidence?path=${encodeURIComponent(
-                                        material.file_url,
-                                      )}`}
+                                      src={
+                                        material.id
+                                          ? `/api/training/materials/${encodeURIComponent(
+                                              material.id,
+                                            )}/download`
+                                          : undefined
+                                      }
                                       onLoadedMetadata={(
                                         event,
                                       ) => {

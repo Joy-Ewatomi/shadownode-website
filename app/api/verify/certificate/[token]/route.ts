@@ -30,6 +30,7 @@ export async function GET(
           id,
           certificate_number,
           recipient_name,
+          organization_name,
           training_title,
           training_type,
           trainer_name,
@@ -73,6 +74,9 @@ export async function GET(
 
         recipient_name:
           certificate.recipient_name,
+
+        organization_name:
+          certificate.organization_name,
 
         training_title:
           certificate.training_title,

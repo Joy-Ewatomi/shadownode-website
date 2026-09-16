@@ -3,6 +3,7 @@
 import { BriefcaseBusiness, RefreshCcw, Shield } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 type ClientCase = {
   id: string
@@ -19,6 +20,7 @@ export default function ClientCasesPage() {
   const [cases, setCases] = useState<ClientCase[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const { getUnreadForResource } = useClientNotifications()
 
   async function load() {
     setLoading(true)
@@ -100,17 +102,32 @@ export default function ClientCasesPage() {
 
       {!loading && cases.length ? (
         <section className="grid gap-4 md:grid-cols-2">
-          {cases.map((c) => (
+          {cases.map((c) => {
+            const unread = getUnreadForResource("case", c.id)
+
+            return (
             <Link
               key={c.id}
               href={`/dashboard/client/cases/${c.id}`}
-              className="group rounded-md border border-[#143b28] bg-[#06110f] p-5 transition hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5"
+              className={`group rounded-md border bg-[#06110f] p-5 transition hover:border-[#20dc73]/30 hover:bg-[#20dc73]/5 ${
+                unread > 0
+                  ? "border-[#20dc73]/40 bg-[#20dc73]/5"
+                  : "border-[#143b28]"
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <Shield className="mt-0.5 h-5 w-5 text-[#20dc73]" />
                   <div>
-                    <p className="font-semibold text-white group-hover:text-[#20dc73]">{c.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-white group-hover:text-[#20dc73]">{c.title}</p>
+                      {unread > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#20dc73]">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
+                          NEW{unread > 1 ? ` ${unread}` : ""}
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 text-xs text-white/40">{c.case_number}</p>
                   </div>
                 </div>
@@ -150,7 +167,7 @@ export default function ClientCasesPage() {
                 </div>
               ) : null}
             </Link>
-          ))}
+          )})}
         </section>
       ) : null}
     </div>

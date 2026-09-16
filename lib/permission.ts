@@ -1,4 +1,5 @@
 import type { AppUser } from "./auth"
+import { normalizePermanentRole } from "@/lib/role-access"
 
 // =========================================================
 // PERMISSIONS
@@ -147,6 +148,38 @@ export const rolePermissions: Record<
     "messages:view",
 
     "notifications:view",
+
+  ],
+
+
+  // =======================================================
+  // STAFF
+  // =======================================================
+  //
+  // Staff have platform access to their own assigned work.
+  // Resource-level APIs still enforce active case/training
+  // assignment before operational data is exposed.
+  // =======================================================
+
+  staff: [
+
+    "dashboard:view",
+
+    "cases:view",
+
+    "training:view",
+
+    "reports:view",
+
+    "messages:view",
+
+    "notifications:view",
+
+    "evidence:view",
+
+    "investigation:view",
+
+    "intelligence:access",
 
   ],
 
@@ -349,8 +382,13 @@ export function hasPermission(
   permission: Permission,
 ): boolean {
 
+  const normalizedRole =
+    normalizePermanentRole(user.role) || user.role
+
   const permissions =
-    rolePermissions[user.role] ?? []
+    rolePermissions[normalizedRole] ??
+    rolePermissions[user.role] ??
+    []
 
 
   // -------------------------------------------------------

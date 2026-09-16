@@ -4,7 +4,8 @@ import {
   optionalText,
   profileIdForUser,
   recordInvestigationTimeline,
-  requireInvestigationWorkspace,
+  requireCaseOperationalAccess,
+  requireCaseReadAccess,
 } from "@/lib/investigation-workspace"
 
 export async function GET(
@@ -13,7 +14,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const access = await requireInvestigationWorkspace(request, id)
+    const access = await requireCaseReadAccess(request, id)
 
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status })
@@ -52,7 +53,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const access = await requireInvestigationWorkspace(request, id)
+    const access = await requireCaseOperationalAccess(request, id)
 
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status })

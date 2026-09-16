@@ -20,8 +20,7 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false })
     if (
   user.role !== "administrator" &&
-  user.role !== "super_administrator" &&
-  user.role !== "analyst"
+  user.role !== "super_administrator"
 ) {
   query = query.eq("user_id", user.id)
 }

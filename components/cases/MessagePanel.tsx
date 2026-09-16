@@ -10,8 +10,10 @@ import {
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 type Message = {
   id: string
@@ -36,6 +38,7 @@ type MessagePermissions = {
 type MessagesResponse = {
   messages: Message[]
   permissions: MessagePermissions
+  conversation_id?: string | null
 }
 
 type MessagePanelProps = {
@@ -49,6 +52,15 @@ export default function MessagePanel({
 
   const [permissions, setPermissions] =
     useState<MessagePermissions | null>(null)
+
+  const [conversationId, setConversationId] =
+    useState<string | null>(null)
+
+  const { markResourceRead } =
+    useClientNotifications()
+
+  const readConversationRef =
+    useRef<string | null>(null)
 
   const [text, setText] = useState("")
 
@@ -123,6 +135,11 @@ export default function MessagePanel({
           result.permissions ??
             null,
         )
+
+        setConversationId(
+          result.conversation_id ??
+            null,
+        )
       } catch (err) {
         setError(
           err instanceof Error
@@ -140,6 +157,38 @@ export default function MessagePanel({
   useEffect(() => {
     loadMessages()
   }, [loadMessages])
+
+  useEffect(() => {
+    if (!conversationId) return
+    if (readConversationRef.current === conversationId) return
+
+    readConversationRef.current = conversationId
+
+    fetch("/api/messages", {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        conversation_id: conversationId,
+      }),
+    })
+      .then(() =>
+        markResourceRead(
+          "conversation",
+          conversationId,
+        ),
+      )
+      .then(() => loadMessages(true))
+      .catch(() => {
+        readConversationRef.current = null
+      })
+  }, [
+    conversationId,
+    loadMessages,
+    markResourceRead,
+  ])
 
   async function sendMessage() {
     const trimmedText =

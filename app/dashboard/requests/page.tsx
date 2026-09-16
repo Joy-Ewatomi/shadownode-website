@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { RefreshCcw, Search } from "lucide-react"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 type Request = {
   id: string
@@ -39,6 +40,8 @@ export default function RequestList() {
   const statusFilter = searchParams.get("status") || "all"
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
+  const { getUnreadForResource } =
+    useClientNotifications()
 
   async function loadRequests() {
     try {
@@ -172,11 +175,21 @@ export default function RequestList() {
                 request.category ||
                 request.service_type ||
                 "Uncategorized"
+              const unreadCount =
+                getUnreadForResource(
+                  "request",
+                  request.id,
+                )
 
               return (
                 <div
                   key={request.id}
-                  className="flex min-w-0 max-w-full flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between"
+                  className={[
+                    "flex min-w-0 max-w-full flex-col gap-4 px-5 py-5 transition sm:flex-row sm:items-center sm:justify-between",
+                    unreadCount > 0
+                      ? "border-l border-[#20dc73]/40 bg-[#20dc73]/5"
+                      : "",
+                  ].join(" ")}
                 >
 
                   {/* =================================================
@@ -191,6 +204,16 @@ export default function RequestList() {
                       {request.title ||
                         "Untitled Request"}
                     </h3>
+
+                    {unreadCount > 0 && (
+                      <span className="mt-2 inline-flex items-center gap-1.5 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#20dc73]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
+                        NEW
+                        {unreadCount > 1
+                          ? ` ${unreadCount}`
+                          : ""}
+                      </span>
+                    )}
 
                     {/* CASE NUMBER */}
 

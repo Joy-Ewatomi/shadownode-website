@@ -1,6 +1,11 @@
+"use client"
+
 import RoleDashboard from "@/components/dashboard/RoleDashboard"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 export default function ClientDashboard() {
+  const { unreadCount } = useClientNotifications()
+
   return (
     <div className="space-y-6">
       <RoleDashboard
@@ -30,7 +35,7 @@ export default function ClientDashboard() {
           {
             key: "notifications",
             label: "Notifications",
-            value: "0",
+            value: String(unreadCount),
             helper: "Secure updates",
           },
         ]}

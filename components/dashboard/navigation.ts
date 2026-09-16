@@ -12,6 +12,7 @@ import {
   ClipboardList,
   History,
   GraduationCap,
+  Award,
 } from "lucide-react"
 import type { ElementType } from "react"
 
@@ -28,7 +29,12 @@ export function getNavigation(role: string): NavigationItem[] {
   const isClient = role === "client"
   const isAdministrator = role === "administrator"
   const isSuperAdministrator =
-    role === "super_administrator"
+    role === "super_administrator" ||
+    role === "super-administrator"
+  const isStaff =
+    role === "staff" ||
+    role === "investigator" ||
+    role === "analyst"
 
   return [
     // =====================================================
@@ -39,7 +45,9 @@ export function getNavigation(role: string): NavigationItem[] {
       label: "Dashboard",
       href: isClient
         ? "/dashboard/client"
-        : "/dashboard",
+        : isStaff
+          ? "/dashboard/staff"
+          : "/dashboard",
       icon: LayoutDashboard,
       permission: "dashboard:view",
     },
@@ -92,6 +100,17 @@ export function getNavigation(role: string): NavigationItem[] {
       icon: GraduationCap,
       permission: "training:view",
     },
+
+    ...(isClient
+      ? [
+          {
+            label: "Certificates",
+            href: "/dashboard/client/certificates",
+            icon: Award,
+            permission: "training:view" as Permission,
+          },
+        ]
+      : []),
 
     // =====================================================
     // ACTIVE REQUESTS
@@ -221,7 +240,7 @@ export function getNavigation(role: string): NavigationItem[] {
 
     {
       label: "Investigation",
-      href: "/dashboard/investigator",
+      href: "/dashboard/staff",
       icon: Shield,
       permission: "investigation:view",
     },

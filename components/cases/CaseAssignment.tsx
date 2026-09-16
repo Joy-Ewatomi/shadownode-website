@@ -68,10 +68,10 @@ type CaseAssignmentProps = {
 }
 
 const ASSIGNMENT_ROLES = [
+  "lead_investigator",
   "investigator",
   "analyst",
-  "administrator",
-  "super_administrator",
+  "reviewer",
 ] as const
 
 type AssignmentRole =
@@ -544,22 +544,14 @@ export default function CaseAssignment({
               return false
             }
 
-            if (
-              assignmentRole ===
-              "super_administrator"
-            ) {
-              return (
-                member.role ===
-                  "super_administrator" ||
-                member.role ===
-                  "super-administrator"
-              )
-            }
-
-            return (
-              member.role ===
-              assignmentRole
-            )
+            return [
+              "staff",
+              "investigator",
+              "analyst",
+              "administrator",
+              "super_administrator",
+              "super-administrator",
+            ].includes(member.role)
           },
         ),
       [
@@ -1696,7 +1688,9 @@ function StatusBadge({
 
     if (
       role ===
-      "investigator"
+        "lead_investigator" ||
+      role ===
+        "investigator"
     ) {
       classes =
         "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
@@ -1708,18 +1702,10 @@ function StatusBadge({
         "border-cyan-500/20 bg-cyan-500/5 text-cyan-300"
     } else if (
       role ===
-      "administrator"
+      "reviewer"
     ) {
       classes =
         "border-blue-500/20 bg-blue-500/5 text-blue-300"
-    } else if (
-      role ===
-        "super_administrator" ||
-      role ===
-        "super-administrator"
-    ) {
-      classes =
-        "border-purple-500/20 bg-purple-500/5 text-purple-300"
     }
   }
 

@@ -6,7 +6,8 @@ import {
   optionalText,
   profileIdForUser,
   recordInvestigationTimeline,
-  requireInvestigationWorkspace,
+  requireCaseOperationalAccess,
+  requireCaseReadAccess,
 } from "@/lib/investigation-workspace"
 import { query } from "@/lib/db"
 import {
@@ -36,6 +37,7 @@ function canManageEvidence(
   return (
     role === "administrator" ||
     isSuperAdminRole(role) ||
+    role === "staff" ||
     role === "investigator" ||
     role === "analyst"
   )
@@ -49,7 +51,7 @@ export async function GET(
     const { id } = await params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseReadAccess(
         request,
         id,
       )
@@ -120,7 +122,7 @@ export async function POST(
     const { id } = await params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseOperationalAccess(
         request,
         id,
       )
@@ -393,7 +395,7 @@ export async function DELETE(
     const { id } = await params
 
     const access =
-      await requireInvestigationWorkspace(
+      await requireCaseOperationalAccess(
         request,
         id,
       )

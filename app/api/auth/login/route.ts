@@ -15,6 +15,7 @@ type LoginUser = {
   password_hash: string
   role:
     | "client"
+    | "staff"
     | "investigator"
     | "analyst"
     | "administrator"

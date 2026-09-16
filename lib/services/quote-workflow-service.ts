@@ -1,4 +1,5 @@
 import {
+  type DatabasePoolClient,
   query,
   withTransaction,
 } from "@/lib/db"
@@ -12,8 +13,6 @@ import {
 import {
   convertCurrency,
 } from "@/lib/services/currency-service"
-
-import type { DatabasePoolClient } from "@/lib/db"
 
 type AdminQuoteReviewAction =
   | "adjust"
@@ -129,30 +128,35 @@ export async function recordRequestAudit(
   actorUserId: string | null,
   action: string,
   details: Record<string, unknown> = {},
+  executor: Pick<DatabasePoolClient, "query"> = { query },
+  options: { strict?: boolean } = {},
 ) {
-  await query(
-    `
-      INSERT INTO request_audit_events
-      (
-        request_id,
-        actor_user_id,
+  try {
+    await executor.query(
+      `
+        INSERT INTO request_audit_events
+        (
+          request_id,
+          actor_user_id,
+          action,
+          details
+        )
+        VALUES ($1, $2, $3, $4)
+      `,
+      [
+        requestId,
+        actorUserId,
         action,
-        details
-      )
-      VALUES ($1, $2, $3, $4)
-    `,
-    [
-      requestId,
-      actorUserId,
-      action,
-      JSON.stringify(details),
-    ],
-  ).catch((error) => {
+        JSON.stringify(details),
+      ],
+    )
+  } catch (error) {
     console.error(
       "AUDIT ERROR",
       error,
     )
-  })
+    if (options.strict) throw error
+  }
 }
 
 /**
@@ -566,7 +570,7 @@ if (!request) {
       row.user_id,
       {
         type:
-          "quote_ready",
+          "quote_available",
 
         title:
           "Quote ready",
@@ -576,6 +580,10 @@ if (!request) {
 
         metadata: {
           request_id:
+            input.requestId,
+          resource_type:
+            "request",
+          resource_id:
             input.requestId,
 
           target_page:
@@ -1473,7 +1481,7 @@ export async function declineRequest(
       row.user_id,
       {
         type:
-          "quote_rejected",
+          "request_declined",
 
         title:
           "Request rejected",
@@ -1483,6 +1491,10 @@ export async function declineRequest(
 
         metadata: {
           request_id:
+            requestId,
+          resource_type:
+            "request",
+          resource_id:
             requestId,
 
           target_page:
@@ -2202,6 +2214,12 @@ export async function requestQuoteReview(
     metadata: {
       request_id:
         input.requestId,
+      resource_type:
+        "request",
+      resource_id:
+        input.requestId,
+      audience:
+        "administrator",
 
       negotiation_id:
         negotiation.id,
@@ -2873,6 +2891,12 @@ export async function administratorReviewNegotiation(
     metadata: {
       request_id:
         current.request_id,
+      resource_type:
+        "request",
+      resource_id:
+        current.request_id,
+      audience:
+        "super_administrator",
 
       negotiation_id:
         input.negotiationId,
@@ -3534,7 +3558,7 @@ export async function superAdminDecideNegotiation(
         result.negotiationRow.client_id,
         {
           type:
-            "quote_rejected",
+            "negotiation_response_received",
 
           title:
             "Quote review declined",
@@ -3544,6 +3568,10 @@ export async function superAdminDecideNegotiation(
 
           metadata: {
             request_id:
+              current.request_id,
+            resource_type:
+              "request",
+            resource_id:
               current.request_id,
 
             negotiation_id:
@@ -4089,7 +4117,7 @@ export async function superAdminDecideNegotiation(
         .client_id,
       {
         type:
-          "quote_ready",
+          "quote_revised",
 
         title:
           "Revised quote ready",
@@ -4099,6 +4127,10 @@ export async function superAdminDecideNegotiation(
 
         metadata: {
           request_id:
+            current.request_id,
+          resource_type:
+            "request",
+          resource_id:
             current.request_id,
 
           negotiation_id:

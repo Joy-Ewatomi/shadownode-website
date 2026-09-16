@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
 import {
-  canUseInvestigationWorkspace,
+  canUseCaseOperationalAccess,
+  canUseCaseOversightRead,
+  canUseCaseReviewAccess,
   profileIdForUser,
   resolveCaseId,
 } from "@/lib/investigation-workspace"
@@ -20,7 +22,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Case not found" }, { status: 404 })
     }
 
-    if (caseId && !(await canUseInvestigationWorkspace(user.id, user.role, caseId))) {
+    if (
+      caseId &&
+      !(
+        (await canUseCaseOperationalAccess(user.id, user.role, caseId)) ||
+        (await canUseCaseReviewAccess(user.id, user.role, caseId)) ||
+        (await canUseCaseOversightRead(user.id, user.role, caseId))
+      )
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

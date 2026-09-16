@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCurrentUser, isAdminRole } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
-import { canUseInvestigationWorkspace } from "@/lib/investigation-workspace"
+import {
+  canUseCaseOperationalAccess,
+  canUseCaseOversightRead,
+  canUseCaseReviewAccess,
+} from "@/lib/investigation-workspace"
 import { deleteEvidenceFile } from "@/lib/services/storage-service"
 
 async function loadEvidence(evidenceId: string) {
@@ -73,7 +77,9 @@ export async function GET(
     const canView =
       user.role === "client"
         ? evidence.client_user_id === user.id
-        : await canUseInvestigationWorkspace(user.id, user.role, evidence.case_id)
+        : (await canUseCaseOperationalAccess(user.id, user.role, evidence.case_id)) ||
+          (await canUseCaseReviewAccess(user.id, user.role, evidence.case_id)) ||
+          (await canUseCaseOversightRead(user.id, user.role, evidence.case_id))
 
     if (!canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -93,13 +99,16 @@ export async function DELETE(
   try {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    if (!isAdminRole(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
     const { id } = await params
     const evidence = await loadEvidence(id)
 
     if (!evidence) {
       return NextResponse.json({ error: "Evidence not found" }, { status: 404 })
+    }
+
+    if (!(await canUseCaseOperationalAccess(user.id, user.role, evidence.case_id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     await query("DELETE FROM forensic_files WHERE id = $1", [id])

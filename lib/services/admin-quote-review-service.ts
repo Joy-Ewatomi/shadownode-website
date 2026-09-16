@@ -979,6 +979,12 @@ await recordRequestAudit(
     metadata: {
       request_id:
         input.requestId,
+      resource_type:
+        "request",
+      resource_id:
+        input.requestId,
+      audience:
+        "super_administrator",
 
       quote_version_id:
         adminVersion.id,

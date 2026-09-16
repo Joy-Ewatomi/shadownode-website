@@ -18,6 +18,7 @@ type ReportRow = {
   approved_by_username: string | null
   created_at: string
   updated_at: string
+  unread_notification_count: number
 }
 
 export default async function ReportsPage() {
@@ -45,7 +46,21 @@ export default async function ReportsPage() {
       creator.username AS created_by_username,
       approver.username AS approved_by_username,
       cr.created_at,
-      cr.updated_at
+      cr.updated_at,
+      (
+        SELECT COUNT(*)::int
+        FROM notifications n
+        WHERE n.user_id = $4
+          AND n.is_read = false
+          AND (
+            n.metadata->>'report_id' = cr.id::text
+            OR n.metadata->>'reportId' = cr.id::text
+            OR (
+              COALESCE(n.metadata->>'resource_type', n.metadata->>'resourceType') = 'report'
+              AND COALESCE(n.metadata->>'resource_id', n.metadata->>'resourceId') = cr.id::text
+            )
+          )
+      ) AS unread_notification_count
     FROM case_reports cr
     JOIN cases c ON c.id = cr.case_id
     LEFT JOIN user_profiles creator_profile ON creator_profile.id = cr.created_by
@@ -71,7 +86,7 @@ export default async function ReportsPage() {
       )
     ORDER BY cr.updated_at DESC, cr.created_at DESC
     `,
-    [isAdmin, profileId, user.role],
+    [isAdmin, profileId, user.role, user.id],
   )
 
   const stats = {
@@ -109,13 +124,27 @@ export default async function ReportsPage() {
         {rows.map((item) => (
           <Link
             key={item.id}
-            href={`/dashboard/cases/${item.case_id}/reports`}
-            className="block rounded-md border border-[#143b28] bg-[#06110f] p-5 transition hover:border-[#20dc73]/55"
+            href={`/dashboard/cases/${item.case_id}/reports?reportId=${encodeURIComponent(item.id)}`}
+            className={[
+              "block rounded-md border p-5 transition hover:border-[#20dc73]/55",
+              item.unread_notification_count > 0
+                ? "border-[#20dc73]/40 bg-[#20dc73]/5"
+                : "border-[#143b28] bg-[#06110f]",
+            ].join(" ")}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="break-all font-mono text-xs text-[#20dc73]">{item.case_number}</p>
                 <h2 className="mt-2 break-words text-lg font-semibold text-white">{item.title}</h2>
+                {item.unread_notification_count > 0 ? (
+                  <span className="mt-2 inline-flex items-center gap-1.5 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#20dc73]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
+                    NEW
+                    {item.unread_notification_count > 1
+                      ? ` ${item.unread_notification_count}`
+                      : ""}
+                  </span>
+                ) : null}
                 <p className="mt-1 break-words text-sm text-white/50">{item.case_title}</p>
               </div>
               <Status value={item.status || "draft"} />

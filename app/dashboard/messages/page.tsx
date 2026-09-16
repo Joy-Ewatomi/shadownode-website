@@ -14,6 +14,7 @@ import {
   useMemo,
   useState,
 } from "react"
+import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider"
 
 type Message = {
   id: string
@@ -61,6 +62,10 @@ export default function DashboardMessagesPage() {
 
   const [sendError, setSendError] =
     useState<string | null>(null)
+  const {
+    getUnreadForResource,
+    markResourceRead,
+  } = useClientNotifications()
 
   async function load(refresh = false) {
     try {
@@ -154,6 +159,11 @@ export default function DashboardMessagesPage() {
     })
       .then(() => load(true))
       .catch(() => undefined)
+
+    void markResourceRead(
+      "conversation",
+      selected.id,
+    ).catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id])
 
@@ -332,7 +342,14 @@ export default function DashboardMessagesPage() {
           ) : null}
 
           {conversations.map(
-            (conversation) => (
+            (conversation) => {
+              const notificationUnread =
+                getUnreadForResource(
+                  "conversation",
+                  conversation.id,
+                )
+
+              return (
               <button
                 key={conversation.id}
                 type="button"
@@ -341,12 +358,16 @@ export default function DashboardMessagesPage() {
                     conversation.id,
                   )
                 }
-                className={`block w-full p-4 text-left transition hover:bg-white/5 ${
+                className={[
+                  "block w-full p-4 text-left transition hover:bg-white/5",
                   selected?.id ===
                   conversation.id
                     ? "bg-[#20dc73]/10"
-                    : ""
-                }`}
+                    : "",
+                  notificationUnread > 0
+                    ? "border-l border-[#20dc73]/40 bg-[#20dc73]/5"
+                    : "",
+                ].join(" ")}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -360,6 +381,16 @@ export default function DashboardMessagesPage() {
                         conversation.last_message ||
                         "No messages yet"}
                     </p>
+
+                    {notificationUnread > 0 ? (
+                      <span className="mt-2 inline-flex items-center gap-1.5 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#20dc73]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
+                        NEW
+                        {notificationUnread > 1
+                          ? ` ${notificationUnread}`
+                          : ""}
+                      </span>
+                    ) : null}
 
                     {conversation.last_message_at ? (
                       <p className="mt-2 text-[10px] text-white/20">
@@ -380,7 +411,8 @@ export default function DashboardMessagesPage() {
                   ) : null}
                 </div>
               </button>
-            ),
+              )
+            },
           )}
         </div>
       </aside>

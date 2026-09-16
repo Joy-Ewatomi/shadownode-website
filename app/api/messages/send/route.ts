@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
-import { query } from "@/lib/db"
+import { query, withTransaction } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
+import {
+  createMessageReceipts,
+  syncConversationParticipants,
+} from "@/lib/services/message-receipts-service"
+import { createCaseMessageNotifications } from "@/lib/services/message-notifications-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +47,9 @@ export async function POST(request: NextRequest) {
         `
         INSERT INTO conversations (case_id)
         VALUES ($1)
+        ON CONFLICT (case_id)
+        WHERE case_id IS NOT NULL
+        DO UPDATE SET case_id = EXCLUDED.case_id
         RETURNING id
         `,
         [messageCaseId],
@@ -63,14 +71,55 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Conversation is not attached to a case" }, { status: 400 })
     }
 
-    const inserted = await query(
-      `
-      INSERT INTO messages (conversation_id, case_id, sender_id, sender_type, encrypted_content, message)
-      VALUES ($1, $2, $3, $4, $5, $5)
-      RETURNING id, conversation_id, case_id, sender_id, message, created_at, read_at
-      `,
-      [conversationId, messageCaseId, profileId, user.role, message],
-    )
+    const inserted = await withTransaction(async (client) => {
+      await syncConversationParticipants(
+        conversationId,
+        messageCaseId,
+        client,
+      )
+
+      const result = await client.query<{
+        id: string
+        conversation_id: string
+        case_id: string
+        sender_id: string
+        message: string
+        created_at: string
+        read_at: string | null
+      }>(
+        `
+        INSERT INTO messages (conversation_id, case_id, sender_id, sender_type, encrypted_content, message)
+        VALUES ($1, $2, $3, $4, $5, $5)
+        RETURNING id, conversation_id, case_id, sender_id, message, created_at, read_at
+        `,
+        [conversationId, messageCaseId, profileId, user.role, message],
+      )
+
+      const row = result.rows[0]
+
+      await createMessageReceipts(
+        {
+          messageId: row.id,
+          conversationId: row.conversation_id,
+          caseId: row.case_id,
+          senderProfileId: profileId,
+        },
+        client,
+      )
+
+      await createCaseMessageNotifications(
+        {
+          messageId: row.id,
+          conversationId: row.conversation_id,
+          caseId: row.case_id,
+          senderUserId: user.id,
+          senderRole: user.role,
+        },
+        client,
+      )
+
+      return result
+    })
 
     return NextResponse.json(inserted.rows[0], { status: 201 })
   } catch (error) {

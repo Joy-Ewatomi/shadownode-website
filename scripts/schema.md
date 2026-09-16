@@ -42,7 +42,7 @@ CREATE TABLE public.cases (
   title character varying NOT NULL,
   description text,
   service_type character varying NOT NULL,
-  status character varying DEFAULT 'submitted'::character varying,
+  status character varying DEFAULT 'submitted'::character varying CHECK (status::text = ANY (ARRAY['awaiting_payment'::character varying, 'awaiting_assignment'::character varying, 'active'::character varying, 'waiting_client'::character varying, 'waiting_evidence'::character varying, 'report_review'::character varying, 'completed'::character varying, 'closed'::character varying, 'archived'::character varying]::text[])),
   priority character varying DEFAULT 'normal'::character varying,
   assigned_to uuid,
   budget numeric,
@@ -54,11 +54,13 @@ CREATE TABLE public.cases (
   payment_status character varying DEFAULT 'pending'::character varying,
   started_at timestamp with time zone,
   final_report_url text,
+  request_id uuid,
   CONSTRAINT cases_pkey PRIMARY KEY (id),
   CONSTRAINT cases_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT cases_case_user_id_fkey FOREIGN KEY (case_user_id) REFERENCES public.user_profiles(id),
   CONSTRAINT cases_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.user_profiles(id),
-  CONSTRAINT cases_client_profile_fk FOREIGN KEY (client_profile_id) REFERENCES public.user_profiles(id)
+  CONSTRAINT cases_client_profile_fk FOREIGN KEY (client_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT cases_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id)
 );
 CREATE TABLE public.case_updates (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -255,7 +257,8 @@ CREATE TABLE public.requests (
   CONSTRAINT requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
   CONSTRAINT requests_admin_reviewed_by_fkey FOREIGN KEY (admin_reviewed_by) REFERENCES public.app_users(id),
   CONSTRAINT requests_super_admin_reviewed_by_fkey FOREIGN KEY (super_admin_reviewed_by) REFERENCES public.app_users(id),
-  CONSTRAINT requests_training_engagement_fk FOREIGN KEY (converted_training_engagement_id) REFERENCES public.training_engagements(id)
+  CONSTRAINT requests_training_engagement_fk FOREIGN KEY (converted_training_engagement_id) REFERENCES public.training_engagements(id),
+  CONSTRAINT requests_training_engagement_legacy_fk FOREIGN KEY (training_engagement_id) REFERENCES public.training_engagements(id)
 );
 CREATE TABLE public.payments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -305,8 +308,8 @@ CREATE TABLE public.case_assignments (
   assigned_by uuid,
   assigned_at timestamp with time zone DEFAULT now(),
   removed_at timestamp with time zone,
-  assignment_role character varying,
-  status character varying DEFAULT 'assigned'::character varying,
+  assignment_role character varying CHECK (assignment_role IS NULL OR (assignment_role::text = ANY (ARRAY['lead_investigator'::character varying, 'investigator'::character varying, 'analyst'::character varying, 'reviewer'::character varying]::text[]))),
+  status character varying DEFAULT 'assigned'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'assigned'::character varying, 'approved'::character varying, 'active'::character varying, 'accepted'::character varying, 'rejected'::character varying]::text[])),
   deadline date,
   notes text,
   accepted_at timestamp with time zone,
@@ -340,7 +343,7 @@ CREATE TABLE public.app_users (
   password_hash text NOT NULL,
   status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'active'::character varying, 'suspended'::character varying, 'deleted'::character varying]::text[])),
   email_verified_at timestamp with time zone,
-  role character varying NOT NULL DEFAULT 'client'::character varying,
+  role character varying NOT NULL DEFAULT 'client'::character varying CHECK (role::text = ANY (ARRAY['client'::character varying, 'staff'::character varying, 'administrator'::character varying, 'super_administrator'::character varying, 'super-administrator'::character varying, 'investigator'::character varying, 'analyst'::character varying]::text[])),
   totp_secret_encrypted text,
   recovery_codes_encrypted text,
   totp_enabled boolean NOT NULL DEFAULT false,
@@ -797,9 +800,12 @@ CREATE TABLE public.training_certificates (
   status character varying DEFAULT 'issued'::character varying CHECK (status::text = ANY (ARRAY['draft'::character varying, 'issued'::character varying, 'revoked'::character varying]::text[])),
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  training_participant_id uuid,
+  organization_name character varying,
   CONSTRAINT training_certificates_pkey PRIMARY KEY (id),
   CONSTRAINT training_certificates_engagement_fk FOREIGN KEY (training_engagement_id) REFERENCES public.training_engagements(id),
-  CONSTRAINT training_certificates_client_fk FOREIGN KEY (client_profile_id) REFERENCES public.user_profiles(id)
+  CONSTRAINT training_certificates_client_fk FOREIGN KEY (client_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT training_certificates_participant_fk FOREIGN KEY (training_participant_id) REFERENCES public.training_participants(id)
 );
 CREATE TABLE public.training_modules (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -962,6 +968,7 @@ CREATE TABLE public.training_engagement_trainers (
   removed_at timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  training_role character varying NOT NULL DEFAULT 'trainer'::character varying CHECK (training_role::text = ANY (ARRAY['lead_trainer'::character varying, 'trainer'::character varying, 'assistant_trainer'::character varying, 'coordinator'::character varying]::text[])),
   CONSTRAINT training_engagement_trainers_pkey PRIMARY KEY (id),
   CONSTRAINT training_engagement_trainers_engagement_fk FOREIGN KEY (training_engagement_id) REFERENCES public.training_engagements(id),
   CONSTRAINT training_engagement_trainers_trainer_fk FOREIGN KEY (trainer_profile_id) REFERENCES public.user_profiles(id),
@@ -1004,4 +1011,70 @@ CREATE TABLE public.case_report_entities (
   CONSTRAINT case_report_entities_report_fk FOREIGN KEY (report_id) REFERENCES public.case_reports(id),
   CONSTRAINT case_report_entities_entity_fk FOREIGN KEY (entity_id) REFERENCES public.investigation_entities(id),
   CONSTRAINT case_report_entities_created_by_fk FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.training_participants (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  training_engagement_id uuid NOT NULL,
+  client_profile_id uuid NOT NULL,
+  full_name character varying NOT NULL,
+  email character varying,
+  certificate_name character varying NOT NULL,
+  organization_name character varying,
+  status character varying NOT NULL DEFAULT 'eligible'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying::text, 'eligible'::character varying::text, 'completed'::character varying::text, 'inactive'::character varying::text])),
+  completed_at timestamp with time zone,
+  certificate_eligible boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT training_participants_pkey PRIMARY KEY (id),
+  CONSTRAINT training_participants_engagement_fk FOREIGN KEY (training_engagement_id) REFERENCES public.training_engagements(id),
+  CONSTRAINT training_participants_client_fk FOREIGN KEY (client_profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.message_receipts (
+  message_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  conversation_id uuid NOT NULL,
+  read_at timestamp with time zone,
+  delivered_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT message_receipts_pkey PRIMARY KEY (message_id, user_id),
+  CONSTRAINT message_receipts_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id),
+  CONSTRAINT message_receipts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
+  CONSTRAINT message_receipts_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id)
+);
+CREATE TABLE public.role_consolidation_account_role_backup (
+  user_id uuid NOT NULL,
+  previous_role character varying NOT NULL,
+  next_role character varying NOT NULL,
+  captured_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT role_consolidation_account_role_backup_pkey PRIMARY KEY (user_id),
+  CONSTRAINT role_consolidation_account_role_backup_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id)
+);
+CREATE TABLE public.role_consolidation_assignment_review (
+  assignment_id uuid NOT NULL,
+  case_id uuid,
+  assigned_to uuid,
+  assigned_user_id uuid,
+  previous_assignment_role character varying,
+  next_assignment_role character varying NOT NULL,
+  assignment_status character varying,
+  captured_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT role_consolidation_assignment_review_pkey PRIMARY KEY (assignment_id)
+);
+CREATE TABLE public.case_workspace_p0b_status_backup (
+  table_name text NOT NULL,
+  row_id uuid NOT NULL,
+  previous_status character varying,
+  next_status character varying,
+  captured_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT case_workspace_p0b_status_backup_pkey PRIMARY KEY (table_name, row_id)
+);
+CREATE TABLE public.case_workspace_p0b_integrity_review (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  check_name text NOT NULL,
+  record_id uuid,
+  related_id uuid,
+  details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  captured_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT case_workspace_p0b_integrity_review_pkey PRIMARY KEY (id)
 );

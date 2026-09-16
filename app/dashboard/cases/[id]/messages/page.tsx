@@ -63,8 +63,6 @@ notFound()
 return (
 
 <div className="space-y-6">
-
-
 <header className="border-b border-[#143b28] pb-6">
 
 

@@ -731,6 +731,9 @@ export async function POST(request: NextRequest) {
         `${title} (${trackingNumber}) - ${service_type}`,
       metadata: {
         request_id: requestId,
+        resource_type: "request",
+        resource_id: requestId,
+        audience: "administrator",
         target_page:
           "admin_request_review",
         action:

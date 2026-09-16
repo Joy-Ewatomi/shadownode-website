@@ -10,6 +10,7 @@ import {
 import {
   issueTrainingCertificate,
 } from "@/lib/services/training-completion-service"
+import { notifyUser } from "@/lib/services/notification-service"
 
 import { query } from "@/lib/db"
 
@@ -39,7 +40,7 @@ function toNullableString(
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   context: {
     params: Promise<{ id: string }>
   },
@@ -101,14 +102,156 @@ export async function POST(
       )
     }
 
+    let body: Record<string, unknown> = {}
+
+    try {
+      body =
+        (await req.json()) as Record<
+          string,
+          unknown
+        >
+    } catch {
+      body = {}
+    }
+
+    const participantId =
+      typeof body.participant_id ===
+      "string"
+        ? body.participant_id.trim()
+        : null
+
+    const issueAll =
+      body.issue_all === true
+
     /* ========================================================
-       3. ISSUE THROUGH EXISTING
-          CERTIFICATE SERVICE
+       3. ISSUE THROUGH CERTIFICATE SERVICE
        ======================================================== */
+
+    if (issueAll) {
+      const participantResult =
+        await query<{
+          id: string
+        }>(
+          `
+            SELECT id
+            FROM training_participants
+            WHERE training_engagement_id = $1
+              AND certificate_eligible = true
+              AND status <> 'inactive'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM training_certificates
+                WHERE training_certificates.training_participant_id = training_participants.id
+              )
+            ORDER BY created_at ASC
+          `,
+          [id],
+        )
+
+      if (
+        participantResult.rows.length ===
+        0
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "No eligible certificate participants were found.",
+          },
+          {
+            status: 400,
+          },
+        )
+      }
+
+      const issued = []
+
+      for (const participant of participantResult.rows) {
+        issued.push(
+          await issueTrainingCertificate(
+            id,
+            participant.id,
+            {
+              notifyClient: false,
+            },
+          ),
+        )
+      }
+
+      const notificationTarget =
+        await query<{
+          user_id: string | null
+          training_goal: string | null
+          training_organization_name: string | null
+        }>(
+          `
+            SELECT
+              up.user_id,
+              te.training_goal,
+              te.training_organization_name
+            FROM training_engagements te
+            JOIN user_profiles up
+              ON up.id = te.client_profile_id
+            WHERE te.id = $1
+            LIMIT 1
+          `,
+          [id],
+        )
+
+      const notificationRow =
+        notificationTarget.rows[0]
+
+      if (notificationRow?.user_id) {
+        await notifyUser(
+          notificationRow.user_id,
+          {
+            type: "certificate_issued",
+            title:
+              "Training certificates issued",
+            message: `${issued.length} training certificate${
+              issued.length === 1 ? "" : "s"
+            } have been issued.`,
+            metadata: {
+              training_engagement_id: id,
+              certificate_count:
+                issued.length,
+              certificate_ids:
+                issued.map(
+                  (certificate) =>
+                    certificate.certificate_id,
+                ),
+              organization_name:
+                notificationRow.training_organization_name,
+              resource_type:
+                "certificate",
+              resource_id: id,
+              target_page:
+                "client_training_certificate",
+              destination: "/dashboard/client/certificates",
+              action:
+                "view_certificates",
+            },
+          },
+        )
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          certificates:
+            issued,
+          count:
+            issued.length,
+        },
+        {
+          status: 200,
+        },
+      )
+    }
 
     const result =
       await issueTrainingCertificate(
         id,
+        participantId,
       )
 
     /* ========================================================
@@ -129,7 +272,9 @@ export async function POST(
           SELECT
             id,
             certificate_number,
+            training_participant_id,
             recipient_name,
+            organization_name,
             training_title,
             training_type,
             trainer_name,
@@ -177,9 +322,19 @@ export async function POST(
             certificate.certificate_number,
           ),
 
+        training_participant_id:
+          toNullableString(
+            certificate.training_participant_id,
+          ),
+
         recipient_name:
           toNullableString(
             certificate.recipient_name,
+          ),
+
+        organization_name:
+          toNullableString(
+            certificate.organization_name,
           ),
 
         training_title:

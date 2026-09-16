@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation"
 
 import TrainingShell from "@/components/training/TrainingShell"
 import TrainingCertificate from "@/components/training/TrainingCertificate"
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 import { getCurrentUser } from "@/lib/auth"
 import {
@@ -52,12 +53,45 @@ function toNullableString(
   return result || null
 }
 
+function toUuidOrNull(
+  value: string | null | undefined,
+) {
+  if (!value) {
+    return null
+  }
+
+  const trimmed = value.trim()
+
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    trimmed,
+  )
+    ? trimmed
+    : null
+}
+
 export default async function CertificatePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{
+    certificateId?: string
+    participantId?: string
+  }>
 }) {
   const { id } = await params
+  const resolvedSearchParams =
+    searchParams
+      ? await searchParams
+      : {}
+  const selectedCertificateId =
+    toUuidOrNull(
+      resolvedSearchParams.certificateId,
+    )
+  const selectedParticipantId =
+    toUuidOrNull(
+      resolvedSearchParams.participantId,
+    )
 
   const user = await getCurrentUser()
 
@@ -107,6 +141,9 @@ export default async function CertificatePage({
         progress,
         training_goal,
         client_profile_id,
+        training_client_type,
+        training_organization_name,
+        participant_count,
         preferred_start_date,
         preferred_completion_date
       FROM training_engagements
@@ -157,6 +194,22 @@ export default async function CertificatePage({
         rawEngagement.client_profile_id,
       ),
 
+    training_client_type:
+      toNullableString(
+        rawEngagement.training_client_type,
+      ),
+
+    training_organization_name:
+      toNullableString(
+        rawEngagement.training_organization_name,
+      ),
+
+    participant_count:
+      toNumber(
+        rawEngagement.participant_count,
+        1,
+      ),
+
     preferred_start_date:
       toNullableString(
         rawEngagement.preferred_start_date,
@@ -167,6 +220,79 @@ export default async function CertificatePage({
         rawEngagement.preferred_completion_date,
       ),
   }
+
+  const participantsResult =
+    await query(
+      `
+        SELECT
+          tp.id,
+          tp.full_name,
+          tp.email,
+          tp.certificate_name,
+          tp.organization_name,
+          tp.status,
+          tp.certificate_eligible,
+          tc.id AS certificate_id,
+          tc.certificate_number,
+          tc.status AS certificate_status,
+          tc.issued_at AS certificate_issued_at
+        FROM training_participants tp
+        LEFT JOIN training_certificates tc
+          ON tc.training_participant_id = tp.id
+        WHERE tp.training_engagement_id = $1
+        ORDER BY tp.created_at ASC
+      `,
+      [id],
+    )
+
+  const participants =
+    participantsResult.rows.map(
+      (participant) => ({
+        id:
+          toNullableString(
+            participant.id,
+          ) || "",
+        full_name:
+          toNullableString(
+            participant.full_name,
+          ) || "",
+        email:
+          toNullableString(
+            participant.email,
+          ),
+        certificate_name:
+          toNullableString(
+            participant.certificate_name,
+          ) || "",
+        organization_name:
+          toNullableString(
+            participant.organization_name,
+          ),
+        status:
+          toNullableString(
+            participant.status,
+          ),
+        certificate_eligible:
+          participant.certificate_eligible ===
+          true,
+        certificate_id:
+          toNullableString(
+            participant.certificate_id,
+          ),
+        certificate_number:
+          toNullableString(
+            participant.certificate_number,
+          ),
+        certificate_status:
+          toNullableString(
+            participant.certificate_status,
+          ),
+        certificate_issued_at:
+          toNullableString(
+            participant.certificate_issued_at,
+          ),
+      }),
+    )
 
   /*
    * ============================================================
@@ -180,7 +306,9 @@ export default async function CertificatePage({
         SELECT
           id,
           certificate_number,
+          training_participant_id,
           recipient_name,
+          organization_name,
           training_title,
           training_type,
           trainer_name,
@@ -189,10 +317,22 @@ export default async function CertificatePage({
           verification_url
         FROM training_certificates
         WHERE training_engagement_id = $1
+          AND (
+            $2::uuid IS NULL
+            OR id = $2::uuid
+          )
+          AND (
+            $3::uuid IS NULL
+            OR training_participant_id = $3::uuid
+          )
         ORDER BY issued_at DESC NULLS LAST
         LIMIT 1
       `,
-      [id],
+      [
+        id,
+        selectedCertificateId,
+        selectedParticipantId,
+      ],
     )
 
   const rawCertificate =
@@ -216,6 +356,16 @@ export default async function CertificatePage({
           recipient_name:
             toNullableString(
               rawCertificate.recipient_name,
+            ),
+
+          training_participant_id:
+            toNullableString(
+              rawCertificate.training_participant_id,
+            ),
+
+          organization_name:
+            toNullableString(
+              rawCertificate.organization_name,
             ),
 
           training_title:
@@ -370,6 +520,12 @@ export default async function CertificatePage({
       title="Certificate"
       status={engagement.status}
     >
+     <MarkResourceNotificationsRead
+       resourceType="certificate"
+       resourceId={
+         certificate?.id || null
+       }
+     />
      <div className="w-full overflow-auto rounded-xl" style={{ maxHeight: "calc(100vh - 170px)" }}>
   <div className="min-w-[1100px] p-2">
    <TrainingCertificate
@@ -428,6 +584,13 @@ export default async function CertificatePage({
 
             certificateRecipientName={
               certificateRecipientName
+            }
+            organizationName={
+              certificate?.organization_name ||
+              engagement.training_organization_name
+            }
+            participants={
+              participants
             }
           />
         </div>

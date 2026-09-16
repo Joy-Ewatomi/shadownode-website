@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
-import { requireUser } from "@/lib/auth"
+import { isAdminRole, requireUser } from "@/lib/auth"
 
 export async function PATCH(
   request: NextRequest,
@@ -18,11 +18,7 @@ export async function PATCH(
     return response
   }
 
-  if (
-    user.role !== "administrator" &&
-    user.role !== "super_administrator" &&
-    user.role !== "analyst"
-  ) {
+  if (!isAdminRole(user.role)) {
     return NextResponse.json(
       {
         error: "Permission denied",
