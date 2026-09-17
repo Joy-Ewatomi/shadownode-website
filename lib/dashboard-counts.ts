@@ -79,7 +79,6 @@ export async function getClientDashboardCounts({
             ON c.id = r.case_id
           WHERE c.client_profile_id = $2::uuid
             AND COALESCE(r.status, 'published') IN (
-              'approved',
               'delivered',
               'final',
               'published'
@@ -104,7 +103,6 @@ export async function getClientDashboardCounts({
            )
           WHERE c.client_profile_id = $2::uuid
             AND COALESCE(r.status, 'published') IN (
-              'approved',
               'delivered',
               'final',
               'published'
@@ -146,7 +144,12 @@ export async function getClientDashboardCounts({
             AND tc.status = 'issued'
         ) AS new_certificates,
         (
-          SELECT COUNT(DISTINCT p.id)::int
+          SELECT COUNT(DISTINCT COALESCE(
+            p.request_id::text,
+            p.case_id::text,
+            p.training_engagement_id::text,
+            p.id::text
+          ))::int
           FROM payments p
           LEFT JOIN cases c
             ON c.id = p.case_id
@@ -161,9 +164,23 @@ export async function getClientDashboardCounts({
               'failed'
             )
             AND (
-              c.client_profile_id = $2::uuid
-              OR r.user_id = $1::uuid
-              OR te.client_profile_id = $2::uuid
+              (c.client_profile_id = $2::uuid AND c.status = 'awaiting_payment')
+              OR (r.user_id = $1::uuid AND r.status = 'awaiting_payment')
+              OR (te.client_profile_id = $2::uuid AND te.status = 'awaiting_payment')
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM payments paid
+              WHERE paid.status = 'paid'
+                AND (
+                  (p.request_id IS NOT NULL AND paid.request_id = p.request_id)
+                  OR (p.request_id IS NULL AND p.case_id IS NOT NULL AND paid.case_id = p.case_id)
+                  OR (
+                    p.request_id IS NULL
+                    AND p.training_engagement_id IS NOT NULL
+                    AND paid.training_engagement_id = p.training_engagement_id
+                  )
+                )
             )
         ) AS outstanding_payments,
         (
@@ -330,7 +347,7 @@ export async function getAdminDashboardCounts({
         (
           SELECT COUNT(*)::int
           FROM case_reports
-          WHERE COALESCE(status, 'draft') = $6
+          WHERE COALESCE(status, 'draft') = 'review'
         ) AS reports_pending_review,
         (
           SELECT COUNT(*)::int
@@ -339,8 +356,19 @@ export async function getAdminDashboardCounts({
              OR trainer_approval_status IN ($7, 'pending')
         ) AS training_requiring_action,
         (
-          SELECT COUNT(DISTINCT p.id)::int
+          SELECT COUNT(DISTINCT COALESCE(
+            p.request_id::text,
+            p.case_id::text,
+            p.training_engagement_id::text,
+            p.id::text
+          ))::int
           FROM payments p
+          LEFT JOIN cases c
+            ON c.id = p.case_id
+          LEFT JOIN requests r
+            ON r.id = p.request_id
+          LEFT JOIN training_engagements te
+            ON te.id = p.training_engagement_id
           WHERE COALESCE(p.status, 'pending') IN (
             'pending',
             'unpaid',
@@ -348,6 +376,25 @@ export async function getAdminDashboardCounts({
             'failed',
             'requires_confirmation'
           )
+            AND (
+              c.status = 'awaiting_payment'
+              OR r.status = 'awaiting_payment'
+              OR te.status = 'awaiting_payment'
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM payments paid
+              WHERE paid.status = 'paid'
+                AND (
+                  (p.request_id IS NOT NULL AND paid.request_id = p.request_id)
+                  OR (p.request_id IS NULL AND p.case_id IS NOT NULL AND paid.case_id = p.case_id)
+                  OR (
+                    p.request_id IS NULL
+                    AND p.training_engagement_id IS NOT NULL
+                    AND paid.training_engagement_id = p.training_engagement_id
+                  )
+                )
+            )
         ) AS outstanding_payments,
         (
           SELECT COUNT(*)::int

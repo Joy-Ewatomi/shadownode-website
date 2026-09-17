@@ -1,4 +1,4 @@
-import { FileText, Shield } from "lucide-react"
+import { Download, FileText, Shield } from "lucide-react"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -47,11 +47,11 @@ export default async function ClientReportPage({
       WHERE r.id = $1
         AND up.user_id = $2
         AND COALESCE(r.status, 'published') IN (
-          'approved',
           'delivered',
           'final',
           'published'
         )
+        AND COALESCE(r.classification, 'confidential') <> 'internal'
       LIMIT 1
     `,
     [id, user.id],
@@ -96,6 +96,13 @@ export default async function ClientReportPage({
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href={`/api/reports/${encodeURIComponent(report.id)}/export`}
+            className="inline-flex items-center gap-2 rounded bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[#20dc73]/80"
+          >
+            <Download className="h-4 w-4" />
+            Download Word Report
+          </a>
           {report.file_url ? (
             <a
               href={report.file_url}

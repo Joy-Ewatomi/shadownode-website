@@ -247,7 +247,7 @@ export default async function StaffDashboardPage() {
           <h2 className="text-lg font-semibold text-white">
             Assigned Cases
           </h2>
-          <div className="grid gap-3">
+          <div className="grid max-h-[28rem] gap-3 overflow-y-auto overscroll-contain pr-1">
             {assignedCases.map((item) => (
               <Link
                 key={item.id}
@@ -278,7 +278,7 @@ export default async function StaffDashboardPage() {
           <h2 className="text-lg font-semibold text-white">
             Assigned Training
           </h2>
-          <div className="grid gap-3">
+          <div className="grid max-h-[28rem] gap-3 overflow-y-auto overscroll-contain pr-1">
             {assignedTraining.map((item) => (
               <Link
                 key={item.id}

@@ -157,9 +157,7 @@ export default function ClientNotificationDetailsPage({ params }: { params: Prom
 
 
 <Link
-  href={`/dashboard/client/payments/${
-    notification?.metadata?.case_id || request.id
-  }?notificationId=${encodeURIComponent(
+  href={`/dashboard/client/payments/${request.id}?notificationId=${encodeURIComponent(
     notification.id,
   )}`}
   className="

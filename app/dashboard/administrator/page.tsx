@@ -190,8 +190,58 @@ export default function AdministratorDashboard() {
           icon: "graduationCap",
         },
       ]}
-      queueTitle=""
-      queueItems={[]}
+      queueTitle="Administrator Operations"
+      queueItems={[
+        {
+          id: "request-review",
+          title: "Request review",
+          detail: `${stats.requests_awaiting_review ?? 0} client requests await administrator review.`,
+          status:
+            (stats.requests_awaiting_review ?? 0) > 0
+              ? "Action required"
+              : "Clear",
+          href: "/dashboard/requests?status=review",
+        },
+        {
+          id: "case-assignment",
+          title: "Case assignment",
+          detail: `${stats.cases_awaiting_assignment ?? 0} cases are waiting for an operational assignment.`,
+          status:
+            (stats.cases_awaiting_assignment ?? 0) > 0
+              ? "Action required"
+              : "Clear",
+          href: "/dashboard/cases",
+        },
+        {
+          id: "report-review",
+          title: "Report review",
+          detail: `${stats.reports_pending_review ?? 0} reports await permitted administrator review.`,
+          status:
+            (stats.reports_pending_review ?? 0) > 0
+              ? "Pending"
+              : "Clear",
+          href: "/dashboard/reports?status=pending",
+        },
+        {
+          id: "training-coordination",
+          title: "Training coordination",
+          detail: `${stats.training_requiring_action ?? 0} training engagements require assignment, scheduling, or approval.`,
+          status:
+            (stats.training_requiring_action ?? 0) > 0
+              ? "Action required"
+              : "Clear",
+          href: "/dashboard/training",
+        },
+        {
+          id: "payment-review",
+          title: "Payment review",
+          detail: `${stats.outstanding_payments ?? 0} outstanding payment obligations are visible to administrators.`,
+          status:
+            (stats.outstanding_payments ?? 0) > 0
+              ? "Pending"
+              : "Clear",
+        },
+      ]}
     />
   )
 }

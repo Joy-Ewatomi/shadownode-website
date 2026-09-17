@@ -76,7 +76,10 @@ export async function GET(request: NextRequest) {
         )
         AND (
           $4::text <> 'client'
-          OR cr.status IN ('approved', 'delivered', 'final')
+          OR (
+            cr.status IN ('delivered', 'final', 'published')
+            AND COALESCE(cr.classification, 'confidential') <> 'internal'
+          )
         )
       ORDER BY cr.updated_at DESC, cr.created_at DESC
       `,
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
         created_by,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'draft'), $7, NOW())
+      VALUES ($1, $2, $3, $4, $5, 'draft', $6, NOW())
       RETURNING *
       `,
       [
@@ -141,7 +144,6 @@ export async function POST(request: NextRequest) {
         body.summary ? String(body.summary) : null,
         body.report_type ? String(body.report_type) : null,
         body.classification ? String(body.classification) : "confidential",
-        body.status ? String(body.status) : "draft",
         profileId,
       ],
     )

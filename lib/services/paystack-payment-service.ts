@@ -512,6 +512,41 @@ export async function verifyAndCompletePaystackPayment(
             ],
           )
 
+          // A completed obligation invalidates older checkout attempts for
+          // the same request/resource. They must not remain actionable.
+          await client.query(
+            `
+            UPDATE payments sibling
+            SET status = 'cancelled'
+            WHERE sibling.id <> $1
+              AND sibling.status IN (
+                'pending',
+                'unpaid',
+                'awaiting_payment',
+                'failed'
+              )
+              AND (
+                ($2::uuid IS NOT NULL AND sibling.request_id = $2::uuid)
+                OR (
+                  $2::uuid IS NULL
+                  AND $3::uuid IS NOT NULL
+                  AND sibling.case_id = $3::uuid
+                )
+                OR (
+                  $2::uuid IS NULL
+                  AND $4::uuid IS NOT NULL
+                  AND sibling.training_engagement_id = $4::uuid
+                )
+              )
+            `,
+            [
+              current.id,
+              current.request_id,
+              current.case_id,
+              current.training_engagement_id,
+            ],
+          )
+
           // =================================================
           // 12. INVESTIGATION PAYMENT
           // =================================================

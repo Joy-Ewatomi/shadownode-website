@@ -371,11 +371,11 @@ export async function GET(
           WHERE
             case_id = $1
             AND status IN (
-              'approved',
               'delivered',
               'final',
               'published'
             )
+            AND COALESCE(classification, 'confidential') <> 'internal'
           ORDER BY created_at DESC
         `,
         [id],

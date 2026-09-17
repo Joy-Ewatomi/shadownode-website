@@ -128,7 +128,8 @@ if (!profileId) {
         JOIN cases c
           ON c.id = r.case_id
         WHERE c.client_profile_id = $1
-          AND COALESCE(r.status, 'published') IN ('approved', 'delivered', 'final', 'published')
+          AND COALESCE(r.status, 'published') IN ('delivered', 'final', 'published')
+          AND COALESCE(r.classification, 'confidential') <> 'internal'
         ORDER BY r.created_at DESC
         LIMIT 6
         `,

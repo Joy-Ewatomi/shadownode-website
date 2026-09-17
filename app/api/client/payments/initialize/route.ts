@@ -661,28 +661,7 @@ export async function POST(
         id: string
       }>(
         `
-        INSERT INTO payments (
-          case_id,
-          amount,
-          currency,
-          provider,
-          transaction_id,
-          status,
-          organization_id,
-          request_id,
-          training_engagement_id
-        )
-        SELECT
-          $1,
-          $2,
-          $3,
-          'paystack',
-          $4,
-          'pending',
-          organization_id,
-          $5,
-          $6
-        FROM (
+        WITH payable AS (
           SELECT
             c.organization_id
           FROM cases c
@@ -700,8 +679,60 @@ export async function POST(
             AND te.id = $6
             AND te.status = 'awaiting_payment'
             AND te.payment_status <> 'paid'
-        ) AS payable
-        RETURNING id
+        ),
+        existing AS (
+          SELECT p.id
+          FROM payments p
+          WHERE p.request_id = $5
+            AND p.status IN ('pending', 'unpaid', 'awaiting_payment', 'failed')
+          ORDER BY p.created_at DESC
+          LIMIT 1
+        ),
+        updated AS (
+          UPDATE payments p
+          SET
+            case_id = $1,
+            amount = $2,
+            currency = $3,
+            provider = 'paystack',
+            transaction_id = $4,
+            status = 'pending',
+            organization_id = payable.organization_id,
+            training_engagement_id = $6
+          FROM existing, payable
+          WHERE p.id = existing.id
+          RETURNING p.id
+        ),
+        inserted AS (
+          INSERT INTO payments (
+            case_id,
+            amount,
+            currency,
+            provider,
+            transaction_id,
+            status,
+            organization_id,
+            request_id,
+            training_engagement_id
+          )
+          SELECT
+            $1,
+            $2,
+            $3,
+            'paystack',
+            $4,
+            'pending',
+            payable.organization_id,
+            $5,
+            $6
+          FROM payable
+          WHERE NOT EXISTS (SELECT 1 FROM updated)
+          RETURNING id
+        )
+        SELECT id FROM updated
+        UNION ALL
+        SELECT id FROM inserted
+        LIMIT 1
         `,
         [
           paymentType === "case"

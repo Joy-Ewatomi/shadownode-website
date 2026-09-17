@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleAlert,
+  Download,
   FileCheck2,
   FileText,
   Fingerprint,
@@ -377,6 +378,14 @@ export default function ReportViewer({
                     status,
                   )}
                 </span>
+
+                <a
+                  href={`/api/reports/${encodeURIComponent(report.id)}/export`}
+                  className="inline-flex items-center gap-1.5 rounded border border-[#20dc73]/25 px-2.5 py-1 text-[9px] uppercase tracking-[0.1em] text-[#20dc73] transition hover:bg-[#20dc73]/10"
+                >
+                  <Download className="h-3 w-3" />
+                  Download Word
+                </a>
               </div>
 
               <p className="mt-5 font-mono text-[9px] uppercase tracking-[0.2em] text-white/25">

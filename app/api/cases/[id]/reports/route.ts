@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { auditLog } from "@/lib/auth"
 import { query } from "@/lib/db"
 import {
+  canUseCaseOperationalAccess,
+  canUseCaseOversightRead,
+  canUseCaseReviewAccess,
   optionalText,
   profileIdForUser,
   recordInvestigationTimeline,
@@ -25,7 +28,6 @@ const REPORT_STATUSES = [
 ]
 
 const CLIENT_VISIBLE_STATUSES = new Set([
-  "approved",
   "delivered",
   "final",
   "published",
@@ -930,12 +932,14 @@ async function verifyReportBelongsToCase(
       id: string
       title: string | null
       status: string | null
+      classification: string | null
     }>(
       `
         SELECT
           id,
           title,
           status
+          ,classification
 
         FROM case_reports
 
@@ -1760,7 +1764,12 @@ export async function GET(
                   report.status ||
                     "",
                 ),
-              ),
+              ) &&
+              String(
+                report.classification ||
+                  "confidential",
+              ).toLowerCase() !==
+                "internal",
           )
         : allReports
 
@@ -2568,7 +2577,7 @@ export async function PATCH(
       await params
 
     const access =
-      await requireCaseOperationalAccess(
+      await requireCaseReadAccess(
         request,
         id,
       )
@@ -2630,6 +2639,27 @@ export async function PATCH(
       ) ||
       "update_report"
 
+    const [hasOperationalAccess, hasReviewAccess] =
+      await Promise.all([
+        canUseCaseOperationalAccess(
+          access.user.id,
+          access.user.role,
+          access.caseId,
+        ),
+        Promise.all([
+          canUseCaseReviewAccess(
+            access.user.id,
+            access.user.role,
+            access.caseId,
+          ),
+          canUseCaseOversightRead(
+            access.user.id,
+            access.user.role,
+            access.caseId,
+          ),
+        ]).then(([review, oversight]) => review || oversight),
+      ])
+
     /*
      * ==========================================================
      * CLIENTS ARE READ-ONLY
@@ -2668,6 +2698,19 @@ export async function PATCH(
         {
           status: 403,
         },
+      )
+    }
+
+    if (
+      action !== "update_report" &&
+      !hasOperationalAccess
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "An active operational assignment is required to edit report content.",
+        },
+        { status: 403 },
       )
     }
 
@@ -3846,6 +3889,28 @@ export async function PATCH(
       )
     }
 
+    const changesReportContent = [
+      body?.title,
+      body?.file_url,
+      body?.summary,
+      body?.executive_summary,
+      body?.report_type,
+      body?.classification,
+    ].some((value) => value !== undefined)
+
+    if (
+      changesReportContent &&
+      !hasOperationalAccess
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "An active operational assignment is required to edit report content.",
+        },
+        { status: 403 },
+      )
+    }
+
     let nextStatus =
       requestedStatus
 
@@ -3862,6 +3927,63 @@ export async function PATCH(
     ) {
       nextStatus =
         "published"
+    }
+
+    const approvalStatuses = new Set([
+      "approved",
+      "delivered",
+      "final",
+      "published",
+    ])
+
+    if (
+      nextStatus &&
+      approvalStatuses.has(nextStatus) &&
+      !hasReviewAccess
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "An active review assignment or Super Administrator oversight authority is required.",
+        },
+        { status: 403 },
+      )
+    }
+
+    if (
+      nextStatus === "review" &&
+      !hasOperationalAccess
+    ) {
+      return NextResponse.json(
+        { error: "Only an operational assignee can submit a report for review." },
+        { status: 403 },
+      )
+    }
+
+    if (
+      nextStatus === "draft" &&
+      currentStatus === "review" &&
+      !hasOperationalAccess &&
+      !hasReviewAccess
+    ) {
+      return NextResponse.json(
+        { error: "You cannot return this report to draft." },
+        { status: 403 },
+      )
+    }
+
+    if (
+      nextStatus &&
+      ["final", "delivered", "published"].includes(nextStatus) &&
+      !isSuperAdminRole(access.user.role)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Only a Super Administrator can finalize, deliver, or publish a report.",
+        },
+        { status: 403 },
+      )
     }
 
     /*
@@ -3959,6 +4081,25 @@ export async function PATCH(
       optionalText(
         body?.classification,
       )
+
+    const effectiveClassification =
+      classification ||
+      report.classification ||
+      "confidential"
+
+    if (
+      nextStatus &&
+      ["delivered", "published"].includes(nextStatus) &&
+      effectiveClassification.toLowerCase() === "internal"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Internal reports cannot be delivered or published to the client.",
+        },
+        { status: 409 },
+      )
+    }
 
     /*
      * ==========================================================
@@ -4215,6 +4356,45 @@ export async function PATCH(
               "staff",
             action:
               "view_report",
+          },
+        })
+      }
+    }
+
+    if (
+      nextStatus === "delivered" ||
+      nextStatus === "published"
+    ) {
+      const client = await query<{
+        user_id: string | null
+      }>(
+        `
+          SELECT up.user_id
+          FROM cases c
+          JOIN user_profiles up
+            ON up.id = c.client_profile_id
+          WHERE c.id = $1
+          LIMIT 1
+        `,
+        [access.caseId],
+      )
+
+      const clientUserId =
+        client.rows[0]?.user_id || null
+
+      if (clientUserId) {
+        await notifyUser(clientUserId, {
+          caseId: access.caseId,
+          type: "report_available",
+          title: "Report available",
+          message: `${finalTitle} is available in your client portal.`,
+          metadata: {
+            report_id: reportId,
+            case_id: access.caseId,
+            resource_type: "report",
+            resource_id: reportId,
+            target_page: "client_reports",
+            action: "view_report",
           },
         })
       }

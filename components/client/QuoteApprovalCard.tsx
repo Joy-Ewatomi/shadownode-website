@@ -26,13 +26,6 @@ export default function QuoteApprovalCard({
       request.status === "awaiting_payment",
     )
 
-  const [paymentCaseId, setPaymentCaseId] =
-    useState<string | null>(
-      request.converted_case_id
-        ? String(request.converted_case_id)
-        : null,
-    )
-
   const [requestedBudget, setRequestedBudget] =
     useState("")
 
@@ -74,15 +67,9 @@ export default function QuoteApprovalCard({
   // PAYMENT DESTINATION
   // ========================================================
 
-  const paymentId =
-    paymentCaseId ||
-    (request.converted_case_id
-      ? String(request.converted_case_id)
-      : request.id)
-
   function goToPayment() {
     window.location.href =
-      `/dashboard/client/payments/${paymentId}`
+      `/dashboard/client/payments/${request.id}`
   }
 
   // ========================================================
@@ -130,18 +117,6 @@ export default function QuoteApprovalCard({
       // ====================================================
 
       if (decision === "accept") {
-        const caseId =
-          data.case_id ||
-          data.request?.converted_case_id ||
-          request.converted_case_id ||
-          request.id
-
-        setPaymentCaseId(
-          caseId
-            ? String(caseId)
-            : null,
-        )
-
         setPaymentRequired(true)
         setDecisionMade(true)
 

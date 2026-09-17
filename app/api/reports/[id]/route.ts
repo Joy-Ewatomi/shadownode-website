@@ -13,7 +13,6 @@ import {
 } from "@/lib/services/notification-service"
 
 const CLIENT_VISIBLE_REPORT_STATUSES = new Set([
-  "approved",
   "delivered",
   "final",
   "published",
@@ -94,7 +93,8 @@ export async function GET(
     const canView =
       user.role === "client"
         ? report.client_user_id === user.id &&
-          CLIENT_VISIBLE_REPORT_STATUSES.has(report.status || "")
+          CLIENT_VISIBLE_REPORT_STATUSES.has(report.status || "") &&
+          String(report.classification || "confidential").toLowerCase() !== "internal"
         : (await canUseCaseOperationalAccess(user.id, user.role, report.case_id)) ||
           (await canUseCaseReviewAccess(user.id, user.role, report.case_id)) ||
           (await canUseCaseOversightRead(user.id, user.role, report.case_id))
@@ -126,7 +126,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Report not found" }, { status: 404 })
     }
 
-    if (!(await canUseCaseReviewAccess(user.id, user.role, current.case_id))) {
+    if (
+      !(await canUseCaseReviewAccess(user.id, user.role, current.case_id)) &&
+      !(await canUseCaseOversightRead(user.id, user.role, current.case_id))
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -144,6 +147,57 @@ export async function PATCH(
         : action === "deliver"
           ? "delivered"
           : requestedStatus
+
+    const currentStatus = String(current.status || "draft").toLowerCase()
+    const normalizedNextStatus = nextStatus ? String(nextStatus).toLowerCase() : null
+    const transitions: Record<string, string[]> = {
+      draft: ["draft", "review"],
+      review: ["review", "draft", "approved"],
+      approved: ["approved", "final", "delivered", "published"],
+      final: ["final", "delivered", "published"],
+      delivered: ["delivered", "published"],
+      published: ["published"],
+    }
+
+    if (
+      normalizedNextStatus &&
+      !transitions[currentStatus]?.includes(normalizedNextStatus)
+    ) {
+      return NextResponse.json(
+        { error: `Invalid report transition from ${currentStatus} to ${normalizedNextStatus}.` },
+        { status: 409 },
+      )
+    }
+
+    const superAdmin =
+      user.role === "super_administrator" ||
+      user.role === "super-administrator"
+
+    if (
+      normalizedNextStatus &&
+      ["final", "delivered", "published"].includes(normalizedNextStatus) &&
+      !superAdmin
+    ) {
+      return NextResponse.json(
+        { error: "Only a Super Administrator can finalize, deliver, or publish reports." },
+        { status: 403 },
+      )
+    }
+
+    const nextClassification = String(
+      body.classification || current.classification || "confidential",
+    ).toLowerCase()
+
+    if (
+      normalizedNextStatus &&
+      ["delivered", "published"].includes(normalizedNextStatus) &&
+      nextClassification === "internal"
+    ) {
+      return NextResponse.json(
+        { error: "Internal reports cannot be delivered or published to the client." },
+        { status: 409 },
+      )
+    }
 
     const updated = await query(
       `
@@ -170,7 +224,7 @@ export async function PATCH(
         body.summary ? String(body.summary) : null,
         body.report_type ? String(body.report_type) : null,
         body.classification ? String(body.classification) : null,
-        nextStatus,
+        normalizedNextStatus,
         profileId,
       ],
     )

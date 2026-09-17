@@ -22,7 +22,7 @@ export default function Header({
   onMenuClick: () => void
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[#143b28] bg-[#030806]/92 backdrop-blur">
+    <header className="z-30 shrink-0 border-b border-[#143b28] bg-[#030806]/92 backdrop-blur">
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
           <button onClick={onMenuClick} className="rounded-md p-2 text-white/65 hover:bg-white/5 hover:text-white lg:hidden" aria-label="Open sidebar">

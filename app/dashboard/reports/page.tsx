@@ -82,7 +82,10 @@ export default async function ReportsPage() {
       )
       AND (
         $3::text <> 'client'
-        OR cr.status IN ('approved', 'delivered', 'final')
+        OR (
+          cr.status IN ('delivered', 'final', 'published')
+          AND COALESCE(cr.classification, 'confidential') <> 'internal'
+        )
       )
     ORDER BY cr.updated_at DESC, cr.created_at DESC
     `,
@@ -92,10 +95,7 @@ export default async function ReportsPage() {
   const stats = {
     total: rows.length,
     drafts: rows.filter((item) => item.status === "draft").length,
-    review: rows.filter((item) => [
-  "pending_admin_review",
-  "pending_super_admin_review",
-].includes(item.status || "")).length,
+    review: rows.filter((item) => item.status === "review").length,
     approved: rows.filter((item) => ["approved", "delivered", "final"].includes(item.status || "")).length,
   }
 

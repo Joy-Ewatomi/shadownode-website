@@ -36,6 +36,7 @@ type QueueItem = {
   title: string
   detail: string
   status: string
+  href?: string
   data?: Record<string, any>
 }
 
@@ -720,14 +721,14 @@ useEffect(() => {
 
     {queueTitle && (
   <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-    <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-[#143b28] bg-[#06110f]">
-      <div className="border-b border-[#143b28] px-5 py-4">
+    <div className="flex h-[24rem] min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] sm:h-[28rem]">
+      <div className="shrink-0 border-b border-[#143b28] px-5 py-4">
         <h2 className="font-semibold text-white">
           {queueTitle}
         </h2>
       </div>
 
-      <div className="min-w-0 divide-y divide-[#143b28]">
+      <div className="min-h-0 min-w-0 flex-1 divide-y divide-[#143b28] overflow-y-auto overscroll-contain">
         {loading && role === "client" ? (
           <div className="px-5 py-8 text-sm text-white/50">
             Loading dashboard...
@@ -771,6 +772,16 @@ useEffect(() => {
                   >
                     View Full Request
                   </button>
+                )}
+
+                {item.href && (
+                  <Link
+                    href={item.href}
+                    className="shrink-0 rounded-md border border-[#20dc73]/30 px-3 py-1.5 text-xs font-medium text-[#20dc73] transition hover:bg-[#20dc73]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]"
+                    aria-label={`Open ${item.title}`}
+                  >
+                    Open
+                  </Link>
                 )}
               </div>
             </div>

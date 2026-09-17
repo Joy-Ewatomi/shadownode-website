@@ -387,8 +387,8 @@ export function getNotificationDestination(
     type === "payment_failed"
   ) {
     return isClient
-      ? caseId
-        ? `/dashboard/client/payments/${caseId}`
+      ? requestId
+        ? `/dashboard/client/payments/${requestId}`
         : "/dashboard/client/payments"
       : staffCasePath(caseId)
   }
