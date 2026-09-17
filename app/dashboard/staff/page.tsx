@@ -1,7 +1,9 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import RoleDashboard from "@/components/dashboard/RoleDashboard"
 import { getCurrentUser } from "@/lib/auth"
+import { getStaffDashboardCounts } from "@/lib/dashboard-counts"
 import { query } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
 import { normalizePermanentRole } from "@/lib/role-access"
@@ -115,6 +117,10 @@ export default async function StaffDashboardPage() {
       [profileId],
     ),
   ])
+  const stats = await getStaffDashboardCounts({
+    userId: user.id,
+    profileId,
+  })
 
   const assignedCases = casesResult.rows
   const assignedTraining = trainingResult.rows
@@ -135,6 +141,94 @@ export default async function StaffDashboardPage() {
           authority remains separate from resource assignments.
         </p>
       </section>
+
+      <RoleDashboard
+        role="staff"
+        eyebrow="Assignment Summary"
+        title="My Operational Work"
+        description="Counts are based on active approved assignments to your profile. Reviewer-only case assignments are excluded from ordinary operational and message counts."
+        metrics={[
+          {
+            key: "assigned_active_cases",
+            label: "Assigned Active Cases",
+            value: String(stats.assigned_active_cases ?? 0),
+            helper: "Active operational case assignments",
+            href: "/dashboard/cases?status=active",
+            icon: "briefcase",
+          },
+          {
+            key: "assigned_training_engagements",
+            label: "Assigned Training",
+            value: String(stats.assigned_training_engagements ?? 0),
+            helper: "Approved trainer assignments",
+            href: "/trainer/training",
+            icon: "graduationCap",
+          },
+          {
+            key: "reports_in_progress",
+            label: "Reports In Progress",
+            value: String(stats.reports_in_progress ?? 0),
+            helper: "Draft or review reports authored by you",
+            href: "/dashboard/reports?status=drafts",
+            icon: "fileText",
+          },
+          {
+            key: "assigned_tasks",
+            label: "Assigned Tasks",
+            value: String(stats.assigned_tasks ?? 0),
+            helper: "Open investigation tasks assigned to you",
+            href: "/dashboard/cases",
+            icon: "activity",
+          },
+          {
+            key: "cases_awaiting_staff_action",
+            label: "Cases Awaiting Action",
+            value: String(stats.cases_awaiting_staff_action ?? 0),
+            helper: "Assigned cases waiting on evidence, client input, or report review",
+            href: "/dashboard/cases",
+            section: "attention",
+            icon: "alert",
+          },
+          {
+            key: "unread_assigned_case_conversations",
+            label: "Unread Case Conversations",
+            value: String(stats.unread_assigned_case_conversations ?? 0),
+            helper: "Unread receipts in assigned operational case conversations",
+            href: "/dashboard/messages",
+            section: "attention",
+            icon: "message",
+          },
+          {
+            key: "reports_requiring_revision",
+            label: "Reports Requiring Revision",
+            value: String(stats.reports_requiring_revision ?? 0),
+            helper: "Authored reports returned for changes",
+            href: "/dashboard/reports?status=pending",
+            section: "attention",
+            icon: "fileText",
+          },
+          {
+            key: "upcoming_training_sessions",
+            label: "Upcoming Training Sessions",
+            value: String(stats.upcoming_training_sessions ?? 0),
+            helper: "Scheduled sessions for assigned training",
+            href: "/trainer/training",
+            section: "attention",
+            icon: "clock",
+          },
+          {
+            key: "unread_notifications",
+            label: "Notifications",
+            value: String(stats.unread_notifications ?? 0),
+            helper: "Unread notifications assigned to you",
+            href: "/dashboard/notifications",
+            section: "attention",
+            icon: "bell",
+          },
+        ]}
+        queueTitle=""
+        queueItems={[]}
+      />
 
       {!hasAssignments ? (
         <section className="rounded-md border border-[#143b28] bg-[#06110f] p-6">

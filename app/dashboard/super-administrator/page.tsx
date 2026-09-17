@@ -23,6 +23,20 @@ type DashboardStats = {
     super_admins: number
     administrators: number
   }
+
+  operational: {
+    requests_awaiting_review?: number
+    quotes_requiring_action?: number
+    cases_awaiting_assignment?: number
+    active_cases?: number
+    reports_pending_review?: number
+    training_requiring_action?: number
+    outstanding_payments?: number
+    active_staff?: number
+    unread_notifications?: number
+    my_assigned_cases?: number
+    my_assigned_training?: number
+  }
 }
 
 export default function SuperAdministratorDashboard() {
@@ -91,31 +105,32 @@ export default function SuperAdministratorDashboard() {
         description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
         metrics={[
           {
-            key: "database_health",
-            label: "System Health",
+            key: "requests_awaiting_review",
+            label: "Requests Awaiting Final Review",
             value: "error",
             helper: error,
+            icon: "alert",
           },
           {
-            key: "total_users",
-            label: "Users",
+            key: "active_cases",
+            label: "Active Cases",
             value: "—",
-            helper:
-              "Unable to load user statistics",
+            helper: "Unable to load operational statistics",
+            icon: "briefcase",
           },
           {
-            key: "audit_events",
-            label: "Audit Logs",
+            key: "active_staff",
+            label: "Active Staff",
             value: "—",
-            helper:
-              "Unable to load audit statistics",
+            helper: "Unable to load team statistics",
+            icon: "users",
           },
           {
-            key: "security_events",
-            label: "Security Overview",
+            key: "unread_notifications",
+            label: "My Notifications",
             value: "—",
-            helper:
-              "Unable to load security statistics",
+            helper: "Unable to load personal notifications",
+            icon: "bell",
           },
         ]}
         queueTitle="System Governance"
@@ -135,7 +150,96 @@ export default function SuperAdministratorDashboard() {
       description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
       metrics={[
         {
-          key: "database_health",
+          key: "requests_awaiting_review",
+          label: "Requests Awaiting Final Review",
+          value: String(stats?.operational.requests_awaiting_review ?? 0),
+          helper: "Organization-wide requests awaiting super-admin review",
+          href: "/dashboard/requests?status=review",
+          section: "oversight",
+          icon: "receipt",
+        },
+{
+  key: "quotes_requiring_action",
+  label: "Quotes Awaiting Approval",
+  value: String(stats?.operational.quotes_requiring_action ?? 0),
+  helper: "Quote approvals requiring super-admin authority",
+  href: "/dashboard/requests?status=quoted",
+  section: "oversight",
+  icon: "alert",
+},
+        {
+          key: "cases_awaiting_assignment",
+          label: "Cases Awaiting Assignment",
+          value: String(stats?.operational.cases_awaiting_assignment ?? 0),
+          helper: "Organization-wide canonical awaiting_assignment cases",
+          href: "/dashboard/cases",
+          section: "oversight",
+          icon: "briefcase",
+        },
+        {
+          key: "active_cases",
+          label: "Active Cases",
+          value: String(stats?.operational.active_cases ?? 0),
+          helper: "Organization-wide active operational cases",
+          href: "/dashboard/cases?status=active",
+          section: "oversight",
+          icon: "activity",
+        },
+        {
+          key: "reports_pending_review",
+          label: "Reports Pending Final Approval",
+          value: String(stats?.operational.reports_pending_review ?? 0),
+          helper: "Reports awaiting final approval",
+          href: "/dashboard/reports?status=pending",
+          section: "oversight",
+          icon: "fileText",
+        },
+        {
+          key: "training_requiring_action",
+          label: "Training Requiring Approval",
+          value: String(stats?.operational.training_requiring_action ?? 0),
+          helper: "Training approvals, assignments, or scheduling requiring attention",
+          href: "/dashboard/training",
+          section: "oversight",
+          icon: "graduationCap",
+        },
+        {
+          key: "outstanding_payments",
+          label: "Payment Exceptions",
+          value: String(stats?.operational.outstanding_payments ?? 0),
+          helper: "Pending or exception payment records supported by payment status",
+          section: "oversight",
+          icon: "creditCard",
+        },
+        {
+          key: "active_staff",
+          label: "Active Staff",
+          value: String(stats?.operational.active_staff ?? 0),
+          helper: "Active staff and administrative accounts",
+          href: "/dashboard/team",
+          section: "oversight",
+          icon: "users",
+        },
+        {
+          key: "unread_notifications",
+          label: "My Notifications",
+          value: String(stats?.operational.unread_notifications ?? 0),
+          helper: "Personal unread super-admin notifications only",
+          href: "/dashboard/notifications",
+          section: "personal",
+          icon: "bell",
+        },
+        {
+          key: "my_assigned_cases",
+          label: "My Assigned Cases",
+          value: String(stats?.operational.my_assigned_cases ?? 0),
+          helper: "Operational case assignments to your profile",
+          href: "/dashboard/cases?status=active",
+          section: "personal",
+          icon: "briefcase",
+        },
+        {
+          key: "system_health",
           label: "System Health",
           value:
             systemHealth === "healthy"
@@ -144,40 +248,9 @@ export default function SuperAdministratorDashboard() {
                 ? "Unhealthy"
                 : "Loading",
           helper:
-            "Application, database, and service readiness overview",
-        },
-        {
-          key: "total_users",
-          label: "Users",
-          value:
-            stats?.total_users?.toString() || "0",
-          helper:
-            "Role-governed personnel and client accounts",
-        },
-{
-  key: "total_training",
-  label: "Training Engagements",
-  value:
-    stats?.total_training?.toString() || "0",
-  helper:
-    "Total training engagements across the bureau",
-},
-
-        {
-          key: "audit_events",
-          label: "Audit Logs",
-          value:
-            stats?.audit_events?.toString() || "0",
-          helper:
-            "Security-relevant actions and administrative events",
-        },
-        {
-          key: "security_events",
-          label: "Security Overview",
-          value:
-            stats?.security_events?.toString() || "0",
-          helper:
-            "Authentication, session, and access-control events",
+            "Database readiness, shown separately from operational counts",
+          section: "personal",
+          icon: "shield",
         },
       ]}
       queueTitle="System Governance"

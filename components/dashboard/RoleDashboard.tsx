@@ -3,21 +3,31 @@
 import {
   Activity,
   AlertTriangle,
+  Award,
+  Bell,
+  BriefcaseBusiness,
   Clock,
+  CreditCard,
   FileText,
+  GraduationCap,
   MessageSquare,
+  ReceiptText,
   ShieldCheck,
   Users,
   X,
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 
 type Metric = {
   key: string
   label: string
   value: string
   helper?: string
+  href?: string
+  section?: "primary" | "attention" | "personal" | "oversight"
+  icon?: keyof typeof namedIcons
 }
 
 type QueueItem = {
@@ -38,6 +48,22 @@ const iconMap = [
   Users,
   AlertTriangle,
 ]
+
+const namedIcons = {
+  activity: Activity,
+  alert: AlertTriangle,
+  award: Award,
+  bell: Bell,
+  briefcase: BriefcaseBusiness,
+  clock: Clock,
+  creditCard: CreditCard,
+  fileText: FileText,
+  graduationCap: GraduationCap,
+  message: MessageSquare,
+  receipt: ReceiptText,
+  shield: ShieldCheck,
+  users: Users,
+}
 
 function formatLabel(value: string) {
   return value
@@ -625,37 +651,72 @@ useEffect(() => {
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {metrics.map((metric, index) => {
-          const Icon = iconMap[index % iconMap.length]
+      {(["primary", "attention", "personal", "oversight"] as const).map(
+        (section) => {
+          const sectionMetrics = metrics.filter(
+            (metric) => (metric.section || "primary") === section,
+          )
 
-          const value =
-            role === "client"
-              ? data?.[metric.key] ?? metric.value ?? 0
-              : metric.value
+          if (!sectionMetrics.length) return null
 
           return (
-            <div
-              key={`${metric.label}-${index}`}
-              className="rounded-md border border-[#143b28] bg-[#06110f] p-5 transition hover:border-[#20dc73]/40"
-            >
-              <Icon className="h-5 w-5 text-[#20dc73]" />
+            <section key={section} className="space-y-3">
+              {section !== "primary" ? (
+                <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-[#20dc73]">
+                  {section === "attention"
+                    ? "Attention Required"
+                    : section === "personal"
+                      ? "My Work"
+                      : "Organization Oversight"}
+                </h2>
+              ) : null}
 
-              <p className="mt-4 text-xl font-bold text-white sm:text-2xl">
-                {value}
-              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                {sectionMetrics.map((metric, index) => {
+                  const Icon = metric.icon
+                    ? namedIcons[metric.icon]
+                    : iconMap[index % iconMap.length]
 
-              <p className="mt-2 text-sm text-white/50">
-                {metric.label}
-              </p>
+                  const value =
+                    role === "client"
+                      ? data?.[metric.key] ?? metric.value ?? 0
+                      : metric.value
 
-              <p className="mt-1 text-xs text-white/40">
-                {metric.helper}
-              </p>
-            </div>
+                  const card = (
+                    <div className="h-full rounded-md border border-[#143b28] bg-[#06110f] p-5 transition hover:border-[#20dc73]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]/70">
+                      <Icon className="h-5 w-5 text-[#20dc73]" />
+
+                      <p className="mt-4 text-xl font-bold text-white sm:text-2xl">
+                        {value}
+                      </p>
+
+                      <p className="mt-2 text-sm text-white/50">
+                        {metric.label}
+                      </p>
+
+                      <p className="mt-1 text-xs text-white/40">
+                        {metric.helper}
+                      </p>
+                    </div>
+                  )
+
+                  return metric.href ? (
+                    <Link
+                      key={`${metric.label}-${index}`}
+                      href={metric.href}
+                      aria-label={`${metric.label}: ${value}`}
+                    >
+                      {card}
+                    </Link>
+                  ) : (
+                    <div key={`${metric.label}-${index}`}>{card}</div>
+                  )
+                })}
+              </div>
+            </section>
           )
-        })}
-      </section>
+        },
+      )}
 
     {queueTitle && (
   <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">

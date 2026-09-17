@@ -6,7 +6,10 @@ import {
   createMessageReceipts,
   syncConversationParticipants,
 } from "@/lib/services/message-receipts-service"
-import { createCaseMessageNotifications } from "@/lib/services/message-notifications-service"
+import {
+  createCaseMessageNotifications,
+  dispatchCaseMessageExternalNotifications,
+} from "@/lib/services/message-notifications-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -107,7 +110,8 @@ export async function POST(request: NextRequest) {
         client,
       )
 
-      await createCaseMessageNotifications(
+      const notificationIds =
+        await createCaseMessageNotifications(
         {
           messageId: row.id,
           conversationId: row.conversation_id,
@@ -118,10 +122,17 @@ export async function POST(request: NextRequest) {
         client,
       )
 
-      return result
+      return {
+        result,
+        notificationIds,
+      }
     })
 
-    return NextResponse.json(inserted.rows[0], { status: 201 })
+    await dispatchCaseMessageExternalNotifications(
+      inserted.notificationIds,
+    )
+
+    return NextResponse.json(inserted.result.rows[0], { status: 201 })
   } catch (error) {
     console.error("MESSAGE SEND ERROR", error)
     return NextResponse.json({ error: "Failed to send message" }, { status: 500 })

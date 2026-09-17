@@ -221,7 +221,7 @@ export const EMPTY_FORM: CybersecurityTrainingFormData = {
   client_country: "",
   preferred_currency: "",
 
-  communication_method: "portal_notification",
+  communication_method: "portal",
 
   communication_email: "",
   communication_country_code: "",

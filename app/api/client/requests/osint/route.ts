@@ -17,6 +17,19 @@ function nullableString(value: unknown): string | null {
   return result || null
 }
 
+function normalizeCommunicationMethod(value: unknown) {
+  const method = clean(value)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+
+  if (method === "email") return "email"
+  if (method === "whatsapp" || method === "whats_app") {
+    return "whatsapp"
+  }
+
+  return "portal"
+}
+
 function nullableDate(value: unknown): string | null {
   const result = clean(value)
   return result || null
@@ -123,14 +136,14 @@ export async function POST(request: NextRequest) {
      * ========================================================
      */
 
-    const contact_method = clean(
+    const contact_method = normalizeCommunicationMethod(
       body.contact_method ||
         body.communication_method ||
         body.communication_channel ||
-        "portal_notification",
+        "portal",
     )
 
-    const communication_method = clean(
+    const communication_method = normalizeCommunicationMethod(
       body.communication_method ||
         body.communication_channel ||
         contact_method,

@@ -863,6 +863,8 @@ export async function issueTrainingCertificate(
       ],
     )
 
+    await query("COMMIT")
+
     const shouldNotifyClient =
       options.notifyClient !== false
 
@@ -876,6 +878,7 @@ export async function issueTrainingCertificate(
         message: `Certificate of Completion ${certificate.certificate_number} has been issued for ${recipientName}.`,
         metadata: {
           training_engagement_id: engagement.id,
+          request_id: engagement.request_id,
           certificate_id: certificate.id,
           participant_id: participant.id,
           certificate_number: certificate.certificate_number,
@@ -889,8 +892,6 @@ export async function issueTrainingCertificate(
         },
       })
     }
-
-    await query("COMMIT")
 
     return {
       certificate_id: certificate.id,

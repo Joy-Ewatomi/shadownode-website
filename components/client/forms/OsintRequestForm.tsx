@@ -328,7 +328,7 @@ function createEmptyForm(): InvestigationFormData {
     urgency: "normal",
     osint_completion_date: "",
 
-    communication_method: "portal_notification",
+    communication_method: "portal",
     communication_email: "",
     communication_country_code: "",
     communication_phone: "",
@@ -759,11 +759,7 @@ export default function InvestigationForm({
               form.communication_whatsapp.trim(),
             )
 
-          case "signal":
-            return Boolean(
-              form.communication_signal.trim(),
-            )
-
+          case "portal":
           case "portal_notification":
             return true
 

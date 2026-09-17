@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "verify:osint-graph": "node scripts/verify-osint-graph.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

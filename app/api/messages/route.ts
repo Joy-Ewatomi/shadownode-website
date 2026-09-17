@@ -12,7 +12,10 @@ import {
   markConversationReceiptsReadForUser,
   syncConversationParticipants,
 } from "@/lib/services/message-receipts-service"
-import { createCaseMessageNotifications } from "@/lib/services/message-notifications-service"
+import {
+  createCaseMessageNotifications,
+  dispatchCaseMessageExternalNotifications,
+} from "@/lib/services/message-notifications-service"
 import { canCaseFunctionMessage } from "@/lib/role-access"
 
 type CasePermission = {
@@ -709,7 +712,7 @@ export async function POST(
     // Find/create case conversation
     // ----------------------------------------------------------
 
-    const insertedMessage = await withTransaction(async (client) => {
+    const messageResult = await withTransaction(async (client) => {
       if (!resolvedConversationId) {
         resolvedConversationId =
           await getOrCreateCaseConversation(
@@ -796,7 +799,8 @@ export async function POST(
         client,
       )
 
-      await createCaseMessageNotifications(
+      const notificationIds =
+        await createCaseMessageNotifications(
         {
           messageId: row.id,
           conversationId: row.conversation_id,
@@ -807,8 +811,17 @@ export async function POST(
         client,
       )
 
-      return row
+      return {
+        message: row,
+        notificationIds,
+      }
     })
+
+    const insertedMessage = messageResult.message
+
+    await dispatchCaseMessageExternalNotifications(
+      messageResult.notificationIds,
+    )
 
     // ----------------------------------------------------------
     // Sender identity

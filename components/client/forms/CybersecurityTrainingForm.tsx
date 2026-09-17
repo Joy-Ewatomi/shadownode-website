@@ -225,7 +225,7 @@ const EMPTY_FORM: CybersecurityTrainingFormData = {
   preferred_currency: "GBP",
   custom_country: "",
 
-  communication_method: "portal_notification",
+  communication_method: "portal",
 
   communication_email: "",
   communication_phone: "",
@@ -441,15 +441,6 @@ export default function CybersecurityTrainingForm({
 
         if (
           form.communication_method ===
-          "signal"
-        ) {
-          return Boolean(
-            form.communication_signal,
-          )
-        }
-
-        if (
-          form.communication_method ===
           "phone"
         ) {
           return Boolean(
@@ -458,8 +449,9 @@ export default function CybersecurityTrainingForm({
         }
 
         if (
+          form.communication_method === "portal" ||
           form.communication_method ===
-          "portal_notification"
+            "portal_notification"
         ) {
           return true
         }

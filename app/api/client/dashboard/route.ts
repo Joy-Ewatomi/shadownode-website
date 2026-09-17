@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
+import { getClientDashboardCounts } from "@/lib/dashboard-counts"
 import { query } from "@/lib/db"
 
 export async function GET() {
   try {
     const user = await getCurrentUser()
-
-console.log("CLIENT DASHBOARD USER:", user)
 
     if (!user) {
       return NextResponse.json(
@@ -166,84 +165,24 @@ if (!profileId) {
       // =====================================================
       // STATS
       // =====================================================
-      query<{
-        active_cases: string
-        pending_requests: string
-        quote_actions: string
-        reports_available: string
-        unread_notifications: string
-      }>(
-        `
-        SELECT
-
-
-          (
-            SELECT COUNT(*)
-            FROM cases
-            WHERE client_profile_id = $2
-              AND payment_status = 'paid'
-              AND status <> 'archived'
-          ) AS active_cases,
-
-
-
-          (
-            SELECT COUNT(*)
-            FROM requests
-            WHERE user_id = $1
-              AND status IN (
-  'pending_admin_review',
-  'pending_super_admin_review'
-)
-          ) AS pending_requests,
-
-
-
-          (
-            SELECT COUNT(*)
-            FROM requests
-            WHERE user_id = $1
-              AND status IN (
-                'quote_sent',
-                'revised_quote_sent',
-                'awaiting_client_acceptance',
-                'negotiation_requested'
-              )
-          ) AS quote_actions,
-
-
-
-          (
-            SELECT COUNT(*)
-            FROM case_reports r
-            JOIN cases c
-              ON c.id = r.case_id
-            WHERE c.client_profile_id = $2
-              AND COALESCE(r.status, 'published') IN ('approved', 'delivered', 'final', 'published')
-          ) AS reports_available,
-
-
-
-        (
-  SELECT COUNT(*)::int
-  FROM notifications
-  WHERE user_id = $1
-    AND is_read = false
-) AS unread_notifications
-
-        `,
-        [
-          user.id,
-          profileId,
-        ],
-      ),
+      getClientDashboardCounts({
+        userId: user.id,
+        profileId,
+      }),
 
     ])
 
+    const dashboardStats = {
+      ...stats,
+      pending_requests: stats.requests_total ?? 0,
+      quote_actions: stats.requests_requiring_action ?? 0,
+      reports_available: stats.reports ?? 0,
+      unread_notifications: stats.unread_notifications ?? 0,
+    }
 
     return NextResponse.json({
 
-      stats: stats.rows[0],
+      stats: dashboardStats,
 
       requests: requests.rows,
 

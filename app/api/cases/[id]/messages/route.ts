@@ -10,7 +10,10 @@ import {
   createMessageReceipts,
   syncConversationParticipants,
 } from "@/lib/services/message-receipts-service"
-import { createCaseMessageNotifications } from "@/lib/services/message-notifications-service"
+import {
+  createCaseMessageNotifications,
+  dispatchCaseMessageExternalNotifications,
+} from "@/lib/services/message-notifications-service"
 import { canCaseFunctionMessage } from "@/lib/role-access"
 
 function isSuperAdmin(
@@ -489,7 +492,7 @@ export async function POST(
       )
     }
 
-    const result = await withTransaction(async (client) => {
+    const transactionResult = await withTransaction(async (client) => {
       const conversationId =
         await getOrCreateCaseConversation(
           caseId,
@@ -565,7 +568,8 @@ export async function POST(
         client,
       )
 
-      await createCaseMessageNotifications(
+      const notificationIds =
+        await createCaseMessageNotifications(
         {
           messageId: row.id,
           conversationId: row.conversation_id,
@@ -576,8 +580,17 @@ export async function POST(
         client,
       )
 
-      return row
+      return {
+        message: row,
+        notificationIds,
+      }
     })
+
+    const result = transactionResult.message
+
+    await dispatchCaseMessageExternalNotifications(
+      transactionResult.notificationIds,
+    )
 
     const sender = await query<{
       full_name: string | null

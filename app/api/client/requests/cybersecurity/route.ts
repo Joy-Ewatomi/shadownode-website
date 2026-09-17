@@ -21,6 +21,19 @@ function nullableString(value: unknown): string | null {
   return result || null
 }
 
+function normalizeCommunicationMethod(value: unknown) {
+  const method = clean(value)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+
+  if (method === "email") return "email"
+  if (method === "whatsapp" || method === "whats_app") {
+    return "whatsapp"
+  }
+
+  return "portal"
+}
+
 function nullableDate(value: unknown): string | null {
   const result = clean(value)
 
@@ -615,15 +628,15 @@ export async function POST(
     // ========================================================
 
     const contact_method =
-      clean(
+      normalizeCommunicationMethod(
         body.contact_method ||
           body.communication_method ||
           body.communication_channel ||
-          "portal_notification",
+          "portal",
       )
 
     const communication_method =
-      clean(
+      normalizeCommunicationMethod(
         body.communication_method ||
           body.communication_channel ||
           contact_method,
@@ -780,22 +793,6 @@ export async function POST(
         {
           error:
             "WhatsApp number is required",
-        },
-        {
-          status: 400,
-        },
-      )
-    }
-
-    if (
-      communication_method ===
-        "signal" &&
-      !communication_signal
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Signal contact is required",
         },
         {
           status: 400,

@@ -148,6 +148,7 @@ async function loadInvestigationData(
     evidenceResult,
     tasksResult,
     notesResult,
+    graphProvenanceResult,
   ] = await Promise.all([
     query(
       `
@@ -210,10 +211,19 @@ async function loadInvestigationData(
           ie.id,
           ie.entity_type,
           ie.name,
+          ie.value,
           ie.description,
           ie.aliases,
+          ie.source_provider,
+          ie.source_reference,
+          ie.retrieved_at,
           ie.verification_status,
           ie.confidence_score,
+          ie.classification,
+          ie.client_visible,
+          ie.notes,
+          ie.last_verified_at,
+          ie.stale_at,
           ie.created_at,
 
           creator.username
@@ -247,7 +257,10 @@ async function loadInvestigationData(
           target_entity.name
             AS target_entity_name,
           er.relationship_type,
+          er.direction,
           er.description,
+          er.source_reference,
+          er.client_visible,
           er.confidence_score,
           er.verification_status,
           er.created_at
@@ -430,6 +443,91 @@ async function loadInvestigationData(
       `,
       [caseId],
     ),
+
+    query(
+      `
+        SELECT
+          'entity_source' AS link_type,
+          es.entity_id AS graph_record_id,
+          ie.name AS graph_record_name,
+          ins.id AS source_id,
+          ins.title AS source_title,
+          ins.url AS source_url,
+          NULL::uuid AS evidence_id,
+          NULL::text AS evidence_name,
+          es.analyst_notes,
+          es.created_at
+        FROM entity_sources es
+        JOIN investigation_entities ie
+          ON ie.id = es.entity_id
+        JOIN intelligence_sources ins
+          ON ins.id = es.source_id
+        WHERE ie.case_id = $1
+
+        UNION ALL
+
+        SELECT
+          'relationship_source' AS link_type,
+          rs.relationship_id AS graph_record_id,
+          er.relationship_type AS graph_record_name,
+          ins.id AS source_id,
+          ins.title AS source_title,
+          ins.url AS source_url,
+          NULL::uuid AS evidence_id,
+          NULL::text AS evidence_name,
+          rs.analyst_notes,
+          rs.created_at
+        FROM relationship_sources rs
+        JOIN entity_relationships er
+          ON er.id = rs.relationship_id
+        JOIN intelligence_sources ins
+          ON ins.id = rs.source_id
+        WHERE er.case_id = $1
+
+        UNION ALL
+
+        SELECT
+          'entity_evidence' AS link_type,
+          ee.entity_id AS graph_record_id,
+          ie.name AS graph_record_name,
+          NULL::uuid AS source_id,
+          NULL::text AS source_title,
+          NULL::text AS source_url,
+          ff.id AS evidence_id,
+          ff.file_name AS evidence_name,
+          ee.analyst_notes,
+          ee.created_at
+        FROM entity_evidence ee
+        JOIN investigation_entities ie
+          ON ie.id = ee.entity_id
+        JOIN forensic_files ff
+          ON ff.id = ee.forensic_file_id
+        WHERE ie.case_id = $1
+
+        UNION ALL
+
+        SELECT
+          'relationship_evidence' AS link_type,
+          re.relationship_id AS graph_record_id,
+          er.relationship_type AS graph_record_name,
+          NULL::uuid AS source_id,
+          NULL::text AS source_title,
+          NULL::text AS source_url,
+          ff.id AS evidence_id,
+          ff.file_name AS evidence_name,
+          re.analyst_notes,
+          re.created_at
+        FROM relationship_evidence re
+        JOIN entity_relationships er
+          ON er.id = re.relationship_id
+        JOIN forensic_files ff
+          ON ff.id = re.forensic_file_id
+        WHERE er.case_id = $1
+
+        ORDER BY created_at ASC
+      `,
+      [caseId],
+    ),
   ])
 
   return {
@@ -448,6 +546,8 @@ async function loadInvestigationData(
       tasksResult.rows,
     notes:
       notesResult.rows,
+    graph_provenance:
+      graphProvenanceResult.rows,
   }
 }
 
@@ -1056,6 +1156,14 @@ EVIDENCE
 
 ${JSON.stringify(
   evidenceIndex,
+  null,
+  2,
+)}
+
+GRAPH PROVENANCE LINKS
+
+${JSON.stringify(
+  investigation.graph_provenance,
   null,
   2,
 )}

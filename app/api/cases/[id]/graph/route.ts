@@ -36,21 +36,21 @@ export async function GET(
         query(
           `
             SELECT
-              id,
-              case_id,
-              name,
-              entity_type,
-              description,
-              verification_status,
-              confidence_score,
-              created_at,
-              updated_at
+              ie.id AS id,
+              ie.case_id AS case_id,
+              ie.name AS name,
+              ie.entity_type AS entity_type,
+              ie.description AS description,
+              ie.verification_status AS verification_status,
+              ie.confidence_score AS confidence_score,
+              ie.created_at AS created_at,
+              ie.updated_at AS updated_at
 
-            FROM investigation_entities
+            FROM investigation_entities ie
 
-            WHERE case_id = $1
+            WHERE ie.case_id = $1
 
-            ORDER BY created_at DESC
+            ORDER BY ie.created_at DESC
           `,
           [access.caseId],
         ),
@@ -58,22 +58,22 @@ export async function GET(
         query(
           `
             SELECT
-              id,
-              case_id,
-              source_entity_id,
-              target_entity_id,
-              relationship_type,
-              description,
-              verification_status,
-              confidence_score,
-              created_at,
-              updated_at
+              er.id AS id,
+              er.case_id AS case_id,
+              er.source_entity_id AS source_entity_id,
+              er.target_entity_id AS target_entity_id,
+              er.relationship_type AS relationship_type,
+              er.description AS description,
+              er.verification_status AS verification_status,
+              er.confidence_score AS confidence_score,
+              er.created_at AS created_at,
+              er.updated_at AS updated_at
 
-            FROM entity_relationships
+            FROM entity_relationships er
 
-            WHERE case_id = $1
+            WHERE er.case_id = $1
 
-            ORDER BY created_at DESC
+            ORDER BY er.created_at DESC
           `,
           [access.caseId],
         ),

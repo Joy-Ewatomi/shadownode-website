@@ -459,9 +459,20 @@ CREATE TABLE public.investigation_entities (
   created_by uuid,
   created_at timestamp without time zone DEFAULT now(),
   updated_at timestamp without time zone DEFAULT now(),
+  value text,
+  source_provider text,
+  source_reference text,
+  retrieved_at timestamp with time zone,
+  classification text DEFAULT 'confidential'::text,
+  client_visible boolean DEFAULT false,
+  notes text,
+  original_result_id uuid,
+  last_verified_at timestamp with time zone,
+  stale_at timestamp with time zone,
   CONSTRAINT investigation_entities_pkey PRIMARY KEY (id),
   CONSTRAINT entity_case_fk FOREIGN KEY (case_id) REFERENCES public.cases(id),
-  CONSTRAINT entity_creator_fk FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
+  CONSTRAINT entity_creator_fk FOREIGN KEY (created_by) REFERENCES public.user_profiles(id),
+  CONSTRAINT investigation_entities_original_result_fk FOREIGN KEY (original_result_id) REFERENCES public.osint_search_results(id)
 );
 CREATE TABLE public.entity_relationships (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -474,6 +485,10 @@ CREATE TABLE public.entity_relationships (
   verification_status character varying DEFAULT 'unverified'::character varying,
   created_by uuid,
   created_at timestamp without time zone DEFAULT now(),
+  direction text DEFAULT 'directed'::text,
+  source_reference text,
+  client_visible boolean DEFAULT false,
+  updated_at timestamp without time zone DEFAULT now(),
   CONSTRAINT entity_relationships_pkey PRIMARY KEY (id),
   CONSTRAINT entity_relationships_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
   CONSTRAINT entity_relationships_source_entity_id_fkey FOREIGN KEY (source_entity_id) REFERENCES public.investigation_entities(id),
@@ -602,6 +617,33 @@ CREATE TABLE public.notifications (
   CONSTRAINT notifications_pkey PRIMARY KEY (id),
   CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
   CONSTRAINT notifications_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id)
+);
+CREATE TABLE public.notification_delivery_attempts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  notification_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  event_type text NOT NULL,
+  resource_type text,
+  resource_id text,
+  channel text NOT NULL,
+  destination text,
+  status text NOT NULL DEFAULT 'pending'::text,
+  provider text,
+  preference text,
+  sensitivity text NOT NULL DEFAULT 'brief'::text,
+  fallback_of uuid,
+  error_code text,
+  error_message text,
+  idempotency_key text NOT NULL,
+  attempted_at timestamp with time zone NOT NULL DEFAULT now(),
+  delivered_at timestamp with time zone,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT notification_delivery_attempts_pkey PRIMARY KEY (id),
+  CONSTRAINT notification_delivery_attempts_notification_id_fkey FOREIGN KEY (notification_id) REFERENCES public.notifications(id),
+  CONSTRAINT notification_delivery_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id),
+  CONSTRAINT notification_delivery_attempts_fallback_of_fkey FOREIGN KEY (fallback_of) REFERENCES public.notification_delivery_attempts(id),
+  CONSTRAINT notification_delivery_attempts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'delivered'::text, 'failed'::text, 'skipped'::text]))),
+  CONSTRAINT notification_delivery_attempts_channel_check CHECK ((channel = ANY (ARRAY['email'::text, 'whatsapp'::text])))
 );
 CREATE TABLE public.conversations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1077,4 +1119,64 @@ CREATE TABLE public.case_workspace_p0b_integrity_review (
   details jsonb NOT NULL DEFAULT '{}'::jsonb,
   captured_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT case_workspace_p0b_integrity_review_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.osint_search_results (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  case_id uuid NOT NULL,
+  query_entity_id uuid,
+  exact_query_value text NOT NULL,
+  query_type text NOT NULL,
+  provider text NOT NULL,
+  transform text NOT NULL,
+  title text NOT NULL,
+  entity_type text NOT NULL,
+  value text NOT NULL,
+  description text,
+  source_url text,
+  retrieved_at timestamp with time zone NOT NULL DEFAULT now(),
+  search_time_ms integer,
+  normalized_result jsonb NOT NULL DEFAULT '{}'::jsonb,
+  raw_result_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+  imported_entity_id uuid,
+  imported_relationship_id uuid,
+  imported_by uuid,
+  import_decision text NOT NULL DEFAULT 'staged'::text,
+  confidence numeric DEFAULT 0,
+  verification_status text NOT NULL DEFAULT 'candidate'::text,
+  terms_classification text NOT NULL DEFAULT 'manual_open_source'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT osint_search_results_pkey PRIMARY KEY (id),
+  CONSTRAINT osint_search_results_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id),
+  CONSTRAINT osint_search_results_query_entity_id_fkey FOREIGN KEY (query_entity_id) REFERENCES public.investigation_entities(id),
+  CONSTRAINT osint_search_results_imported_entity_id_fkey FOREIGN KEY (imported_entity_id) REFERENCES public.investigation_entities(id),
+  CONSTRAINT osint_search_results_imported_relationship_id_fkey FOREIGN KEY (imported_relationship_id) REFERENCES public.entity_relationships(id),
+  CONSTRAINT osint_search_results_imported_by_fkey FOREIGN KEY (imported_by) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.relationship_sources (
+  relationship_id uuid NOT NULL,
+  source_id uuid NOT NULL,
+  analyst_notes text,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT relationship_sources_pkey PRIMARY KEY (relationship_id, source_id),
+  CONSTRAINT relationship_sources_relationship_id_fkey FOREIGN KEY (relationship_id) REFERENCES public.entity_relationships(id),
+  CONSTRAINT relationship_sources_source_id_fkey FOREIGN KEY (source_id) REFERENCES public.intelligence_sources(id)
+);
+CREATE TABLE public.entity_evidence (
+  entity_id uuid NOT NULL,
+  forensic_file_id uuid NOT NULL,
+  analyst_notes text,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT entity_evidence_pkey PRIMARY KEY (entity_id, forensic_file_id),
+  CONSTRAINT entity_evidence_entity_id_fkey FOREIGN KEY (entity_id) REFERENCES public.investigation_entities(id),
+  CONSTRAINT entity_evidence_forensic_file_id_fkey FOREIGN KEY (forensic_file_id) REFERENCES public.forensic_files(id)
+);
+CREATE TABLE public.relationship_evidence (
+  relationship_id uuid NOT NULL,
+  forensic_file_id uuid NOT NULL,
+  analyst_notes text,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT relationship_evidence_pkey PRIMARY KEY (relationship_id, forensic_file_id),
+  CONSTRAINT relationship_evidence_relationship_id_fkey FOREIGN KEY (relationship_id) REFERENCES public.entity_relationships(id),
+  CONSTRAINT relationship_evidence_forensic_file_id_fkey FOREIGN KEY (forensic_file_id) REFERENCES public.forensic_files(id)
 );

@@ -8,7 +8,8 @@ Controls,
 MiniMap,
 addEdge,
 useNodesState,
-useEdgesState
+useEdgesState,
+type NodeTypes
 } from "reactflow"
 
 
@@ -22,7 +23,7 @@ import GraphToolbar from "./GraphToolbar"
 
 
 
-const nodeTypes={
+const NODE_TYPES: NodeTypes = {
 entity:EntityNode
 }
 
@@ -120,7 +121,7 @@ onAdd={addEntity}
 nodes={nodes}
 edges={edges}
 
-nodeTypes={nodeTypes}
+nodeTypes={NODE_TYPES}
 
 onNodesChange={onNodesChange}
 

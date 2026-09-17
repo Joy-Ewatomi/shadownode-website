@@ -1,6 +1,7 @@
 import type { QueryResultRow } from "pg"
 
 import { query, type DatabasePoolClient } from "@/lib/db"
+import { deliverExternalNotificationsForIds } from "@/lib/services/notification-delivery-service"
 
 type QueryExecutor = Pick<DatabasePoolClient, "query"> | {
   query<T extends QueryResultRow = QueryResultRow>(
@@ -45,8 +46,12 @@ export async function createCaseMessageNotifications(
   assertUuid(input.senderUserId, "sender user ID")
 
   const db = executorOrDefault(executor)
+  const shouldDeliverExternally =
+    !executor
 
-  await db.query(
+  const inserted = await db.query<{
+    id: string
+  }>(
     `
       WITH input AS (
         SELECT
@@ -157,6 +162,7 @@ export async function createCaseMessageNotifications(
           AND existing.type = recipients.notification_type
           AND existing.metadata->>'message_id' = input.message_id::text
       )
+      RETURNING id
     `,
     [
       input.messageId,
@@ -166,4 +172,36 @@ export async function createCaseMessageNotifications(
       input.senderRole,
     ],
   )
+
+  if (shouldDeliverExternally) {
+    await deliverExternalNotificationsForIds(
+      inserted.rows.map((row) => row.id),
+    ).catch((error) => {
+      console.error(
+        "CASE MESSAGE EXTERNAL DELIVERY ERROR:",
+        error instanceof Error
+          ? error.message
+          : error,
+      )
+    })
+  }
+
+  return inserted.rows.map((row) => row.id)
+}
+
+export async function dispatchCaseMessageExternalNotifications(
+  notificationIds: string[],
+) {
+  if (notificationIds.length === 0) {
+    return
+  }
+
+  await deliverExternalNotificationsForIds(
+    notificationIds,
+  ).catch((error) => {
+    console.error(
+      "CASE MESSAGE POST-COMMIT EXTERNAL DELIVERY ERROR:",
+      error instanceof Error ? error.message : error,
+    )
+  })
 }

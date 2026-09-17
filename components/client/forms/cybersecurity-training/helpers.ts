@@ -24,9 +24,9 @@ export function isWhatsappMethod(method: string) {
 }
 
 export function isSignalMethod(method: string) {
-  return method === "signal"
+  return false
 }
 
 export function isPortalMethod(method: string) {
-  return method === "portal_notification"
+  return method === "portal" || method === "portal_notification"
 }

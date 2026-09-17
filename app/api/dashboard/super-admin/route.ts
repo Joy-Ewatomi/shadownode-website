@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
+import { getAdminDashboardCounts } from "@/lib/dashboard-counts"
 import { query } from "@/lib/db"
+import { profileIdForUser } from "@/lib/investigation-workspace"
+import { normalizePermanentRole } from "@/lib/role-access"
 
 export async function GET() {
   try {
@@ -13,7 +16,7 @@ export async function GET() {
       )
     }
 
-    if (user.role !== "super_administrator") {
+    if (normalizePermanentRole(user.role) !== "super_administrator") {
   return NextResponse.json(
     { error: "Forbidden" },
     { status: 403 },
@@ -56,13 +59,22 @@ const usersResult = await query<{
  * TRAINING ENGAGEMENTS
  * ------------------------------------------------------
  */
-const trainingResult = await query<{
-  total_training: number
-}>(`
-  SELECT
-    COUNT(*)::int AS total_training
-  FROM training_engagements
-`)
+const [profileId, operationalCounts] = await Promise.all([
+  profileIdForUser(user.id),
+  getAdminDashboardCounts({
+    userId: user.id,
+    profileId: null,
+    superAdmin: true,
+  }),
+])
+
+const personalOperationalCounts = profileId
+  ? await getAdminDashboardCounts({
+      userId: user.id,
+      profileId,
+      superAdmin: true,
+    })
+  : operationalCounts
 
 /*
  * ------------------------------------------------------
@@ -167,7 +179,17 @@ const trainingResult = await query<{
   usersResult.rows[0]?.total_users ?? 0,
 
 total_training:
-  trainingResult.rows[0]?.total_training ?? 0,
+  operationalCounts.training_requiring_action ?? 0,
+
+      operational: {
+        ...operationalCounts,
+        my_assigned_cases:
+          personalOperationalCounts.my_assigned_cases ?? 0,
+        my_assigned_training:
+          personalOperationalCounts.my_assigned_training ?? 0,
+        unread_notifications:
+          personalOperationalCounts.unread_notifications ?? 0,
+      },
 
 audit_events:
         auditResult.rows[0]?.audit_events ?? 0,

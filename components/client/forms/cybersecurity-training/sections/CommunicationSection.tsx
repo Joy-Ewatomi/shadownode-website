@@ -43,7 +43,7 @@ export default function CommunicationSection({
 
   email,
   whatsapp,
-  signal,
+  signal: _signal,
 
   onCountryChange,
   onCustomCountryChange,
@@ -52,7 +52,7 @@ export default function CommunicationSection({
 
   onEmailChange,
   onWhatsappChange,
-  onSignalChange,
+  onSignalChange: _onSignalChange,
 
 }: Props) {
 
@@ -178,24 +178,21 @@ Preferred Communication
 {
 value:"email",
 label:"Email",
+description:"Detailed updates by email and in your portal.",
 icon:MessageSquareText
 },
 
 {
 value:"whatsapp",
 label:"WhatsApp",
+description:"Updates through WhatsApp and in your portal.",
 icon:Phone
 },
 
 {
-value:"signal",
-label:"Signal",
-icon:MessageSquareText
-},
-
-{
-value:"portal_notification",
+value:"portal",
 label:"Portal",
+description:"Full updates in your portal, with brief email alerts.",
 icon:Shield
 }
 
@@ -218,8 +215,7 @@ onMethodChange(item.value)
 
 className={`
 flex
-items-center
-justify-center
+items-start
 gap-2
 rounded
 border
@@ -247,7 +243,14 @@ communicationMethod===item.value
 
 <Icon className="h-4 w-4"/>
 
-{item.label}
+<span className="text-left">
+  <span className="block font-semibold">
+    {item.label}
+  </span>
+  <span className="mt-1 block text-xs leading-4 text-white/45">
+    {item.description}
+  </span>
+</span>
 
 
 </button>
@@ -259,6 +262,10 @@ communicationMethod===item.value
 
 
 </div>
+
+<p className="mt-3 text-xs leading-5 text-white/45">
+Sensitive case information is only available after signing into the secure portal.
+</p>
 
 
 </div>
@@ -343,44 +350,6 @@ onWhatsappChange(value || "")
 
 )
 }
-
-
-
-
-{/* SIGNAL */}
-
-{
-communicationMethod==="signal" && (
-
-<div>
-
-<label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-Signal Number
-</label>
-
-
-<PhoneInput
-
-international
-
-defaultCountry="GB"
-
-value={signal}
-
-onChange={(value)=>
-onSignalChange(value || "")
-}
-
-/>
-
-
-</div>
-
-)
-}
-
-
-
 </div>
 
 )

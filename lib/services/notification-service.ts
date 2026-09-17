@@ -1,4 +1,5 @@
 import { query } from "@/lib/db"
+import { deliverExternalNotification } from "@/lib/services/notification-delivery-service"
 
 /* =======================================================
    Types
@@ -362,7 +363,15 @@ export async function notifyUser(
       normalizedType,
     )
 
-  await query(
+  const inserted = await query<{
+    id: string
+    user_id: string
+    case_id: string | null
+    type: string
+    title: string
+    message: string | null
+    metadata: Record<string, unknown> | null
+  }>(
     `
       INSERT INTO notifications (
         user_id,
@@ -379,9 +388,17 @@ export async function notifyUser(
         $3,
         $4,
         $5,
-        $6,
+      $6::jsonb,
         false
       )
+      RETURNING
+        id,
+        user_id,
+        case_id,
+        type,
+        title,
+        message,
+        metadata
     `,
     [
       userId,
@@ -396,7 +413,26 @@ export async function notifyUser(
       "NOTIFICATION INSERT ERROR:",
       err,
     )
+    return null
   })
+
+  const notification =
+    inserted?.rows[0]
+
+  if (notification) {
+    await deliverExternalNotification({
+      ...notification,
+      metadata:
+        notification.metadata || {},
+    }).catch((err) => {
+      console.error(
+        "NOTIFICATION EXTERNAL DELIVERY ERROR:",
+        err instanceof Error
+          ? err.message
+          : err,
+      )
+    })
+  }
 }
 
 /* =======================================================
@@ -520,10 +556,12 @@ export async function notifyTrainingClient(
     const result =
       await query<{
         user_id: string | null
+        request_id: string | null
       }>(
         `
           SELECT
-            au.id AS user_id
+            au.id AS user_id,
+            te.request_id
           FROM training_engagements te
           JOIN user_profiles up
             ON up.id = te.client_profile_id
@@ -559,10 +597,12 @@ export async function notifyTrainingClient(
           event.message ||
           "There is a new update on your training engagement.",
         metadata: {
-          ...(event.metadata || {}),
-          training_engagement_id:
-            trainingEngagementId,
-          resource_type:
+            ...(event.metadata || {}),
+            training_engagement_id:
+              trainingEngagementId,
+            request_id:
+              result.rows[0]?.request_id || null,
+            resource_type:
             getTrainingNotificationType(event.type) ===
             "certificate_issued"
               ? "certificate"

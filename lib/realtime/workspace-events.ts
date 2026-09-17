@@ -5,6 +5,7 @@ export const caseWorkspaceEventTypes = [
   "entity.updated",
   "entity.deleted",
   "relationship.created",
+  "relationship.updated",
   "relationship.deleted",
   "observation.created",
   "observation.updated",

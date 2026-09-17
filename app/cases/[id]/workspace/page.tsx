@@ -2,6 +2,7 @@
 
 import Timeline from "@/components/cases/Timeline"
 import MessagePanel from "@/components/cases/MessagePanel"
+import { ClientNotificationProvider } from "@/components/notifications/ClientNotificationProvider"
 import EvidencePanel from "@/components/evidence/EvidencePanel"
 import InvestigationWorkspaceFoundation from "@/components/investigation/InvestigationWorkspaceFoundation"
 import ReportBuilder from "@/components/reports/ReportBuilder"
@@ -380,7 +381,8 @@ export default function InvestigatorCaseWorkspace() {
     caseId
 
   return (
-    <main className="min-h-screen bg-[#020604] text-white">
+    <ClientNotificationProvider>
+      <main className="min-h-screen bg-[#020604] text-white">
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-7xl space-y-6">
 
@@ -950,7 +952,8 @@ export default function InvestigatorCaseWorkspace() {
 
         </div>
       </div>
-    </main>
+      </main>
+    </ClientNotificationProvider>
   )
 }
 
