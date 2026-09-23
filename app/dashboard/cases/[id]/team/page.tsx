@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, isAdminRole } from "@/lib/auth"
 import CaseAssignment from "@/components/cases/CaseAssignment"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 import {
@@ -36,11 +36,12 @@ export default async function CaseTeamPage({
   }
 
   const canView =
-    await canUseInvestigationWorkspace(
+    isAdminRole(user.role) ||
+    (await canUseInvestigationWorkspace(
       user.id,
       user.role,
       caseId,
-    )
+    ))
 
   if (!canView) {
     redirect("/403")

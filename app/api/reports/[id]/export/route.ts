@@ -9,6 +9,13 @@ import {
   canUseCaseReviewAccess,
 } from "@/lib/investigation-workspace"
 
+type ReportRow = Record<string, unknown> & { id: string; case_id: string; client_user_id: string | null; status: string | null; classification: string | null }
+type ReportSectionRow = Record<string, unknown> & { section_type: string | null; title: string | null; content: string | null; order_index: number }
+type EvidenceRow = Record<string, unknown> & { id: string; file_name: string; file_type: string | null; file_hash: string | null; evidence_type: string | null; created_at: string | Date | null; chain_of_custody: unknown; uploaded_by_name: string | null }
+type TimelineRow = Record<string, unknown> & { event_date: string | Date | null; title: string | null; description: string | null; created_at: string | Date }
+type UpdateRow = Record<string, unknown> & { update_type: string | null; title: string | null; content: string | null; created_at: string | Date }
+type ExportTimelineRow = { date: string | Date | null; type: string; title: string | null; detail: string | null }
+
 function escapeHtml(value: unknown) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -48,7 +55,7 @@ export async function GET(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const reportResult = await query(
+    const reportResult = await query<ReportRow>(
       `
         SELECT
           cr.*,
@@ -75,7 +82,7 @@ export async function GET(
     const clientCanView =
       user.role === "client" &&
       report.client_user_id === user.id &&
-      ["delivered", "final", "published"].includes(String(report.status || "")) &&
+      ["delivered", "published"].includes(String(report.status || "")) &&
       String(report.classification || "confidential").toLowerCase() !== "internal"
 
     const staffCanView =
@@ -89,8 +96,8 @@ export async function GET(
     }
 
     const [sections, evidence, entities, timeline, updates] = await Promise.all([
-      query(`SELECT section_type, title, content, order_index FROM case_report_sections WHERE report_id = $1 ORDER BY order_index, created_at`, [id]),
-      query(`
+      query<ReportSectionRow>(`SELECT section_type, title, content, order_index FROM case_report_sections WHERE report_id = $1 ORDER BY order_index, created_at`, [id]),
+      query<EvidenceRow>(`
         SELECT ff.id, ff.file_name, ff.file_type, ff.file_size, ff.file_hash,
                ff.evidence_type, ff.description, ff.created_at, ff.chain_of_custody,
                uploader.full_name AS uploaded_by_name
@@ -107,13 +114,13 @@ export async function GET(
         WHERE cre.report_id = $1
         ORDER BY ie.name
       `, [id]),
-      query(`
+      query<TimelineRow>(`
         SELECT event_date, title, description, created_at
         FROM investigation_timeline
         WHERE case_id = $1
         ORDER BY event_date NULLS LAST, created_at
       `, [report.case_id]),
-      query(`
+      query<UpdateRow>(`
         SELECT update_type, title, content, created_at
         FROM case_updates
         WHERE case_id = $1
@@ -166,7 +173,7 @@ export async function GET(
         }).join("")
       : '<tr><td colspan="5">No evidence was attached to this report.</td></tr>'
 
-    const timelineRows = [...timeline.rows.map((item) => ({
+    const timelineRows: ExportTimelineRow[] = [...timeline.rows.map((item) => ({
       date: item.event_date || item.created_at,
       type: "Investigation timeline",
       title: item.title,
@@ -176,7 +183,7 @@ export async function GET(
       type: item.update_type || "Case update",
       title: item.title,
       detail: item.content,
-    }))].sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+    }))].sort((a, b) => new Date(a.date ?? 0).getTime() - new Date(b.date ?? 0).getTime())
 
     const timelineHtml = timelineRows.length
       ? timelineRows.map((item) => `<tr><td>${escapeHtml(formatDate(item.date))}</td><td>${escapeHtml(item.type)}</td><td><strong>${escapeHtml(item.title)}</strong><br>${escapeHtml(item.detail)}</td></tr>`).join("")

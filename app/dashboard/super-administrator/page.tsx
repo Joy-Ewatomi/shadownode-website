@@ -103,6 +103,10 @@ export default function SuperAdministratorDashboard() {
         eyebrow="Bureau Command"
         title="Super Administrator Dashboard"
         description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
+        primaryAction={{
+          label: "Create Request",
+          href: "/request/anonymous",
+        }}
         metrics={[
           {
             key: "requests_awaiting_review",
@@ -148,6 +152,10 @@ export default function SuperAdministratorDashboard() {
       eyebrow="Bureau Command"
       title="Super Administrator Dashboard"
       description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
+      primaryAction={{
+        label: "Create Request",
+        href: "/request/anonymous",
+      }}
       metrics={[
         {
           key: "requests_awaiting_review",

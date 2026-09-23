@@ -11,6 +11,7 @@ import {
   FileText,
   GraduationCap,
   MessageSquare,
+  Plus,
   ReceiptText,
   ShieldCheck,
   Users,
@@ -514,6 +515,7 @@ export default function RoleDashboard({
   metrics,
   queueTitle,
   queueItems,
+  primaryAction,
 }: {
   role: string
   eyebrow: string
@@ -522,6 +524,10 @@ export default function RoleDashboard({
   metrics: Metric[]
   queueTitle: string
   queueItems: QueueItem[]
+  primaryAction?: {
+    label: string
+    href: string
+  }
 }) {
   const [data, setData] = useState<Record<string, string | number> | null>(
     null
@@ -632,18 +638,30 @@ useEffect(() => {
   return (
     <div className="space-y-6">
 
-      <header className="border-b border-[#143b28] pb-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">
-          {eyebrow}
-        </p>
+      <header className="flex flex-col gap-4 border-b border-[#143b28] pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#20dc73]">
+            {eyebrow}
+          </p>
 
-        <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
-          {title}
-        </h1>
+          <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
+            {title}
+          </h1>
 
-        <p className="mt-2 max-w-3xl text-sm text-white/55">
-          {description}
-        </p>
+          <p className="mt-2 max-w-3xl text-sm text-white/55">
+            {description}
+          </p>
+        </div>
+
+        {primaryAction ? (
+          <Link
+            href={primaryAction.href}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-[#20dc73]/40 bg-[#20dc73]/10 px-4 text-sm font-semibold text-[#20dc73] transition hover:border-[#20dc73] hover:bg-[#20dc73]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            {primaryAction.label}
+          </Link>
+        ) : null}
       </header>
 
       {error && (

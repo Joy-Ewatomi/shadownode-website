@@ -107,6 +107,11 @@ export default function ClientRequestsPage() {
                 window.location.href =
                   "/dashboard/client/requests/cybersecurity"
               }
+
+              if (service === "custom") {
+                window.location.href =
+                  "/dashboard/client/requests/custom"
+              }
             }}
           />
         </section>

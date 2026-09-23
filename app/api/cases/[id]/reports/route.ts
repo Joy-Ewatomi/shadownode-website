@@ -14,6 +14,7 @@ import {
 } from "@/lib/investigation-workspace"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 import {
+  notifyAdmins,
   notifySuperAdmins,
   notifyUser,
 } from "@/lib/services/notification-service"
@@ -29,7 +30,6 @@ const REPORT_STATUSES = [
 
 const CLIENT_VISIBLE_STATUSES = new Set([
   "delivered",
-  "final",
   "published",
 ])
 
@@ -3899,6 +3899,19 @@ export async function PATCH(
     ].some((value) => value !== undefined)
 
     if (
+      isFinalized &&
+      changesReportContent
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Approved, finalized, delivered, or published report content is immutable. Create a revised draft instead.",
+        },
+        { status: 409 },
+      )
+    }
+
+    if (
       changesReportContent &&
       !hasOperationalAccess
     ) {
@@ -4282,7 +4295,7 @@ export async function PATCH(
       : "Case report"
 
     if (nextStatus === "review") {
-      await notifySuperAdmins({
+      const reviewNotification = {
         caseId:
           access.caseId,
         type:
@@ -4306,7 +4319,12 @@ export async function PATCH(
           action:
             "review_report",
         },
-      })
+      }
+
+      await Promise.all([
+        notifyAdmins(reviewNotification),
+        notifySuperAdmins(reviewNotification),
+      ])
     }
 
     if (nextStatus === "approved") {

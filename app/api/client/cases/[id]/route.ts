@@ -372,7 +372,6 @@ export async function GET(
             case_id = $1
             AND status IN (
               'delivered',
-              'final',
               'published'
             )
             AND COALESCE(classification, 'confidential') <> 'internal'

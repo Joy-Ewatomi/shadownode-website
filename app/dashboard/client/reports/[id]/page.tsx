@@ -48,7 +48,6 @@ export default async function ClientReportPage({
         AND up.user_id = $2
         AND COALESCE(r.status, 'published') IN (
           'delivered',
-          'final',
           'published'
         )
         AND COALESCE(r.classification, 'confidential') <> 'internal'

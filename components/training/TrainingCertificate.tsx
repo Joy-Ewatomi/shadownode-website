@@ -688,6 +688,24 @@ export default function TrainingCertificate({
     }, 1500)
   }
 
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !cert ||
+      new URLSearchParams(window.location.search).get("print") !== "1"
+    ) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      printCertificate()
+    }, 600)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [cert])
+
   /*
    * ============================================================
    * CERTIFICATE VALUES

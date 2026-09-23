@@ -1,9 +1,9 @@
 "use client"
 
-import { ArrowRight, Search, Shield } from "lucide-react"
+import { ArrowRight, Plus, Search, Shield } from "lucide-react"
 
 type Props = {
-  onSelect: (service: "osint" | "cybersecurity") => void
+  onSelect: (service: "osint" | "cybersecurity" | "custom") => void
 }
 
 export default function RequestServiceSelector({ onSelect }: Props) {
@@ -115,6 +115,27 @@ export default function RequestServiceSelector({ onSelect }: Props) {
               </div>
             </div>
 
+            <ArrowRight className="h-5 w-5 text-white/30 transition group-hover:text-[#20dc73]" />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelect("custom")}
+          className="group w-full rounded-md border border-dashed border-[#143b28] bg-black/20 p-6 text-left transition hover:border-[#20dc73] hover:bg-[#20dc73]/5"
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex gap-4">
+              <div className="rounded-md bg-[#20dc73]/10 p-3">
+                <Plus className="h-6 w-6 text-[#20dc73]" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Custom Request</h3>
+                <p className="mt-2 text-sm text-white/55">
+                  Describe another service or project. The bureau will review it and request the information needed for the suitable workflow.
+                </p>
+              </div>
+            </div>
             <ArrowRight className="h-5 w-5 text-white/30 transition group-hover:text-[#20dc73]" />
           </div>
         </button>

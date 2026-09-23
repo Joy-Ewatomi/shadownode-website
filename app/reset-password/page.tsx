@@ -11,9 +11,21 @@ function ResetPasswordForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    setLoading(true);
+    setMessage("");
+    setIsError(false);
+
+    if (!token) {
+      setIsError(true);
+      setMessage("Reset link is missing a token. Please request a new password reset link.");
+      setLoading(false);
+      return;
+    }
 
     const response = await fetch("/api/auth/reset-password", {
       method: "POST",
@@ -28,7 +40,9 @@ function ResetPasswordForm() {
     });
 
     const data = await response.json();
+    setIsError(!response.ok);
     setMessage(data.message || data.error || "Request processed.");
+    setLoading(false);
   }
 
   return (
@@ -57,12 +71,18 @@ function ResetPasswordForm() {
           minLength={12}
         />
 
-        <Button className="w-full">
-          Update password
+        <Button className="w-full" disabled={loading || !token}>
+          {loading ? "Updating..." : "Update password"}
         </Button>
 
+        {!token && !message ? (
+          <p className="rounded border border-[#ff6b6b]/30 bg-[#ff6b6b]/10 px-3 py-2 text-sm text-[#ffd1d1]">
+            Reset link is missing a token. Please request a new password reset link.
+          </p>
+        ) : null}
+
         {message ? (
-          <p className="text-sm text-[#c7ffe6]">
+          <p className={`rounded border px-3 py-2 text-sm ${isError ? "border-[#ff6b6b]/30 bg-[#ff6b6b]/10 text-[#ffd1d1]" : "border-[#20dc73]/35 bg-[#20dc73]/10 text-[#c7ffe6]"}`}>
             {message}
           </p>
         ) : null}

@@ -3,8 +3,9 @@ import { auditLog, hashPassword, hashToken, validatePassword } from "@/lib/auth"
 import { query } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
-  const { token, password, confirmPassword } = await request.json();
-  if (typeof token !== "string" || typeof password !== "string") return NextResponse.json({ error: "Token and password are required" }, { status: 400 });
+  const { token: rawToken, password, confirmPassword } = await request.json();
+  const token = typeof rawToken === "string" ? rawToken.trim() : "";
+  if (!token || typeof password !== "string") return NextResponse.json({ error: "Reset link is missing or invalid. Please request a new reset link." }, { status: 400 });
   if (confirmPassword !== undefined && confirmPassword !== password) return NextResponse.json({ error: "Passwords do not match" }, { status: 400 });
   if (!validatePassword(password)) return NextResponse.json({ error: "Password must be 12+ characters and include uppercase, lowercase, number, and symbol." }, { status: 400 });
 
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     [hashToken(token)],
   );
   const reset = rows[0];
-  if (!reset || new Date(reset.expires_at) < new Date()) return NextResponse.json({ error: "Reset link is invalid or expired" }, { status: 400 });
+  if (!reset || new Date(reset.expires_at) < new Date()) return NextResponse.json({ error: "Reset link is invalid or expired. Please request a new reset link." }, { status: 400 });
 
   await query("UPDATE app_users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [await hashPassword(password), reset.user_id]);
   await query("UPDATE password_resets SET used_at = NOW() WHERE id = $1", [reset.id]);

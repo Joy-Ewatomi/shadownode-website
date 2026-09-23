@@ -10,7 +10,7 @@ interface Request {
   id: string
   token: string
   service_type: string
-  status: 'submitted' | 'active' | 'completed'
+  status: string
   description: string
   budget: string
   timeline: string
@@ -26,10 +26,16 @@ const STATUS_COLORS = {
   completed: { color: 'text-secondary', bg: 'bg-secondary/10', border: 'border-secondary/30' }
 }
 
-const STATUS_LABELS = {
-  submitted: 'Under Review',
-  active: 'Investigation Active',
-  completed: 'Completed'
+function statusPresentation(status: string) {
+  if (status === 'completed' || status === 'closed' || status === 'published' || status === 'delivered') {
+    return { key: 'completed' as const, label: 'Completed' }
+  }
+
+  if (status === 'active' || status === 'waiting_client' || status === 'waiting_evidence' || status === 'report_review') {
+    return { key: 'active' as const, label: 'In Progress' }
+  }
+
+  return { key: 'submitted' as const, label: 'Under Review' }
 }
 
 export default function StatusPage() {
@@ -41,6 +47,7 @@ export default function StatusPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [searched, setSearched] = useState(!!tokenParam)
+  const presentation = request ? statusPresentation(request.status) : null
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -156,9 +163,9 @@ export default function StatusPage() {
                   <h1 className="text-3xl font-bold mb-2">Case Status</h1>
                   <p className="text-foreground/60 font-mono text-sm">{request.token}</p>
                 </div>
-                <div className={`px-4 py-2 rounded-lg border ${STATUS_COLORS[request.status].border} ${STATUS_COLORS[request.status].bg}`}>
-                  <p className={`font-medium text-sm ${STATUS_COLORS[request.status].color}`}>
-                    {STATUS_LABELS[request.status]}
+                <div className={`px-4 py-2 rounded-lg border ${STATUS_COLORS[presentation!.key].border} ${STATUS_COLORS[presentation!.key].bg}`}>
+                  <p className={`font-medium text-sm ${STATUS_COLORS[presentation!.key].color}`}>
+                    {presentation!.label}
                   </p>
                 </div>
               </div>
@@ -204,44 +211,44 @@ export default function StatusPage() {
 
                   <div className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${request.status === 'submitted' ? 'bg-muted' : 'bg-primary'}`} />
-                      {request.status !== 'completed' && <div className="w-0.5 h-12 bg-border/30" />}
+                      <div className={`w-3 h-3 rounded-full ${presentation!.key === 'submitted' ? 'bg-muted' : 'bg-primary'}`} />
+                      {presentation!.key !== 'completed' && <div className="w-0.5 h-12 bg-border/30" />}
                     </div>
                     <div className="pb-4">
-                      <p className={`font-medium ${request.status === 'submitted' ? 'text-foreground/50' : 'text-primary'}`}>
+                      <p className={`font-medium ${presentation!.key === 'submitted' ? 'text-foreground/50' : 'text-primary'}`}>
                         Initial Assessment
                       </p>
                       <p className="text-sm text-foreground/60">
-                        {request.status === 'submitted' ? 'Expected within 24 hours' : 'Completed'}
+                        {presentation!.key === 'submitted' ? 'Pending bureau review' : 'Completed'}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${request.status !== 'active' ? 'bg-muted' : 'bg-primary'}`} />
-                      {request.status === 'completed' && <div className="w-0.5 h-12 bg-primary/30" />}
+                      <div className={`w-3 h-3 rounded-full ${presentation!.key !== 'active' ? 'bg-muted' : 'bg-primary'}`} />
+                      {presentation!.key === 'completed' && <div className="w-0.5 h-12 bg-primary/30" />}
                     </div>
                     <div className="pb-4">
-                      <p className={`font-medium ${request.status === 'active' || request.status === 'completed' ? 'text-primary' : 'text-foreground/50'}`}>
+                      <p className={`font-medium ${presentation!.key === 'active' || presentation!.key === 'completed' ? 'text-primary' : 'text-foreground/50'}`}>
                         Investigation Active
                       </p>
                       <p className="text-sm text-foreground/60">
-                        {request.status !== 'submitted' ? 'In Progress' : 'Pending'}
+                        {presentation!.key !== 'submitted' ? 'In Progress' : 'Pending'}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${request.status === 'completed' ? 'bg-primary' : 'bg-muted'}`} />
+                      <div className={`w-3 h-3 rounded-full ${presentation!.key === 'completed' ? 'bg-primary' : 'bg-muted'}`} />
                     </div>
                     <div>
-                      <p className={`font-medium ${request.status === 'completed' ? 'text-primary' : 'text-foreground/50'}`}>
+                      <p className={`font-medium ${presentation!.key === 'completed' ? 'text-primary' : 'text-foreground/50'}`}>
                         Delivery & Briefing
                       </p>
                       <p className="text-sm text-foreground/60">
-                        {request.status === 'completed' ? 'Available for download' : 'Pending'}
+                        {presentation!.key === 'completed' ? 'Completed' : 'Pending'}
                       </p>
                     </div>
                   </div>

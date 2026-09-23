@@ -8,15 +8,12 @@ import {
 } from "@/lib/auth"
 
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { getOAuthBaseUrl, getOAuthCallbackUrl, getOAuthStateCookieName, type OAuthProvider as Provider } from "@/lib/oauth"
 
 import {
   NextRequest,
   NextResponse,
 } from "next/server"
-
-type Provider =
-  | "google"
-  | "github"
 
 type OAuthUser = {
   id: string
@@ -107,13 +104,8 @@ export async function GET(
         "state"
       )
 
-    const stateCookie =
-      request.cookies.get(
-        "shadownode_oauth_state"
-      )?.value
-
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL
+    const stateCookieName = getOAuthStateCookieName(provider)
+    const stateCookie = request.cookies.get(stateCookieName)?.value
 
     const clientId =
       process.env[
@@ -132,12 +124,11 @@ export async function GET(
     if (
       !code ||
       !state ||
-      stateCookie !== `${provider}.${state}` ||
-      !appUrl ||
+      stateCookie !== state ||
       !clientId ||
       !clientSecret
     ) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           error:
             "OAuth sign-in could not be verified",
@@ -146,14 +137,15 @@ export async function GET(
           status: 400,
         }
       )
+      response.cookies.delete(stateCookieName)
+      return response
     }
 
     // --------------------------------
     // REDIRECT URI
     // --------------------------------
 
-    const redirectUri =
-      `${appUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`
+    const redirectUri = getOAuthCallbackUrl(request, provider)
 
     // --------------------------------
     // EXCHANGE CODE FOR ACCESS TOKEN
@@ -585,7 +577,7 @@ export async function GET(
         NextResponse.redirect(
           new URL(
             "/login?twoFactorRequired=1",
-            request.url
+            getOAuthBaseUrl(request)
           )
         )
 
@@ -595,7 +587,7 @@ export async function GET(
       )
 
       response.cookies.delete(
-        "shadownode_oauth_state"
+        stateCookieName
       )
 
       return response
@@ -625,7 +617,7 @@ export async function GET(
     )
 
     response.cookies.delete(
-      "shadownode_oauth_state"
+      stateCookieName
     )
 
     return response

@@ -62,6 +62,7 @@ type TeamMember = {
   username: string | null
   email: string | null
   role: string | null
+  assignment_role: string | null
   assigned_by_username: string | null
 }
 
@@ -758,7 +759,9 @@ export default function CaseDashboard() {
 
                                   <p className="mt-0.5 text-xs capitalize text-white/40">
                                     {cleanText(
-                                      member.role,
+                                      [member.assignment_role, member.role]
+                                        .filter(Boolean)
+                                        .join(" · "),
                                       "team member",
                                     ).replace(
                                       /_/g,

@@ -79,10 +79,10 @@ const PRIORITIES = [
 ]
 
 const ASSIGNMENT_ROLES = [
+  "lead_investigator",
   "investigator",
   "analyst",
-  "administrator",
-  "super_administrator",
+  "reviewer",
 ] as const
 
 type AssignmentRole =
@@ -172,6 +172,8 @@ type CaseItem = {
   approved_quote_currency?: string | null
   approved_quote_notes?: string | null
   approved_estimated_completion?: string | null
+  osint_completion_date?: string | null
+  preferred_deadline?: string | null
   quote_sent_at?: string | null
   client_decision_at?: string | null
   declined_reason?: string | null
@@ -285,6 +287,12 @@ function formatDateTime(value?: string | null) {
       minute: "2-digit",
     },
   )
+}
+
+function dateInputValue(value?: string | null) {
+  if (!value) return ""
+
+  return value.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || ""
 }
 
 function formatMoney(
@@ -1226,30 +1234,8 @@ export default function AdminCasesPage() {
 
   const selectedRoleStaff =
     useMemo(() => {
-      return staff.filter(
-        (member) => {
-          if (
-            assignmentRole ===
-            "super_administrator"
-          ) {
-            return (
-              member.role ===
-                "super_administrator" ||
-              member.role ===
-                "super-administrator"
-            )
-          }
-
-          return (
-            member.role ===
-            assignmentRole
-          )
-        },
-      )
-    }, [
-      staff,
-      assignmentRole,
-    ])
+      return staff
+    }, [staff])
 
   const assignmentStats =
     useMemo(() => {
@@ -2562,11 +2548,19 @@ export default function AdminCasesPage() {
                       {!showAssignmentForm ? (
                         <Button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            setAssignmentDeadline(
+                              dateInputValue(
+                                selectedCase.osint_completion_date ||
+                                  selectedCase.preferred_deadline ||
+                                  selectedCase.approved_estimated_completion ||
+                                  selectedCase.estimated_completion,
+                              ),
+                            )
                             setShowAssignmentForm(
                               true,
                             )
-                          }
+                          }}
                           className="w-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
                         >
                           <UserPlus className="mr-2 h-4 w-4" />

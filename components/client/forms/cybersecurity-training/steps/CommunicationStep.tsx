@@ -6,6 +6,7 @@ import CommunicationSection from "../sections/CommunicationSection"
 type Props = {
  form:any
  set:(value:any)=>void
+ anonymous?: boolean
 }
 
 
@@ -13,6 +14,7 @@ type Props = {
 export default function CommunicationStep({
   form,
   set,
+  anonymous = false,
 }:Props){
 
 
@@ -27,6 +29,7 @@ Provide your preferred communication details so our team can contact you.
 
 
 <CommunicationSection
+allowPortal={!anonymous}
 
 country={form.client_country}
 

@@ -18,6 +18,8 @@ export const OPERATIONAL_CASE_ASSIGNMENT_ROLES = [
   "lead_investigator",
   "investigator",
   "analyst",
+  "administrator",
+  "super_administrator"
 ] as const
 
 export type DashboardCounts = Record<string, number>
@@ -80,7 +82,6 @@ export async function getClientDashboardCounts({
           WHERE c.client_profile_id = $2::uuid
             AND COALESCE(r.status, 'published') IN (
               'delivered',
-              'final',
               'published'
             )
             AND COALESCE(r.classification, 'confidential') <> 'internal'
@@ -104,7 +105,6 @@ export async function getClientDashboardCounts({
           WHERE c.client_profile_id = $2::uuid
             AND COALESCE(r.status, 'published') IN (
               'delivered',
-              'final',
               'published'
             )
             AND COALESCE(r.classification, 'confidential') <> 'internal'
@@ -352,8 +352,13 @@ export async function getAdminDashboardCounts({
         (
           SELECT COUNT(*)::int
           FROM training_engagements
-          WHERE status IN ('awaiting_assignment', 'pending_assignment', 'awaiting_scheduling')
-             OR trainer_approval_status IN ($7, 'pending')
+          WHERE status IN (
+            'awaiting_assignment',
+            'pending_assignment',
+            'awaiting_scheduling'
+          )
+            OR status = $6
+            OR trainer_approval_status IN ($7, 'pending')
         ) AS training_requiring_action,
         (
           SELECT COUNT(DISTINCT COALESCE(

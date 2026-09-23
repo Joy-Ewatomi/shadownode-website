@@ -31,6 +31,7 @@ type Props = {
   onEmailChange: (value: string) => void
   onWhatsappChange: (value: string) => void
   onSignalChange: (value: string) => void
+  allowPortal?: boolean
 }
 
 
@@ -53,6 +54,7 @@ export default function CommunicationSection({
   onEmailChange,
   onWhatsappChange,
   onSignalChange: _onSignalChange,
+  allowPortal = true,
 
 }: Props) {
 
@@ -178,23 +180,27 @@ Preferred Communication
 {
 value:"email",
 label:"Email",
-description:"Detailed updates by email and in your portal.",
+description: allowPortal
+? "Detailed updates by email and in your portal."
+: "The bureau will contact you by email.",
 icon:MessageSquareText
 },
 
 {
 value:"whatsapp",
 label:"WhatsApp",
-description:"Updates through WhatsApp and in your portal.",
+description: allowPortal
+? "Updates through WhatsApp and in your portal."
+: "The bureau will contact you through WhatsApp.",
 icon:Phone
 },
 
-{
+...(allowPortal ? [{
 value:"portal",
 label:"Portal",
 description:"Full updates in your portal, with brief email alerts.",
 icon:Shield
-}
+}] : [])
 
 ].map((item)=>{
 

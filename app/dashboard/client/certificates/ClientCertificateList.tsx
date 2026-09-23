@@ -3,7 +3,9 @@
 import Link from "next/link"
 import {
   Award,
+  Download,
   ExternalLink,
+  Printer,
   ShieldCheck,
 } from "lucide-react"
 
@@ -46,6 +48,11 @@ export default function ClientCertificateList({
   certificates: ClientCertificateListItem[]
 }) {
   const { getUnreadForResource } = useClientNotifications()
+
+  function printCertificate(certificate: ClientCertificateListItem) {
+    const url = `/dashboard/training/${certificate.training_engagement_id}/certificate?certificateId=${certificate.id}&print=1`
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
 
   if (certificates.length === 0) {
     return (
@@ -171,6 +178,24 @@ export default function ClientCertificateList({
                 <ShieldCheck className="h-3.5 w-3.5" />
                 Open Certificate
               </Link>
+
+              <Link
+                href={`/dashboard/training/${certificate.training_engagement_id}/certificate?certificateId=${certificate.id}`}
+                download={`${certificate.certificate_number}.html`}
+                className="inline-flex items-center gap-2 rounded border border-white/15 px-3 py-2 text-xs font-semibold text-white/60 transition hover:border-white/30 hover:text-white"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => printCertificate(certificate)}
+                className="inline-flex items-center gap-2 rounded border border-white/15 px-3 py-2 text-xs font-semibold text-white/60 transition hover:border-white/30 hover:text-white"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Print
+              </button>
 
               {certificate.verification_url && (
                 <Link

@@ -83,7 +83,7 @@ export default async function ReportsPage() {
       AND (
         $3::text <> 'client'
         OR (
-          cr.status IN ('delivered', 'final', 'published')
+          cr.status IN ('delivered', 'published')
           AND COALESCE(cr.classification, 'confidential') <> 'internal'
         )
       )

@@ -19,6 +19,7 @@ type CaseRow = {
   updated_at: string
 
   investigator_username: string | null
+  active_operator_summary: string | null
 
   investigation_objective: string | null
   client_username: string | null
@@ -120,6 +121,28 @@ export default async function CasesPage() {
         c.updated_at,
 
         investigator.username AS investigator_username,
+
+        (
+          SELECT STRING_AGG(
+            COALESCE(assigned_user.username, 'Assigned operator') || ' (' ||
+            REPLACE(COALESCE(active_assignment.assignment_role, 'investigator'), '_', ' ') || ')',
+            ', '
+            ORDER BY active_assignment.assigned_at ASC
+          )
+          FROM case_assignments active_assignment
+          JOIN user_profiles assigned_profile
+            ON assigned_profile.id = active_assignment.assigned_to
+          JOIN app_users assigned_user
+            ON assigned_user.id = assigned_profile.user_id
+          WHERE active_assignment.case_id = c.id
+            AND active_assignment.removed_at IS NULL
+            AND COALESCE(active_assignment.status, 'assigned') IN (
+              'assigned',
+              'approved',
+              'active',
+              'accepted'
+            )
+        ) AS active_operator_summary,
 
         r.investigation_objective,
 
@@ -477,9 +500,9 @@ export default async function CasesPage() {
               />
 
               <Info
-                label="Investigator"
+                label="Active team"
                 value={
-                  item.investigator_username ||
+                  item.active_operator_summary ||
                   "Unassigned"
                 }
               />
@@ -534,9 +557,9 @@ export default async function CasesPage() {
                   />
 
                   <Info
-                    label="Investigator"
+                    label="Active team"
                     value={
-                      item.investigator_username ||
+                      item.active_operator_summary ||
                       "Not assigned"
                     }
                   />

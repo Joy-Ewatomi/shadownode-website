@@ -39,6 +39,7 @@ export async function convertAcceptedRequestToCase(
       training_topics: string | null
       training_participant_count: number | string | null
       training_details: unknown
+      evidence_uploads: unknown
     }>(
       `
       SELECT
@@ -59,7 +60,8 @@ export async function convertAcceptedRequestToCase(
         training_goal,
         training_topics,
         training_participant_count,
-        training_details
+        training_details,
+        evidence_uploads
       FROM requests
       WHERE id = $1
         AND user_id = $2
@@ -218,6 +220,105 @@ export async function convertAcceptedRequestToCase(
 
     if (linkedRequest.rowCount !== 1) {
       throw new Error("Request-to-case linkage failed")
+    }
+
+    const requestEvidence = Array.isArray(item.evidence_uploads)
+      ? item.evidence_uploads
+      : []
+    const verifiedEvidence = requestEvidence.filter(
+      (entry): entry is Record<string, unknown> =>
+        Boolean(
+          entry &&
+            typeof entry === "object" &&
+            (entry as Record<string, unknown>).verified === true &&
+            typeof (entry as Record<string, unknown>).storage_path === "string" &&
+            typeof (entry as Record<string, unknown>).sha256 === "string",
+        ),
+    )
+
+    for (const evidence of verifiedEvidence) {
+      const custody = Array.isArray(evidence.custody) ? evidence.custody : []
+      const transferredAt = new Date().toISOString()
+
+      await client.query(
+        `
+          INSERT INTO forensic_files (
+            case_id,
+            file_name,
+            file_size,
+            file_type,
+            file_hash,
+            uploaded_by,
+            storage_path,
+            is_evidence,
+            evidence_type,
+            description,
+            chain_of_custody
+          )
+          SELECT
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            TRUE,
+            'client_submission',
+            'Evidence supplied with the original investigation request.',
+            $8::jsonb
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM forensic_files ff
+            WHERE ff.case_id = $1
+              AND ff.storage_path = $7
+          )
+        `,
+        [
+          caseId,
+          String(evidence.name || "request-evidence"),
+          Number(evidence.size) || null,
+          String(evidence.type || "application/octet-stream"),
+          String(evidence.sha256),
+          clientProfile.id,
+          String(evidence.storage_path),
+          JSON.stringify([
+            ...custody,
+            {
+              action: "promoted_to_case_evidence",
+              actor_id: actorUserId,
+              timestamp: transferredAt,
+              notes: `Transferred from request ${requestId} to case ${caseId}.`,
+            },
+          ]),
+        ],
+      )
+    }
+
+    if (verifiedEvidence.length > 0) {
+      await client.query(
+        `
+          INSERT INTO case_updates (
+            case_id,
+            updated_by,
+            update_type,
+            title,
+            content
+          )
+          VALUES (
+            $1,
+            $2,
+            'evidence_uploaded',
+            'Request Evidence Transferred',
+            $3
+          )
+        `,
+        [
+          caseId,
+          clientProfile.id,
+          `${verifiedEvidence.length} verified evidence file${verifiedEvidence.length === 1 ? " was" : "s were"} transferred from the original request.`,
+        ],
+      )
     }
 
     await client.query(

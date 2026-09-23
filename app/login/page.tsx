@@ -17,6 +17,7 @@ export default function AuthPage() {
   const [rememberDevice, setRememberDevice] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [twoFactorCode, setTwoFactorCode] = useState('')
 
@@ -48,6 +49,7 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setSuccess('')
 
     const endpoint = twoFactorRequired ? '/api/auth/2fa/verify' : tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
     const bodyData = tab === 'login'
@@ -75,7 +77,7 @@ export default function AuthPage() {
 
       if (tab === 'signup') {
         setTab('login')
-        setError('Account created. Check your email to verify it, then sign in.')
+        setSuccess('Account created. Check your email to verify it, then sign in.')
         setPassword('')
         setConfirmPassword('')
       } else {
@@ -186,6 +188,12 @@ export default function AuthPage() {
               {error && (
                 <div className="rounded border border-[#ff6b6b]/30 bg-[#ff6b6b]/10 px-3 py-2 text-sm text-[#ffd1d1]">
                   {error}
+                </div>
+              )}
+
+              {success && (
+                <div className="rounded border border-[#20dc73]/35 bg-[#20dc73]/10 px-3 py-2 text-sm text-[#c7ffe6]">
+                  {success}
                 </div>
               )}
 

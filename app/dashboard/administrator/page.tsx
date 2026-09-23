@@ -85,6 +85,10 @@ export default function AdministratorDashboard() {
       eyebrow="Mission Control"
       title="Administrator Dashboard"
       description="Manage client requests, prepare investigation quotes, review operational workflow, and coordinate active bureau assignments."
+      primaryAction={{
+        label: "Create Request",
+        href: "/request/anonymous",
+      }}
       metrics={[
         {
           key: "total_cases",

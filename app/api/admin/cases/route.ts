@@ -127,6 +127,8 @@ export async function GET() {
         r.approved_quote_currency,
         r.approved_quote_notes,
         r.approved_estimated_completion,
+        r.osint_completion_date,
+        r.preferred_deadline,
         r.quote_sent_at,
         r.client_decision_at,
         r.declined_reason,

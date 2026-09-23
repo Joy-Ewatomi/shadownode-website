@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import { NextRequest, NextResponse } from "next/server"
+import { getOAuthCallbackUrl, getOAuthStateCookieName, getOAuthStateCookieOptions, type OAuthProvider } from "@/lib/oauth"
 
 const providers = {
   google: {
@@ -50,8 +51,7 @@ export async function GET(
       )
     }
 
-    const name =
-      provider as keyof typeof providers
+    const name = provider as OAuthProvider
 
     // --------------------------------
     // CLIENT CONFIGURATION
@@ -62,10 +62,7 @@ export async function GET(
         `OAUTH_${provider.toUpperCase()}_CLIENT_ID`
       ]
 
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL
-
-    if (!clientId || !appUrl) {
+    if (!clientId) {
       return NextResponse.json(
         {
           error:
@@ -90,8 +87,7 @@ export async function GET(
     // REDIRECT URI
     // --------------------------------
 
-    const redirectUri =
-      `${appUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`
+    const redirectUri = getOAuthCallbackUrl(request, name)
 
     // --------------------------------
     // AUTHORIZATION URL
@@ -134,17 +130,9 @@ export async function GET(
       NextResponse.redirect(url)
 
     response.cookies.set(
-      "shadownode_oauth_state",
-      `${provider}.${state}`,
-      {
-        httpOnly: true,
-        secure:
-          process.env.NODE_ENV ===
-          "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 600,
-      }
+      getOAuthStateCookieName(name),
+      state,
+      getOAuthStateCookieOptions(request)
     )
 
     return response

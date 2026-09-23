@@ -3,9 +3,17 @@ import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 
 type ProfileRow = {
+  id: string | null
   full_name: string | null
   is_anonymous: boolean | null
   organization_name: string | null
+}
+
+type ClientCountRow = {
+  requests: string | number | null
+  cases: string | number | null
+  training: string | number | null
+  certificates: string | number | null
 }
 
 type SessionRow = {
@@ -28,6 +36,7 @@ export default async function SettingsPage() {
     query<ProfileRow>(
       `
       SELECT
+        up.id,
         up.full_name,
         up.is_anonymous,
         org.name AS organization_name
@@ -57,6 +66,37 @@ export default async function SettingsPage() {
   ])
 
   const profileRow = profile.rows[0]
+  const clientCounts =
+    user.role === "client" && profileRow?.id
+      ? await query<ClientCountRow>(
+          `
+          SELECT
+            (
+              SELECT COUNT(*)
+              FROM requests
+              WHERE user_id = $1
+            ) AS requests,
+            (
+              SELECT COUNT(*)
+              FROM cases
+              WHERE client_profile_id = $2
+                 OR case_user_id = $2
+            ) AS cases,
+            (
+              SELECT COUNT(*)
+              FROM training_engagements
+              WHERE client_profile_id = $2
+            ) AS training,
+            (
+              SELECT COUNT(*)
+              FROM training_certificates
+              WHERE client_profile_id = $2
+            ) AS certificates
+          `,
+          [user.id, profileRow.id],
+        ).catch(() => ({ rows: [] as ClientCountRow[] }))
+      : { rows: [] as ClientCountRow[] }
+  const clientCountRow = clientCounts.rows[0]
 
   return (
     <main className="space-y-6">
@@ -81,6 +121,34 @@ export default async function SettingsPage() {
           <Info label="Anonymous Profile" value={profileRow?.is_anonymous ? "yes" : "no"} />
         </div>
       </section>
+
+      {user.role === "client" ? (
+        <section className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-white">Client Settings</h2>
+              <p className="mt-1 text-sm text-white/45">
+                Client workspace summary and account routing details.
+              </p>
+            </div>
+            <span className="rounded border border-[#20dc73]/30 px-2 py-1 text-xs text-[#20dc73]">
+              active client portal
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 text-xs text-white/50 md:grid-cols-4">
+            <Info label="Requests" value={formatCount(clientCountRow?.requests)} />
+            <Info label="Cases" value={formatCount(clientCountRow?.cases)} />
+            <Info label="Training" value={formatCount(clientCountRow?.training)} />
+            <Info label="Certificates" value={formatCount(clientCountRow?.certificates)} />
+          </div>
+
+          <div className="mt-4 grid gap-3 text-xs text-white/50 md:grid-cols-2">
+            <Info label="Client Profile ID" value={profileRow?.id || "not linked"} />
+            <Info label="Verification" value={user.email_verified_at ? "email verified" : "email not verified"} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-md border border-[#143b28] bg-[#06110f]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#143b28] px-5 py-4">
@@ -107,6 +175,12 @@ export default async function SettingsPage() {
       </section>
     </main>
   )
+}
+
+function formatCount(value: string | number | null | undefined) {
+  const number = Number(value ?? 0)
+
+  return Number.isFinite(number) ? String(number) : "0"
 }
 
 function Info({ label, value }: { label: string; value: string }) {

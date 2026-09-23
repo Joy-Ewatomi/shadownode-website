@@ -14,7 +14,6 @@ import {
 
 const CLIENT_VISIBLE_REPORT_STATUSES = new Set([
   "delivered",
-  "final",
   "published",
 ])
 

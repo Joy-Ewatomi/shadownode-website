@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!client_country) {
+    if (!client_country && service_type !== "custom") {
       return NextResponse.json(
         {
           error: "Country is required",

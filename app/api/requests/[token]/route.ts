@@ -35,6 +35,7 @@ export async function GET(
           id,
           case_number,
           title,
+          description,
           service_type,
           timeline,
           status,
@@ -61,9 +62,12 @@ export async function GET(
     }
 
     return NextResponse.json({
+      id: data.id,
+      token,
       request_id: data.id,
       case_number: data.case_number ?? null,
       title: data.title ?? null,
+      description: data.description ?? null,
       service_type: data.service_type ?? null,
       timeline: data.timeline ?? null,
       status: data.status ?? null,

@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
   const user = rows[0];
   if (user) {
     const token = newToken();
+    await query("DELETE FROM password_resets WHERE user_id = $1 AND used_at IS NULL", [user.id]);
     await query("INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES ($1, $2, $3)", [user.id, hashToken(token), new Date(Date.now() + 15 * 60_000).toISOString()]);
     await sendPasswordResetEmail(email, token);
   }

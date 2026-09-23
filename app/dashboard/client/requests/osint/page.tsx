@@ -19,6 +19,17 @@ export default function OsintRequestPage() {
     setSubmitting(true)
 
     try {
+      const evidenceFiles = data.evidence_files
+        .map((item) => item.file)
+        .filter((file): file is File => file instanceof File)
+
+      const requestPayload = {
+        ...data,
+        // Evidence metadata is written only after the server has stored and
+        // hashed each binary file.
+        evidence_files: [],
+      }
+
       const res = await fetch(
         "/api/client/requests/osint",
         {
@@ -27,7 +38,7 @@ export default function OsintRequestPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify(requestPayload),
         },
       )
 
@@ -39,6 +50,33 @@ export default function OsintRequestPage() {
             "Failed to submit OSINT request",
         )
         return
+      }
+
+      if (evidenceFiles.length > 0) {
+        const evidenceBody = new FormData()
+        evidenceFiles.forEach((file) => {
+          evidenceBody.append("files", file)
+        })
+
+        const evidenceResponse = await fetch(
+          `/api/client/requests/${result.id}/evidence`,
+          {
+            method: "POST",
+            credentials: "include",
+            body: evidenceBody,
+          },
+        )
+
+        if (!evidenceResponse.ok) {
+          const evidenceResult = await evidenceResponse
+            .json()
+            .catch(() => ({}))
+
+          alert(
+            evidenceResult.error ||
+              "Your request was submitted, but its evidence files could not be uploaded. Contact operations before the request is reviewed.",
+          )
+        }
       }
 
       setSubmittedRef(

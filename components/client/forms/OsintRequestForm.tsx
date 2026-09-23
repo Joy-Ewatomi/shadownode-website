@@ -190,7 +190,7 @@ export type EvidenceFile = {
   name: string
   size: number
   type: string
-  dataUrl?: string
+  file?: File
 }
 
 export type InvestigationFormData = {
@@ -435,6 +435,7 @@ type Props = {
   ) => Promise<void>
 
   submitting: boolean
+  anonymous?: boolean
 }
 
 /* ============================================================
@@ -487,10 +488,14 @@ function FormInput({
 export default function InvestigationForm({
   onSubmit,
   submitting,
+  anonymous = false,
 }: Props) {
   const [form, setForm] =
     useState<InvestigationFormData>(
-      createEmptyForm(),
+      {
+        ...createEmptyForm(),
+        communication_method: anonymous ? "email" : "portal",
+      },
     )
 
   const [step, setStep] = useState(1)
@@ -555,8 +560,12 @@ export default function InvestigationForm({
 
         setLastFileError("")
 
-        const newFiles: EvidenceFile[] =
-          []
+        const newFiles: EvidenceFile[] = []
+        const currentCount = form.evidence_files.length
+        const currentSize = form.evidence_files.reduce(
+          (total, file) => total + file.size,
+          0,
+        )
 
         for (
           let index = 0;
@@ -568,9 +577,27 @@ export default function InvestigationForm({
           const MAX_SIZE =
             50 * 1024 * 1024
 
+          if (currentCount + newFiles.length >= 10) {
+            setLastFileError(
+              "A maximum of 10 evidence files can be submitted with one request.",
+            )
+            break
+          }
+
           if (file.size > MAX_SIZE) {
             setLastFileError(
               `"${file.name}" exceeds the 50MB limit and has been skipped.`,
+            )
+            continue
+          }
+
+          const pendingSize = newFiles.reduce(
+            (total, pending) => total + pending.size,
+            0,
+          )
+          if (currentSize + pendingSize + file.size > 100 * 1024 * 1024) {
+            setLastFileError(
+              "The combined evidence upload cannot exceed 100MB.",
             )
             continue
           }
@@ -586,6 +613,7 @@ export default function InvestigationForm({
             name: file.name,
             size: file.size,
             type: file.type,
+            file,
           })
         }
 
@@ -597,7 +625,7 @@ export default function InvestigationForm({
           ],
         }))
       },
-      [],
+      [form.evidence_files],
     )
 
   const removeEvidenceFile =
@@ -684,6 +712,10 @@ export default function InvestigationForm({
         )
 
       case 3:
+        if (form.service_type === "custom") {
+          return true
+        }
+
         switch (
           form.subject_type
         ) {
@@ -1000,6 +1032,10 @@ export default function InvestigationForm({
         )
 
       case 3:
+        if (form.service_type === "custom") {
+          return true
+        }
+
         return Boolean(
           subjectSummary() &&
             subjectSummary() !==
@@ -1051,10 +1087,6 @@ export default function InvestigationForm({
   ========================================================== */
 
   function renderStep1() {
-    const isCustom =
-      form.service_type ===
-      "custom"
-
     return (
       <div className="space-y-6">
         <div>
@@ -1126,82 +1158,7 @@ export default function InvestigationForm({
             },
           )}
 
-          <button
-            type="button"
-            onClick={() =>
-              set({
-                service_type:
-                  "custom",
-              })
-            }
-            className={`group relative rounded-2xl border p-4 text-left transition ${
-              isCustom
-                ? "border-[#20dc73]/60 bg-[#20dc73]/8"
-                : "border-dashed border-[#143b28] bg-black/10 hover:border-[#20dc73]/30"
-            }`}
-          >
-            {isCustom ? (
-              <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#20dc73]">
-                <Check className="h-3 w-3 text-black" />
-              </div>
-            ) : null}
-
-            <div className="flex items-start gap-3 pr-6">
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                  isCustom
-                    ? "bg-[#20dc73]/10 text-[#20dc73]"
-                    : "bg-black/30 text-white/25"
-                }`}
-              >
-                <Plus className="h-4 w-4" />
-              </div>
-
-              <div>
-                <p
-                  className={`text-sm font-semibold ${
-                    isCustom
-                      ? "text-[#20dc73]"
-                      : "text-white/70"
-                  }`}
-                >
-                  Custom Requirement
-                </p>
-
-                <p className="mt-1 text-[10px] leading-4 text-white/25">
-                  Tell us what intelligence support you need
-                </p>
-              </div>
-            </div>
-          </button>
         </div>
-
-        {isCustom ? (
-          <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
-            <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
-              Describe your custom requirement
-            </label>
-
-            <textarea
-              value={
-                form.custom_description
-              }
-              onChange={(event) =>
-                set({
-                  custom_description:
-                    event.target.value,
-                })
-              }
-              rows={5}
-              placeholder="Describe the investigation, analysis, verification, or intelligence support you require..."
-              className="w-full rounded-xl border border-[#143b28] bg-black px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 transition focus:border-[#20dc73]/50"
-            />
-
-            <p className="mt-2 text-[10px] text-white/25">
-              Minimum 10 characters.
-            </p>
-          </div>
-        ) : null}
       </div>
     )
   }
@@ -1221,11 +1178,15 @@ export default function InvestigationForm({
 
             <div>
               <p className="text-sm font-semibold text-white">
-                What should the investigation establish?
+                {form.service_type === "custom"
+                  ? "What outcome do you need?"
+                  : "What should the investigation establish?"}
               </p>
 
               <p className="mt-1 text-xs leading-5 text-white/35">
-                Describe the specific question, concern, or outcome you need ShadowNode to investigate.
+                {form.service_type === "custom"
+                  ? "Describe what you want the bureau to deliver and what a successful result should look like."
+                  : "Describe the specific question, concern, or outcome you need ShadowNode to investigate."}
               </p>
             </div>
           </div>
@@ -1270,7 +1231,9 @@ export default function InvestigationForm({
         <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
           <div className="flex items-center justify-between gap-3">
             <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
-              Investigation objective
+              {form.service_type === "custom"
+                ? "Requested outcome"
+                : "Investigation objective"}
             </label>
 
             <span
@@ -1298,7 +1261,11 @@ export default function InvestigationForm({
                   event.target.value,
               })
             }
-            placeholder="Example: Determine whether this individual is using multiple online identities and establish which public profiles appear to belong to the same person."
+            placeholder={
+              form.service_type === "custom"
+                ? "Example: Design and build a secure portal where our team can submit cases, exchange evidence, and receive reports."
+                : "Example: Determine whether this individual is using multiple online identities and establish which public profiles appear to belong to the same person."
+            }
             className="mt-3 min-h-40 w-full rounded-xl border border-[#143b28] bg-black px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 transition focus:border-[#20dc73]/50"
           />
 
@@ -1315,6 +1282,33 @@ export default function InvestigationForm({
   ========================================================== */
 
   function renderStep3() {
+    if (form.service_type === "custom") {
+      return (
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
+            <p className="text-sm font-semibold text-white">
+              Project context
+            </p>
+            <p className="mt-1 text-xs leading-5 text-white/35">
+              Share any background, current systems, constraints, audience, or examples that will help the bureau assess the request.
+            </p>
+
+            <textarea
+              value={form.existing_information}
+              onChange={(event) =>
+                set({
+                  existing_information: event.target.value,
+                })
+              }
+              rows={7}
+              placeholder="Optional context, technical requirements, users, integrations, references, budget expectations, or other relevant details..."
+              className="mt-4 w-full rounded-xl border border-[#143b28] bg-black px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 transition focus:border-[#20dc73]/50"
+            />
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="space-y-5">
         <div>
@@ -2376,6 +2370,7 @@ export default function InvestigationForm({
 
         <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
           <CommunicationSection
+            allowPortal={!anonymous}
             country={
               form.client_country
             }
@@ -2466,11 +2461,13 @@ export default function InvestigationForm({
   ========================================================== */
 
   function getSummaryItems() {
-    return [
+    const items = [
       {
         label: "Division",
         value:
-          "OSINT Operations",
+          form.service_type === "custom"
+            ? "Bureau Services"
+            : "OSINT Operations",
       },
       {
         label: "Service",
@@ -2478,7 +2475,7 @@ export default function InvestigationForm({
           form.service_type ===
           "custom"
             ? form.custom_description ||
-              "Custom Requirement"
+              "Custom Request"
             : form.service_type,
       },
       {
@@ -2547,6 +2544,17 @@ export default function InvestigationForm({
           "Not specified",
       },
     ]
+
+    if (form.service_type === "custom") {
+      return items.filter(
+        (item) =>
+          item.label !== "Subject" &&
+          item.label !== "Target" &&
+          item.label !== "Depth",
+      )
+    }
+
+    return items
   }
 
   function renderStep8() {
