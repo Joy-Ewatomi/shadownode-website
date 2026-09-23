@@ -1,75 +1,128 @@
-export async function sendVerificationEmail(email: string, token: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (!apiKey || !from || !appUrl) return false;
-  const verificationUrl = `${appUrl.replace(/\/$/, "")}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [email], subject: "Verify your ShadowNode account", html: `<p>Verify your account by clicking <a href="${verificationUrl}">this secure link</a>. It expires in 24 hours.</p>` }),
-  });
-  if (!response.ok) throw new Error("Verification email could not be sent");
-  return true;
-}
-
-export async function sendPasswordResetEmail(email: string, token: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  if (!apiKey || !from || !appUrl) return false;
-  const normalizedAppUrl = appUrl.startsWith("http") ? appUrl : `https://${appUrl}`;
-  const resetUrl = `${normalizedAppUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [email], subject: "Reset your ShadowNode password", html: `<p>Reset your password by opening <a href="${resetUrl}">this secure link</a>. It expires in 15 minutes.</p>` }),
-  });
-  if (!response.ok) throw new Error("Password reset email could not be sent");
-  return true;
-}
+import {
+  createEmailActionUrl,
+  renderShadowNodeEmail,
+  type EmailTemplateInput,
+} from "@/lib/email-template"
 
 export type EmailAttachment = {
   filename: string
   type?: string
-  data: string // base64
+  data: string
 }
 
 export async function sendEmail(options: {
   to: string | string[]
   subject: string
-  html?: string
-  text?: string
+  content: EmailTemplateInput
   attachments?: EmailAttachment[]
 }) {
   const apiKey = process.env.RESEND_API_KEY
   const from = process.env.EMAIL_FROM
   if (!apiKey || !from) return false
 
-  const body: any = {
+  const rendered = renderShadowNodeEmail(options.content)
+  const body: {
+    from: string
+    to: string[]
+    subject: string
+    html: string
+    text: string
+    attachments?: Array<{ filename: string; type: string; data: string }>
+  } = {
     from,
     to: Array.isArray(options.to) ? options.to : [options.to],
     subject: options.subject,
+    html: rendered.html,
+    text: rendered.text,
   }
 
-  if (options.html) body.html = options.html
-  if (options.text) body.text = options.text
-
-  if (options.attachments && options.attachments.length) {
-    // Resend API expects attachments as array of {filename, type, data}
-    body.attachments = options.attachments.map((a) => ({ filename: a.filename, type: a.type || 'application/octet-stream', data: a.data }))
+  if (options.attachments?.length) {
+    body.attachments = options.attachments.map((attachment) => ({
+      filename: attachment.filename,
+      type: attachment.type || "application/octet-stream",
+      data: attachment.data,
+    }))
   }
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(body),
   })
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '')
-    throw new Error(`Email send failed: ${res.status} ${txt}`)
+  if (!response.ok) {
+    throw new Error(`Email send failed with status ${response.status}`)
   }
-
   return true
+}
+
+export async function sendVerificationEmail(
+  email: string,
+  token: string,
+  recipientName?: string | null,
+) {
+  const verificationUrl = createEmailActionUrl(
+    "/api/auth/verify-email",
+    { token },
+  )
+  if (!verificationUrl) return false
+
+  return sendEmail({
+    to: email,
+    subject: "Verify your ShadowNode account",
+    content: {
+      preheader: "Complete your email verification to secure your ShadowNode account.",
+      category: "Account security",
+      heading: "Verify your email address",
+      recipientName,
+      paragraphs: [
+        "Thank you for creating a ShadowNode account.",
+        "Email verification is required before you can access protected ShadowNode services.",
+      ],
+      cta: {
+        label: "Verify email address",
+        url: verificationUrl,
+        showFallbackUrl: true,
+      },
+      expiryNotice: "This verification link expires in 24 hours.",
+      securityNotice: "If you did not create this account, you can safely ignore this email.",
+    },
+  })
+}
+
+export async function sendPasswordResetEmail(
+  email: string,
+  token: string,
+  recipientName?: string | null,
+) {
+  const resetUrl = createEmailActionUrl(
+    "/reset-password",
+    { token },
+  )
+  if (!resetUrl) return false
+
+  return sendEmail({
+    to: email,
+    subject: "Reset your ShadowNode password",
+    content: {
+      preheader: "A secure password-reset request was made for your ShadowNode account.",
+      category: "Account security",
+      heading: "Reset your password",
+      recipientName,
+      paragraphs: [
+        "We received a request to reset the password for your ShadowNode account.",
+        "Use the secure link below to choose a new password.",
+      ],
+      cta: {
+        label: "Reset password",
+        url: resetUrl,
+        showFallbackUrl: true,
+      },
+      expiryNotice: "This secure link expires in 15 minutes and can only be used once.",
+      securityNotice: "If you did not request this reset, ignore this email and consider reviewing your account security.",
+    },
+  })
 }

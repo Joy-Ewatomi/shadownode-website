@@ -402,62 +402,53 @@ export function clearTwoFactorChallenge(
   return response
 }
 
-export function attachTwoFactorChallenge(
+export async function attachTwoFactorChallenge(
   response: NextResponse,
-  userId: string
+  userId: string,
+  request?: NextRequest,
+  primaryAuthMethod = "password",
 ) {
-  const payload =
-    Buffer
-      .from(
-        JSON.stringify({
-          userId,
+  const token = newToken()
+  const expiresAt = new Date(
+    Date.now() + TWO_FACTOR_MINUTES * 60000,
+  ).toISOString()
 
-          expiresAt:
-            Date.now() +
-            TWO_FACTOR_MINUTES * 60000,
-        })
+  await query(
+    `
+      INSERT INTO pending_two_factor_challenges (
+        user_id,
+        token_hash,
+        primary_auth_method,
+        expires_at,
+        created_ip,
+        created_user_agent
       )
-      .toString("base64url")
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `,
+    [
+      userId,
+      hashToken(token),
+      primaryAuthMethod,
+      expiresAt,
+      getIp(request),
+      request?.headers.get("user-agent") ?? null,
+    ],
+  )
 
   response.cookies.set(
     TWO_FACTOR_COOKIE,
-    payload,
+    token,
     {
-      ...sessionCookieOptions(
-        TWO_FACTOR_MINUTES * 60
-      ),
-
+      ...sessionCookieOptions(TWO_FACTOR_MINUTES * 60),
       sameSite: "strict",
-    }
+    },
   )
 
   return response
 }
 
 export async function getTwoFactorChallenge() {
-  const raw =
-    (await cookies())
-      .get(TWO_FACTOR_COOKIE)
-      ?.value
-
-  if (!raw) {
-    return null
-  }
-
-  try {
-    const value =
-      JSON.parse(
-        Buffer
-          .from(raw, "base64url")
-          .toString()
-      )
-
-    return value.expiresAt > Date.now()
-      ? value
-      : null
-  } catch {
-    return null
-  }
+  return (await cookies()).get(TWO_FACTOR_COOKIE)?.value ?? null
 }
 
 // ===============================

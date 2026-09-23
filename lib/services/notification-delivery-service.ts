@@ -1,4 +1,5 @@
 import { sendEmail } from "@/lib/email"
+import { getEmailApplicationOrigin, type EmailTemplateInput } from "@/lib/email-template"
 import { query } from "@/lib/db"
 
 type DeliveryPreference =
@@ -25,6 +26,7 @@ type RecipientDeliveryContext = {
   user_id: string
   email: string | null
   email_verified_at: string | null
+  full_name: string | null
   communication_method: string | null
   communication_email: string | null
   communication_whatsapp: string | null
@@ -83,15 +85,6 @@ function asString(value: unknown) {
   }
 
   return null
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
 }
 
 function normalizePreference(
@@ -159,11 +152,7 @@ function resourceValue(
 }
 
 function appBaseUrl() {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.APP_URL ||
-    ""
-  ).replace(/\/$/, "")
+  return getEmailApplicationOrigin() || ""
 }
 
 function absolutePortalUrl(
@@ -171,10 +160,14 @@ function absolutePortalUrl(
 ) {
   const base = appBaseUrl()
   if (!base || !destination) return null
-  if (/^https?:\/\//i.test(destination)) {
-    return destination
+
+  try {
+    const baseUrl = new URL(base)
+    const url = new URL(destination, baseUrl)
+    return url.origin === baseUrl.origin ? url.toString() : null
+  } catch {
+    return null
   }
-  return `${base}${destination.startsWith("/") ? "" : "/"}${destination}`
 }
 
 function normalizeEventType(type: string) {
@@ -308,42 +301,50 @@ function briefText(type: string) {
   return "A ShadowNode portal update is available."
 }
 
+function emailCategory(type: string) {
+  const normalized = normalizeEventType(type)
+  if (normalized.includes("quote") || normalized.includes("negotiation")) return "Quotation update"
+  if (normalized.includes("payment")) return "Payment update"
+  if (normalized.includes("message")) return "Secure case communication"
+  if (normalized.includes("report")) return "Report update"
+  if (normalized.includes("certificate")) return "Certificate update"
+  if (normalized.includes("training")) return "Training update"
+  if (normalized.includes("case")) return "Case update"
+  return "Service notification"
+}
+
 function emailTemplate(
   notification: PortalNotification,
   sensitivity: DeliverySensitivity,
   portalUrl: string | null,
-) {
-  const safeTitle = escapeHtml(notification.title)
-  const intro =
+  recipientName: string | null,
+): { subject: string; content: EmailTemplateInput } {
+  const message =
     sensitivity === "detailed"
-      ? escapeHtml(
-          notification.message ||
-            "There is a new update in your ShadowNode portal.",
-        )
-      : escapeHtml(briefText(notification.type))
-  const button = portalUrl
-    ? `<p style="margin:24px 0"><a href="${escapeHtml(portalUrl)}" style="background:#20dc73;color:#06110f;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:700">Open secure portal</a></p>`
-    : ""
-
-  const html = `
-    <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a">
-      <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#047857">ShadowNode Intelligence Bureau</p>
-      <h1 style="font-size:20px;margin:0 0 12px">${safeTitle}</h1>
-      <p>${intro}</p>
-      ${button}
-      <p style="font-size:13px;color:#475569">Sensitive case information is only available after signing in to the secure portal.</p>
-    </div>
-  `
-
-  const text = `${notification.title}\n\n${sensitivity === "detailed" ? notification.message || briefText(notification.type) : briefText(notification.type)}\n\n${portalUrl || "Sign in to your ShadowNode portal."}\n\nSensitive case information is only available after signing in to the secure portal.`
+      ? notification.message ||
+        "There is a new update in your ShadowNode portal."
+      : briefText(notification.type)
 
   return {
     subject:
       sensitivity === "detailed"
         ? notification.title
         : "ShadowNode portal update",
-    html,
-    text,
+    content: {
+      preheader: briefText(notification.type),
+      category: emailCategory(notification.type),
+      heading: notification.title,
+      recipientName,
+      paragraphs: [message],
+      cta: portalUrl
+        ? {
+            label: "Open secure portal",
+            url: portalUrl,
+          }
+        : undefined,
+      securityNotice:
+        "Sensitive case information is only available after signing in to the secure portal.",
+    },
   }
 }
 
@@ -398,6 +399,7 @@ async function recipientContext(
           au.id AS user_id,
           au.email,
           au.email_verified_at,
+          up.full_name,
           r.communication_method,
           r.communication_email,
           r.communication_whatsapp
@@ -636,6 +638,7 @@ async function deliverEmail(input: {
     input.notification,
     sensitivity,
     portalUrl,
+    input.context.full_name,
   )
   const attemptId = await createAttempt({
     notification: input.notification,
@@ -653,8 +656,7 @@ async function deliverEmail(input: {
     const sent = await sendEmail({
       to: destination,
       subject: template.subject,
-      html: template.html,
-      text: template.text,
+      content: template.content,
     })
 
     await markAttempt(

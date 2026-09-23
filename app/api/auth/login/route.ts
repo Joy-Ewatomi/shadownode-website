@@ -137,9 +137,11 @@ export async function POST(request: NextRequest) {
         requiresTwoFactor: true,
       })
 
-      return attachTwoFactorChallenge(
+      return await attachTwoFactorChallenge(
         response,
-        user.id
+        user.id,
+        request,
+        "password",
       )
     }
 

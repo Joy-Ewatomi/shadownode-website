@@ -612,9 +612,11 @@ export async function GET(
           )
         )
 
-      attachTwoFactorChallenge(
+      await attachTwoFactorChallenge(
         response,
-        user.id
+        user.id,
+        request,
+        provider,
       )
 
       return clearOAuthStateCookie(response, request, provider)
