@@ -42,6 +42,21 @@ export default function AuthPage() {
         setTwoFactorRequired(true)
         setError('Enter the code from your authenticator app.')
       }
+
+      const oauthError = params.get('oauthError')
+      const oauthMessages: Record<string, string> = {
+        provider_access_denied: 'Sign-in was cancelled or access was denied by the provider.',
+        provider_error: 'The OAuth provider could not complete sign-in. Please try again.',
+        missing_code: 'The provider did not return a sign-in code. Please try again.',
+        missing_state: 'The sign-in response was incomplete. Please try again.',
+        missing_cookie: 'Your sign-in session expired or cookies were unavailable. Please try again.',
+        state_mismatch: 'The sign-in session could not be verified. Please try again.',
+        missing_client_id: 'OAuth sign-in is temporarily unavailable.',
+        missing_client_secret: 'OAuth sign-in is temporarily unavailable.',
+      }
+      if (oauthError && oauthMessages[oauthError]) {
+        setError(oauthMessages[oauthError])
+      }
     }
   }, [])
 

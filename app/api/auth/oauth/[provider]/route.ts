@@ -1,6 +1,6 @@
 import crypto from "crypto"
-import { NextRequest, NextResponse } from "next/server"
-import { getOAuthCallbackUrl, getOAuthStateCookieName, getOAuthStateCookieOptions, type OAuthProvider } from "@/lib/oauth"
+import { NextRequest } from "next/server"
+import { createOAuthInitiationResponse, getOAuthCallbackUrl, oauthJson, type OAuthProvider } from "@/lib/oauth"
 
 const providers = {
   google: {
@@ -17,6 +17,10 @@ const providers = {
 } as const
 
 const oauthClientKey = `client_${"id"}`
+
+export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+export const revalidate = 0
 
 export async function GET(
   request: NextRequest,
@@ -41,7 +45,7 @@ export async function GET(
         provider
       )
     ) {
-      return NextResponse.json(
+      return oauthJson(
         {
           error: "Unsupported OAuth provider",
         },
@@ -63,7 +67,7 @@ export async function GET(
       ]
 
     if (!clientId) {
-      return NextResponse.json(
+      return oauthJson(
         {
           error:
             "OAuth provider is not configured",
@@ -126,23 +130,19 @@ export async function GET(
     // STATE COOKIE
     // --------------------------------
 
-    const response =
-      NextResponse.redirect(url)
-
-    response.cookies.set(
-      getOAuthStateCookieName(name),
+    return createOAuthInitiationResponse(
+      request,
+      name,
+      url,
       state,
-      getOAuthStateCookieOptions(request)
     )
-
-    return response
   } catch (error) {
     console.error(
       "OAUTH INITIATION ERROR:",
       error
     )
 
-    return NextResponse.json(
+    return oauthJson(
       {
         error:
           "OAuth authentication could not be started",

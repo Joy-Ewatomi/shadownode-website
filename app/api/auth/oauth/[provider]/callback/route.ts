@@ -8,7 +8,7 @@ import {
 } from "@/lib/auth"
 
 import { supabaseAdmin } from "@/lib/supabase/admin"
-import { getOAuthBaseUrl, getOAuthCallbackUrl, getOAuthStateCookieName, type OAuthProvider as Provider } from "@/lib/oauth"
+import { clearOAuthStateCookie, getOAuthBaseUrl, getOAuthCallbackUrl, getOAuthStateCookieName, oauthJson, oauthRedirect, safeOAuthErrorCode, verifyOAuthCallback, type OAuthProvider as Provider } from "@/lib/oauth"
 
 import {
   NextRequest,
@@ -52,6 +52,10 @@ const config: Record<
   },
 }
 
+export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+export const revalidate = 0
+
 export async function GET(
   request: NextRequest,
   {
@@ -62,6 +66,14 @@ export async function GET(
     }>
   }
 ) {
+  let callbackProvider: Provider | null = null
+  const callbackJson = (body: unknown, init?: ResponseInit) => {
+    const response = oauthJson(body, init)
+    return callbackProvider
+      ? clearOAuthStateCookie(response, request, callbackProvider)
+      : response
+  }
+
   try {
     const {
       provider: rawProvider,
@@ -77,7 +89,7 @@ export async function GET(
         rawProvider
       )
     ) {
-      return NextResponse.json(
+      return callbackJson(
         {
           error: "Unsupported OAuth provider",
         },
@@ -89,6 +101,7 @@ export async function GET(
 
     const provider =
       rawProvider as Provider
+    callbackProvider = provider
 
     // --------------------------------
     // OAUTH PARAMETERS
@@ -117,28 +130,46 @@ export async function GET(
         `OAUTH_${provider.toUpperCase()}_CLIENT_SECRET`
       ]
 
-    // --------------------------------
-    // STATE VALIDATION
-    // --------------------------------
+    const providerErrorCode = safeOAuthErrorCode(
+      request.nextUrl.searchParams.get("error")
+    )
+    const verification = verifyOAuthCallback({
+      code,
+      returnedState: state,
+      stateCookie,
+      clientId,
+      clientSecret,
+    })
 
-    if (
-      !code ||
-      !state ||
-      stateCookie !== state ||
-      !clientId ||
-      !clientSecret
-    ) {
-      const response = NextResponse.json(
-        {
-          error:
-            "OAuth sign-in could not be verified",
-        },
-        {
-          status: 400,
-        }
-      )
-      response.cookies.delete(stateCookieName)
-      return response
+    if (!verification.valid || providerErrorCode) {
+      console.warn("OAuth callback verification", {
+        provider,
+        requestHostname: request.nextUrl.hostname,
+        providerErrorCode,
+        hasCode: verification.hasCode,
+        hasReturnedState: verification.hasReturnedState,
+        hasStateCookie: verification.hasStateCookie,
+        stateMatches: verification.stateMatches,
+        hasClientId: verification.hasClientId,
+        hasClientSecret: verification.hasClientSecret,
+      })
+    }
+
+    const loginError = providerErrorCode && verification.stateMatches
+      ? providerErrorCode === "access_denied"
+        ? "provider_access_denied"
+        : "provider_error"
+      : verification.failure
+
+    if (loginError) {
+      const loginUrl = new URL("/login", getOAuthBaseUrl(request))
+      loginUrl.searchParams.set("oauthError", loginError)
+      const response = oauthRedirect(loginUrl)
+      return clearOAuthStateCookie(response, request, provider)
+    }
+
+    if (!code || !clientId || !clientSecret) {
+      throw new Error("OAuth callback verification invariant failed")
     }
 
     // --------------------------------
@@ -190,7 +221,7 @@ export async function GET(
         tokenResponse.status
       )
 
-      return NextResponse.json(
+      return callbackJson(
         {
           error:
             "OAuth token exchange failed",
@@ -214,7 +245,7 @@ export async function GET(
         | undefined
 
     if (!accessToken) {
-      return NextResponse.json(
+      return callbackJson(
         {
           error:
             "OAuth token exchange failed",
@@ -252,7 +283,7 @@ export async function GET(
         profileResponse.status
       )
 
-      return NextResponse.json(
+      return callbackJson(
         {
           error:
             "Unable to retrieve OAuth profile",
@@ -343,7 +374,7 @@ export async function GET(
       !providerId ||
       !email
     ) {
-      return NextResponse.json(
+      return callbackJson(
         {
           error:
             "The OAuth provider did not supply a verified email address",
@@ -507,7 +538,7 @@ export async function GET(
           createError
         )
 
-        return NextResponse.json(
+        return callbackJson(
           {
             error:
               "Could not create OAuth account",
@@ -555,7 +586,7 @@ export async function GET(
         linkError
       )
 
-      return NextResponse.json(
+      return callbackJson(
         {
           error:
             "Could not link OAuth account",
@@ -574,7 +605,7 @@ export async function GET(
       user.totp_enabled
     ) {
       const response =
-        NextResponse.redirect(
+        oauthRedirect(
           new URL(
             "/login?twoFactorRequired=1",
             getOAuthBaseUrl(request)
@@ -586,11 +617,7 @@ export async function GET(
         user.id
       )
 
-      response.cookies.delete(
-        stateCookieName
-      )
-
-      return response
+      return clearOAuthStateCookie(response, request, provider)
     }
 
     // --------------------------------
@@ -604,7 +631,7 @@ export async function GET(
       )
 
     const response =
-      NextResponse.redirect(
+      oauthRedirect(
         new URL(
           "/dashboard",
           request.url
@@ -616,11 +643,7 @@ export async function GET(
       sessionToken
     )
 
-    response.cookies.delete(
-      stateCookieName
-    )
-
-    return response
+    return clearOAuthStateCookie(response, request, provider)
 
   } catch (error) {
     console.error(
@@ -628,7 +651,7 @@ export async function GET(
       error
     )
 
-    return NextResponse.json(
+    return callbackJson(
       {
         error:
           "OAuth authentication failed",
