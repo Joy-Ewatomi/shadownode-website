@@ -61,6 +61,16 @@ export function getOAuthStateCookieOptions(request: NextRequest) {
   }
 }
 
+export function getCanonicalOAuthInitiationUrl(
+  request: NextRequest,
+  provider: OAuthProvider,
+) {
+  const canonicalOrigin = getOAuthBaseUrl(request)
+  return request.nextUrl.origin === canonicalOrigin
+    ? null
+    : new URL("/api/auth/oauth/" + provider, canonicalOrigin)
+}
+
 export function createOAuthInitiationResponse(
   request: NextRequest,
   provider: OAuthProvider,
@@ -76,7 +86,16 @@ export function createOAuthInitiationResponse(
   })
 
   const cookieName = getOAuthStateCookieName(provider)
-  response.cookies.set(cookieName, state, getOAuthStateCookieOptions(request))
+  const options = getOAuthStateCookieOptions(request)
+  const setCookieValue = [
+    cookieName + "=" + encodeURIComponent(state),
+    "Path=/",
+    "Max-Age=600",
+    "HttpOnly",
+    "SameSite=Lax",
+    options.secure ? "Secure" : null,
+  ].filter(Boolean).join("; ")
+  response.headers.set("Set-Cookie", setCookieValue)
 
   const setCookie = response.headers.get("set-cookie")
   if (!setCookie || !setCookie.includes(cookieName + "=")) {
@@ -91,11 +110,17 @@ export function clearOAuthStateCookie(
   request: NextRequest,
   provider: OAuthProvider,
 ) {
-  response.cookies.set(getOAuthStateCookieName(provider), "", {
-    ...getOAuthStateCookieOptions(request),
-    maxAge: 0,
-    expires: new Date(0),
-  })
+  const options = getOAuthStateCookieOptions(request)
+  const setCookieValue = [
+    getOAuthStateCookieName(provider) + "=",
+    "Path=/",
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+    "HttpOnly",
+    "SameSite=Lax",
+    options.secure ? "Secure" : null,
+  ].filter(Boolean).join("; ")
+  response.headers.append("Set-Cookie", setCookieValue)
   return response
 }
 

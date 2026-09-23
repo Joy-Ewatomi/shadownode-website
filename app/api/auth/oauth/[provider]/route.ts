@@ -1,6 +1,6 @@
 import crypto from "crypto"
 import { NextRequest } from "next/server"
-import { createOAuthInitiationResponse, getOAuthCallbackUrl, oauthJson, type OAuthProvider } from "@/lib/oauth"
+import { createOAuthInitiationResponse, getCanonicalOAuthInitiationUrl, getOAuthCallbackUrl, oauthJson, oauthRedirect, type OAuthProvider } from "@/lib/oauth"
 
 const providers = {
   google: {
@@ -56,6 +56,11 @@ export async function GET(
     }
 
     const name = provider as OAuthProvider
+    const canonicalInitiationUrl = getCanonicalOAuthInitiationUrl(request, name)
+
+    if (canonicalInitiationUrl) {
+      return oauthRedirect(canonicalInitiationUrl, 302)
+    }
 
     // --------------------------------
     // CLIENT CONFIGURATION
