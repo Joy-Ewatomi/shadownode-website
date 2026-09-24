@@ -23,6 +23,7 @@ export type ClientCertificateListItem = {
   issued_at: string | null
   status: string | null
   verification_url: string | null
+  pdf_url: string | null
   engagement_number: string | null
 }
 
@@ -176,17 +177,19 @@ export default function ClientCertificateList({
                 className="inline-flex items-center gap-2 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-3 py-2 text-xs font-semibold text-[#20dc73] transition hover:bg-[#20dc73]/15"
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Open Certificate
+                View certificate
               </Link>
 
-              <Link
-                href={`/dashboard/training/${certificate.training_engagement_id}/certificate?certificateId=${certificate.id}`}
-                download={`${certificate.certificate_number}.html`}
-                className="inline-flex items-center gap-2 rounded border border-white/15 px-3 py-2 text-xs font-semibold text-white/60 transition hover:border-white/30 hover:text-white"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download
-              </Link>
+              {certificate.pdf_url ? (
+                <a
+                  href={certificate.pdf_url}
+                  download
+                  className="inline-flex items-center gap-2 rounded border border-white/15 px-3 py-2 text-xs font-semibold text-white/60 transition hover:border-white/30 hover:text-white"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download certificate
+                </a>
+              ) : null}
 
               <button
                 type="button"
@@ -194,7 +197,7 @@ export default function ClientCertificateList({
                 className="inline-flex items-center gap-2 rounded border border-white/15 px-3 py-2 text-xs font-semibold text-white/60 transition hover:border-white/30 hover:text-white"
               >
                 <Printer className="h-3.5 w-3.5" />
-                Print
+                Print / Save as PDF
               </button>
 
               {certificate.verification_url && (

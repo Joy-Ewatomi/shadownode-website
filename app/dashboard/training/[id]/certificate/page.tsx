@@ -77,6 +77,7 @@ export default async function CertificatePage({
   searchParams?: Promise<{
     certificateId?: string
     participantId?: string
+    print?: string
   }>
 }) {
   const { id } = await params
@@ -314,7 +315,8 @@ export default async function CertificatePage({
           trainer_name,
           completion_date,
           issued_at,
-          verification_url
+          verification_url,
+          pdf_url
         FROM training_certificates
         WHERE training_engagement_id = $1
           AND (
@@ -339,6 +341,13 @@ export default async function CertificatePage({
     certificateRes.rows[0] as
       | Record<string, unknown>
       | undefined
+
+  if (
+    (selectedCertificateId || selectedParticipantId) &&
+    !rawCertificate
+  ) {
+    return notFound()
+  }
 
   const certificate =
     rawCertificate
@@ -396,6 +405,11 @@ export default async function CertificatePage({
           verification_url:
             toNullableString(
               rawCertificate.verification_url,
+            ),
+
+          pdf_url:
+            toNullableString(
+              rawCertificate.pdf_url,
             ),
         }
       : null
@@ -526,8 +540,8 @@ export default async function CertificatePage({
          certificate?.id || null
        }
      />
-     <div className="w-full overflow-auto rounded-xl" style={{ maxHeight: "calc(100vh - 170px)" }}>
-  <div className="min-w-[1100px] p-2">
+     <div className="certificate-screen-scroll w-full overflow-auto rounded-xl">
+       <div className="certificate-screen-canvas min-w-[1100px] p-2">
    <TrainingCertificate
             certificate={certificate}
             engagementId={id}
@@ -548,12 +562,6 @@ export default async function CertificatePage({
               engagement.training_goal
             }
 
-            /*
-             * Certificate trainer designation is fixed.
-             * Do not expose an internal analyst/investigator
-             * name as the public certificate trainer.
-             */
-            trainerName="ShadowNode Training Facilitator"
 
             /*
              * Existing issued certificate takes precedence
@@ -595,66 +603,6 @@ export default async function CertificatePage({
           />
         </div>
       </div>
-
-      <style>{`
-        /* ======================================================
-           SCREEN VIEW
-           ====================================================== */
-
-        .certificate-scroll-wrapper {
-          width: 100%;
-          max-height: calc(100vh - 180px);
-          overflow: auto;
-          border-radius: 12px;
-          background: #0a0f0d;
-          padding: 1.5rem;
-        }
-
-        .certificate-page-container {
-          min-width: 1100px;
-          width: 100%;
-          display: flex;
-          justify-content: center;
-        }
-
-        .certificate-page-container #training-certificate {
-          width: 100%;
-          max-width: 1400px;
-        }
-
-        /* ======================================================
-           PRINT / PDF
-           ====================================================== */
-
-        @media print {
-          .certificate-scroll-wrapper {
-            max-height: none !important;
-            overflow: visible !important;
-            padding: 0 !important;
-            background: transparent !important;
-            border-radius: 0 !important;
-          }
-
-          .certificate-page-container {
-            min-width: 0 !important;
-            width: 297mm !important;
-            height: 210mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          .certificate-page-container #training-certificate,
-          .certificate-page-container .certificate-page {
-            width: 297mm !important;
-            height: 210mm !important;
-            max-width: none !important;
-            max-height: 210mm !important;
-            min-height: 0 !important;
-            aspect-ratio: auto !important;
-            overflow: hidden !important;
-          }
-        }
-      `}</style>
     </TrainingShell>
   )
 }

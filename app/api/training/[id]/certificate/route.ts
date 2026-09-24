@@ -281,6 +281,7 @@ export async function POST(
             completion_date,
             issued_at,
             verification_url,
+            pdf_url,
             status
           FROM training_certificates
           WHERE id = $1
@@ -369,6 +370,11 @@ export async function POST(
         verification_url:
           toNullableString(
             certificate.verification_url,
+          ),
+
+        pdf_url:
+          toNullableString(
+            certificate.pdf_url,
           ),
 
         status:

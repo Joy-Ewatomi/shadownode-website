@@ -67,6 +67,7 @@ export default async function ClientCertificatesPage() {
         tc.issued_at,
         tc.status,
         tc.verification_url,
+        tc.pdf_url,
         te.engagement_number
       FROM training_certificates tc
       JOIN training_engagements te
@@ -121,6 +122,10 @@ export default async function ClientCertificatesPage() {
       verification_url:
         toNullableString(
           row.verification_url,
+        ),
+      pdf_url:
+        toNullableString(
+          row.pdf_url,
         ),
       engagement_number:
         toNullableString(

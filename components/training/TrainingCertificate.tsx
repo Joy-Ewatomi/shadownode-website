@@ -2,7 +2,7 @@
 
 import {
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from "react"
 
@@ -20,7 +20,10 @@ type CertificateData = {
   completion_date?: string | null
   issued_at?: string | null
   verification_url?: string | null
+  pdf_url?: string | null
 }
+
+const automaticPrintStarted = new Set<string>()
 
 type CertificateParticipant = {
   id: string
@@ -341,6 +344,9 @@ export default function TrainingCertificate({
 
   const [loading, setLoading] =
     useState(false)
+  const [certificateVisualReady, setCertificateVisualReady] =
+    useState(!certificate?.verification_url)
+  const printingRef = useRef(false)
 
   const [feedback, setFeedback] =
     useState<FeedbackData | null>(
@@ -638,7 +644,8 @@ export default function TrainingCertificate({
           null,
 
         trainer_name:
-          "ShadowNode Training Facilitator",
+          payload.trainer_name ||
+          null,
 
         /*
          * The certificate completion date should
@@ -656,6 +663,10 @@ export default function TrainingCertificate({
         verification_url:
           payload.verification_url ||
           null,
+
+        pdf_url:
+          payload.pdf_url ||
+          null,
       })
 
       window.alert(
@@ -672,39 +683,45 @@ export default function TrainingCertificate({
     }
   }
 
-  function printCertificate() {
-    document.body.classList.add(
-      "printing-training-certificate",
-    )
+  async function waitForCertificateAssets() {
+    if (!cert || !certificateVisualReady) return false
+    if (document.fonts?.ready) await document.fonts.ready
+    const images = Array.from(document.querySelectorAll<HTMLImageElement>("#training-certificate img"))
+    await Promise.all(images.map(async (image) => {
+      if (image.complete) {
+        try { await image.decode() } catch { /* A loaded image may not support decode. */ }
+        return
+      }
+      await new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true })
+        image.addEventListener("error", () => resolve(), { once: true })
+      })
+    }))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    return true
+  }
 
-    window.setTimeout(() => {
-      window.print()
-    }, 100)
-
-    window.setTimeout(() => {
-      document.body.classList.remove(
-        "printing-training-certificate",
-      )
-    }, 1500)
+  async function printCertificate() {
+    if (printingRef.current || !await waitForCertificateAssets()) return
+    printingRef.current = true
+    document.body.classList.add("printing-training-certificate")
+    const cleanup = () => {
+      document.body.classList.remove("printing-training-certificate")
+      printingRef.current = false
+      window.removeEventListener("afterprint", cleanup)
+    }
+    window.addEventListener("afterprint", cleanup)
+    window.print()
+    window.setTimeout(cleanup, 60000)
   }
 
   useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      !cert ||
-      new URLSearchParams(window.location.search).get("print") !== "1"
-    ) {
-      return
-    }
+    if (!cert || !certificateVisualReady || new URLSearchParams(window.location.search).get("print") !== "1") return
+    if (automaticPrintStarted.has(cert.id)) return
+    automaticPrintStarted.add(cert.id)
+    void printCertificate()
+  }, [cert, certificateVisualReady])
 
-    const timeout = window.setTimeout(() => {
-      printCertificate()
-    }, 600)
-
-    return () => {
-      window.clearTimeout(timeout)
-    }
-  }, [cert])
 
   /*
    * ============================================================
@@ -715,16 +732,12 @@ export default function TrainingCertificate({
   const finalTrainingTitle =
     cert?.training_title ||
     trainingTitle ||
-    "Cybersecurity Awareness Training"
+    "Training Certificate"
 
-  /*
-   * Public trainer designation.
-   *
-   * Internal roles such as "analyst" must never appear
-   * on the public certificate.
-   */
   const finalTrainerName =
-    "ShadowNode Training Facilitator"
+    cert?.trainer_name ||
+    trainerName ||
+    null
 
   /*
    * Certificate completion date:
@@ -738,32 +751,7 @@ export default function TrainingCertificate({
     completionDate ||
     null
 
-  /*
-   * Calculate certificate duration directly from
-   * the engagement timeline.
-   */
-  const calculatedDuration =
-    useMemo(
-      () =>
-        calculateTrainingDuration(
-          startDate,
-          finalCompletionDate,
-        ),
-      [
-        startDate,
-        finalCompletionDate,
-      ],
-    )
 
-  /*
-   * Only use the old duration prop if dates are
-   * unavailable. New certificates should normally
-   * use calculatedDuration.
-   */
-  const finalDuration =
-    calculatedDuration?.label ||
-    duration ||
-    "—"
 
   const finalRecipientName =
     cert?.recipient_name ||
@@ -795,79 +783,74 @@ export default function TrainingCertificate({
   const printStyles = `
     @page {
       size: A4 landscape;
-      margin: 0;
-    }
-
-    html,
-    body {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
+      margin: 8mm;
     }
 
     @media print {
       html,
       body {
-        width: 297mm !important;
-        height: 210mm !important;
+        width: auto !important;
+        height: 0 !important;
+        min-height: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
+        overflow: visible !important;
         background: #ffffff !important;
       }
 
-      body.printing-training-certificate > * {
+      body.printing-training-certificate,
+      body.printing-training-certificate * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      body.printing-training-certificate * {
         visibility: hidden !important;
       }
 
-      body.printing-training-certificate
-        #training-certificate,
-      body.printing-training-certificate
-        #training-certificate * {
+      body.printing-training-certificate #training-certificate,
+      body.printing-training-certificate #training-certificate * {
         visibility: visible !important;
       }
 
-      body.printing-training-certificate
-        #training-certificate {
+      body.printing-training-certificate #training-certificate {
         position: fixed !important;
-        inset: 0 !important;
-        width: 297mm !important;
-        height: 210mm !important;
-        max-width: none !important;
-        max-height: none !important;
+        inset: 0 auto auto 50% !important;
+        transform: translateX(-50%) !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        height: auto !important;
+        min-width: 0 !important;
+        max-width: 274mm !important;
         min-height: 0 !important;
+        max-height: 194mm !important;
+        aspect-ratio: 297 / 210 !important;
         margin: 0 !important;
         padding: 0 !important;
         overflow: hidden !important;
-        box-shadow: none !important;
         border: 0 !important;
+        box-shadow: none !important;
+        break-inside: avoid-page !important;
+        page-break-inside: avoid !important;
       }
 
-      body.printing-training-certificate
-        #training-certificate
-        > .certificate-page {
-        width: 297mm !important;
-        height: 210mm !important;
-        min-height: 0 !important;
-        max-height: 210mm !important;
-        aspect-ratio: auto !important;
-        overflow: hidden !important;
-      }
-
-      body.printing-training-certificate
-        #training-certificate
-        .certificate-content {
+      body.printing-training-certificate #training-certificate > .certificate-page,
+      body.printing-training-certificate #training-certificate .certificate-content {
+        box-sizing: border-box !important;
         width: 100% !important;
         height: 100% !important;
         min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
       }
 
-      body.printing-training-certificate
-        #training-certificate * {
-        break-inside: avoid !important;
+      body.printing-training-certificate #training-certificate .certificate-page {
+        aspect-ratio: auto !important;
+        break-after: avoid-page !important;
+        page-break-after: avoid !important;
       }
     }
   `
-
   /*
    * ============================================================
    * ISSUED CERTIFICATE
@@ -903,13 +886,18 @@ export default function TrainingCertificate({
 
             <button
               type="button"
-              onClick={
-                printCertificate
-              }
+              onClick={() => void printCertificate()}
+              disabled={!certificateVisualReady}
               className="rounded-lg border border-[#c9a227]/40 bg-[#c9a227]/10 px-4 py-2 text-sm font-medium text-[#e8cf72] transition hover:bg-[#c9a227]/20"
             >
-              Print / Save PDF
+              {certificateVisualReady ? "Print / Save as PDF" : "Preparing certificate..."}
             </button>
+
+            {cert.pdf_url ? (
+              <a href={cert.pdf_url} download className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white/70 transition hover:border-white/40 hover:text-white">
+                Download certificate
+              </a>
+            ) : null}
           </div>
 
           {/* ==================================================
@@ -1135,18 +1123,12 @@ export default function TrainingCertificate({
                     {finalTrainingTitle}
                   </div>
 
-                  <p className="mx-auto mt-2 max-w-3xl text-[8.5px] leading-4 text-[#555d68] sm:text-[10.5px] sm:leading-5">
-                    This training has equipped the participant
-                    with essential knowledge and practical
-                    skills to identify, prevent, and respond
-                    to modern cybersecurity threats.
-                  </p>
                 </div>
 
                 {/* DETAILS */}
 
                 <div className="mt-[1.6%] border-y border-[#c79b31]/60 py-[1.35%]">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
 
                     <CertificateDetail
                       icon="calendar"
@@ -1157,12 +1139,6 @@ export default function TrainingCertificate({
                     />
 
                     <CertificateDetail
-                      icon="clock"
-                      label="Duration"
-                      value={finalDuration}
-                    />
-
-                    <CertificateDetail
                       icon="certificate"
                       label="Certificate ID"
                       value={
@@ -1170,13 +1146,13 @@ export default function TrainingCertificate({
                       }
                     />
 
-                    <CertificateDetail
-                      icon="trainer"
-                      label="Trainer"
-                      value={
-                        finalTrainerName
-                      }
-                    />
+                    {finalTrainerName ? (
+                      <CertificateDetail
+                        icon="trainer"
+                        label="Trainer"
+                        value={finalTrainerName}
+                      />
+                    ) : null}
 
                     <CertificateDetail
                       icon="issued"
@@ -1226,24 +1202,20 @@ export default function TrainingCertificate({
                     </div>
                   </div>
 
-                  {/* SIGNATURE */}
+                  {/* SIGNATORY */}
 
                   <div className="pt-0.5 text-center">
-
-                    <div className="font-serif text-[1.55rem] italic leading-none text-[#17243b] sm:text-[1.85rem]">
-                      Joy Ewatomi
-                    </div>
-
-                    <div className="mx-auto mt-1 h-px w-32 bg-[#17243b]/40" />
-
-                    <p className="mt-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-[#17243b] sm:text-[9px]">
-                      Joy Ewatomi
-                    </p>
-
-                    <p className="mt-0.5 text-[6.5px] uppercase tracking-[0.2em] text-[#a97918] sm:text-[7.5px]">
-                      Founder &amp; CEO
-                    </p>
-
+                    {finalTrainerName ? (
+                      <>
+                        <div className="mx-auto mt-5 h-px w-32 bg-[#17243b]/40" />
+                        <p className="mt-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-[#17243b] sm:text-[9px]">
+                          {finalTrainerName}
+                        </p>
+                        <p className="mt-0.5 text-[6.5px] uppercase tracking-[0.2em] text-[#a97918] sm:text-[7.5px]">
+                          Recorded trainer / signatory
+                        </p>
+                      </>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1287,10 +1259,9 @@ export default function TrainingCertificate({
 
                         {cert.verification_url ? (
                           <RealQrCode
-                            value={
-                              cert.verification_url
-                            }
+                            value={cert.verification_url}
                             size={58}
+                            onReady={() => setCertificateVisualReady(true)}
                           />
                         ) : (
                           <div className="flex h-[58px] w-[58px] items-center justify-center border border-[#17243b]/20 bg-white px-1 text-center text-[6px] uppercase leading-tight tracking-[0.04em] text-[#6b7079]">
@@ -1648,15 +1619,23 @@ export default function TrainingCertificate({
 function RealQrCode({
   value,
   size = 58,
+  onReady,
 }: {
   value: string
   size?: number
+  onReady?: () => void
 }) {
   const [qrDataUrl, setQrDataUrl] =
     useState<string | null>(null)
 
   const [error, setError] =
     useState(false)
+
+  const onReadyRef = useRef(onReady)
+
+  useEffect(() => {
+    onReadyRef.current = onReady
+  }, [onReady])
 
   useEffect(() => {
     let cancelled = false
@@ -1689,6 +1668,7 @@ function RealQrCode({
           setQrDataUrl(
             dataUrl,
           )
+          onReadyRef.current?.()
         }
       } catch (error) {
         console.error(
@@ -1699,6 +1679,7 @@ function RealQrCode({
         if (!cancelled) {
           setError(true)
           setQrDataUrl(null)
+          onReadyRef.current?.()
         }
       }
     }
@@ -1708,7 +1689,7 @@ function RealQrCode({
     return () => {
       cancelled = true
     }
-  }, [value])
+  }, [value, onReady])
 
   if (error) {
     return (
