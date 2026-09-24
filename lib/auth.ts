@@ -322,6 +322,11 @@ export async function requireUser() {
   }
 }
 
+export async function getCurrentSessionHash() {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value
+  return token ? hashToken(token) : null
+}
+
 // ===============================
 // DELETE CURRENT SESSION
 // ===============================

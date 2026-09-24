@@ -43,6 +43,10 @@ export default function AuthPage() {
         setError('Enter the code from your authenticator app.')
       }
 
+      if (params.get('loggedOut') === 'all') {
+        setSuccess('All devices were logged out successfully.')
+      }
+
       const oauthError = params.get('oauthError')
       const oauthMessages: Record<string, string> = {
         provider_access_denied: 'Sign-in was cancelled or access was denied by the provider.',
