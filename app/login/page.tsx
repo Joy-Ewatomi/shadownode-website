@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Check, Eye, Github, Lock, Mail, Shield, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { evaluatePassword, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/password-policy'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { motion } from 'framer-motion'
 
@@ -21,13 +22,13 @@ export default function AuthPage() {
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [twoFactorCode, setTwoFactorCode] = useState('')
 
-  const passwordChecks = useMemo(() => [
-    { label: '12+ characters', valid: password.length >= 12 },
-    { label: 'Uppercase', valid: /[A-Z]/.test(password) },
-    { label: 'Lowercase', valid: /[a-z]/.test(password) },
-    { label: 'Number', valid: /\d/.test(password) },
-    { label: 'Special char', valid: /[^A-Za-z0-9]/.test(password) },
-  ], [password])
+  const passwordChecks = useMemo(() => {
+    const policy = evaluatePassword(password)
+    return PASSWORD_REQUIREMENTS.map((requirement) => ({
+      label: requirement.label,
+      valid: policy.checks[requirement.id],
+    }))
+  }, [password])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -47,6 +48,10 @@ export default function AuthPage() {
         setSuccess('All devices were logged out successfully.')
       }
 
+      if (params.get('passwordReset') === '1') {
+        setSuccess('Password reset successfully. Sign in with your new password.')
+      }
+
       const oauthError = params.get('oauthError')
       const oauthMessages: Record<string, string> = {
         provider_access_denied: 'Sign-in was cancelled or access was denied by the provider.',
@@ -64,8 +69,11 @@ export default function AuthPage() {
     }
   }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const submittedPassword = isSignup ? String(formData.get('newPassword') ?? '') : password
+    const submittedConfirmation = isSignup ? String(formData.get('confirmNewPassword') ?? '') : confirmPassword
     setLoading(true)
     setError('')
     setSuccess('')
@@ -73,7 +81,7 @@ export default function AuthPage() {
     const endpoint = twoFactorRequired ? '/api/auth/2fa/verify' : tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
     const bodyData = tab === 'login'
       ? twoFactorRequired ? { code: twoFactorCode } : { username, password, rememberDevice }
-      : { email, username, password, confirmPassword }
+      : { email, username, password: submittedPassword, confirmPassword: submittedConfirmation }
 
     try {
       const response = await fetch(endpoint, {
@@ -171,21 +179,21 @@ export default function AuthPage() {
 
                 <Field label="Password" required>
                   <InputShell icon={<Lock className="h-4 w-4" />} trailing={<Eye className="h-4 w-4" />}>
-                    <Input className="h-10 border-0 bg-transparent px-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••••" required minLength={12} />
+                    <Input className="h-10 border-0 bg-transparent px-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="password" name={isSignup ? "newPassword" : "password"} autoComplete={isSignup ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••••" required minLength={isSignup ? PASSWORD_MIN_LENGTH : undefined} maxLength={isSignup ? PASSWORD_MAX_LENGTH : undefined} />
                   </InputShell>
                 </Field>
 
                 {isSignup && (
                   <Field label="Confirm Password" required>
                     <InputShell icon={<Lock className="h-4 w-4" />} trailing={<Eye className="h-4 w-4" />}>
-                      <Input className="h-10 border-0 bg-transparent px-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••••••" required minLength={12} />
+                      <Input className="h-10 border-0 bg-transparent px-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="password" name="confirmNewPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••••••" required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
                     </InputShell>
                   </Field>
                 )}
               </div>
 
               {isSignup && (
-                <div className="grid gap-x-6 gap-y-1 border-t border-[#20dc73] pt-2 text-xs text-white/75 sm:grid-cols-3">
+                <div aria-live="polite" aria-label="Password requirements" className="grid gap-x-6 gap-y-1 border-t border-[#20dc73] pt-2 text-xs text-white/75 sm:grid-cols-3">
                   {passwordChecks.map((check) => (
                     <span key={check.label} className={check.valid ? 'text-[#7dffb0]' : 'text-white/45'}>
                       <Check className="mr-1 inline h-3 w-3" />{check.label}

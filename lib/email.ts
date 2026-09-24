@@ -1,3 +1,4 @@
+import { createPasswordResetActionUrl } from "@/lib/app-origin"
 import {
   createEmailActionUrl,
   renderShadowNodeEmail,
@@ -98,10 +99,7 @@ export async function sendPasswordResetEmail(
   token: string,
   recipientName?: string | null,
 ) {
-  const resetUrl = createEmailActionUrl(
-    "/reset-password",
-    { token },
-  )
+  const resetUrl = createPasswordResetActionUrl(token)
   if (!resetUrl) return false
 
   return sendEmail({

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auditLog, hashPassword, hashToken, newToken, validatePassword, validateUsername } from "@/lib/auth";
+import { auditLog, hashPassword, hashToken, newToken, validateUsername } from "@/lib/auth";
+import { evaluatePassword } from "@/lib/password-policy";
 import { sendVerificationEmail } from "@/lib/email";
 import { isDatabaseConfigurationError, isDatabaseNetworkError, query } from "@/lib/db";
 
@@ -8,15 +9,12 @@ export async function POST(req: Request) {
     const { username: rawUsername, email: rawEmail, password, confirmPassword } = await req.json();
     const username = typeof rawUsername === "string" ? rawUsername.trim() : "";
     const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
- if (
-  !validateUsername(username) ||
-  !/^\S+@\S+\.\S+$/.test(email) ||
-  typeof password !== "string" ||
-  !validatePassword(password)
-) {
-      return NextResponse.json({ error: "Use a valid email, a 4-30 character username, and a 12+ character password with uppercase, lowercase, number, and symbol." }, { status: 400 });
+    if (!validateUsername(username) || !/^\S+@\S+\.\S+$/.test(email) || typeof password !== "string") {
+      return NextResponse.json({ error: "Use a valid email and a 4-30 character username." }, { status: 400 });
     }
     if (confirmPassword !== undefined && password !== confirmPassword) return NextResponse.json({ error: "Passwords do not match" }, { status: 400 });
+    const passwordPolicy = evaluatePassword(password);
+    if (!passwordPolicy.valid) return NextResponse.json({ error: passwordPolicy.message }, { status: 400 });
 const password_hash = await hashPassword(password);
 
 const { rows } = await query<{

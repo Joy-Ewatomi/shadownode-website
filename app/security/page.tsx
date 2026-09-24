@@ -13,6 +13,13 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  evaluatePassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_REQUIREMENTS,
+  readChangePasswordFormValues,
+} from "@/lib/password-policy"
 
 type View = "history" | "devices" | "twoFactor" | "password" | "disableTwoFactor" | "recovery" | "deletion" | null
 
@@ -59,7 +66,8 @@ export default function SecurityPage() {
   const [error, setError] = useState("")
   const [confirmLogout, setConfirmLogout] = useState(false)
   const panelRef = useRef<HTMLElement | null>(null)
-  const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", password: "", authCode: "", confirmation: "", reason: "" })
+  const [form, setForm] = useState({ password: "", authCode: "", confirmation: "", reason: "" })
+  const [newPasswordForChecklist, setNewPasswordForChecklist] = useState("")
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
   const [deletionRequest, setDeletionRequest] = useState<{ status: string; requested_at: string; cooling_off_ends_at: string } | null>(null)
 
@@ -205,9 +213,27 @@ export default function SecurityPage() {
     } finally { setLoading(null) }
   }
 
-  async function changePassword() {
-    const data = await submitSecurityAction("/api/auth/change-password", { currentPassword: form.currentPassword, newPassword: form.newPassword, confirmPassword: form.confirmPassword }, "password")
-    if (data) setForm((current) => ({ ...current, currentPassword: "", newPassword: "", confirmPassword: "" }))
+  async function changePassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    const values = readChangePasswordFormValues(new FormData(formElement))
+    setNewPasswordForChecklist(values.newPassword)
+    setError("")
+    setMessage("")
+    if (values.newPassword !== values.confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+    const policy = evaluatePassword(values.newPassword)
+    if (!policy.valid) {
+      setError(policy.message || "Password does not meet the security requirements.")
+      return
+    }
+    const data = await submitSecurityAction("/api/auth/change-password", values, "password")
+    if (data) {
+      formElement.reset()
+      setNewPasswordForChecklist("")
+    }
   }
 
   async function disableTwoFactor() {
@@ -373,12 +399,21 @@ export default function SecurityPage() {
           <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="password-heading">
             <h2 id="password-heading" className="text-xl font-semibold">Change password</h2>
             <p className="mt-2 text-sm text-white/55">OAuth-only accounts should use password reset first to establish a password they can verify.</p>
-            <div className="mt-4 grid max-w-xl gap-4">
-              <label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.currentPassword} onChange={(event) => updateForm("currentPassword", event.target.value)} className="mt-2" /></label>
-              <label className="text-sm">New password<Input type="password" autoComplete="new-password" value={form.newPassword} onChange={(event) => updateForm("newPassword", event.target.value)} className="mt-2" /></label>
-              <label className="text-sm">Confirm new password<Input type="password" autoComplete="new-password" value={form.confirmPassword} onChange={(event) => updateForm("confirmPassword", event.target.value)} className="mt-2" /></label>
-              <Button type="button" onClick={changePassword} disabled={loading === "password" || !form.currentPassword || !form.newPassword || !form.confirmPassword}>{loading === "password" ? <Loader2 className="animate-spin" /> : null}Change password</Button>
-            </div>
+            <form onSubmit={changePassword} className="mt-4 grid max-w-xl gap-4" noValidate>
+              <label className="text-sm">Current password<Input type="password" name="currentPassword" autoComplete="current-password" required className="mt-2" /></label>
+              <label className="text-sm">New password<Input type="password" name="newPassword" autoComplete="new-password" required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} onInput={(event) => setNewPasswordForChecklist(event.currentTarget.value)} className="mt-2" /></label>
+              <label className="text-sm">Confirm new password<Input type="password" name="confirmPassword" autoComplete="new-password" required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} className="mt-2" /></label>
+              <div aria-live="polite" aria-label="Password requirements" className="rounded border border-white/10 bg-black/15 p-3">
+                <p className="text-xs font-semibold uppercase text-white/60">Password requirements</p>
+                <ul className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
+                  {PASSWORD_REQUIREMENTS.map((requirement) => {
+                    const satisfied = evaluatePassword(newPasswordForChecklist).checks[requirement.id]
+                    return <li key={requirement.id} className={satisfied ? "text-[#7dffb0]" : "text-white/50"}>{satisfied ? "✓" : "○"} {requirement.label}</li>
+                  })}
+                </ul>
+              </div>
+              <Button type="submit" disabled={loading === "password"}>{loading === "password" ? <Loader2 className="animate-spin" /> : null}Change password</Button>
+            </form>
           </section>
         ) : null}
 

@@ -1,3 +1,5 @@
+import { getTrustedApplicationOrigin } from "./app-origin"
+
 export const EMAIL_LEGAL_NAME = "ShadowNode Operations Bureau Limited"
 export const EMAIL_BRAND_NAME = "ShadowNode Operations Bureau"
 
@@ -36,34 +38,8 @@ export function escapeEmailHtml(value: string) {
     .replace(/'/g, "&#39;")
 }
 
-function configuredOrigins() {
-  return [
-    process.env.NETLIFY === "true" ? process.env.URL : undefined,
-    process.env.APP_URL,
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.URL,
-    process.env.VERCEL_PROJECT_PRODUCTION_URL,
-    process.env.VERCEL_URL,
-  ]
-}
-
 export function getEmailApplicationOrigin() {
-  for (const candidate of configuredOrigins()) {
-    if (!candidate) continue
-    const normalized = /^https?:\/\//i.test(candidate.trim())
-      ? candidate.trim()
-      : `https://${candidate.trim()}`
-
-    try {
-      const url = new URL(normalized)
-      if (url.protocol === "https:" || url.protocol === "http:") {
-        return url.origin
-      }
-    } catch {
-      continue
-    }
-  }
-  return null
+  return getTrustedApplicationOrigin()
 }
 
 export function createEmailActionUrl(
