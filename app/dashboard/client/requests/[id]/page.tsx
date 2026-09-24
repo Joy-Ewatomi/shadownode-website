@@ -7,6 +7,7 @@ import {
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
+import CustomRequestAdditionalInformation from "@/components/requests/CustomRequestAdditionalInformation"
 
 type ClientRequest = {
   [key: string]: unknown
@@ -20,6 +21,7 @@ type ClientRequest = {
   supporting_links?: unknown
   evidence_files?: unknown
   status?: string | null
+  client_facing_status_explanation?: string | null
 
   subject_type?: string | null
   subject_name?: string | null
@@ -995,6 +997,14 @@ const isCybersecurityTraining =
           Review the information submitted with your request.
         </p>
       </header>
+
+      {(normalizedServiceType === "custom_service" || normalizedServiceType === "custom") &&
+        status === "more_information_required" && (
+          <CustomRequestAdditionalInformation
+            requestId={request.id}
+            explanation={request.client_facing_status_explanation}
+          />
+        )}
 
       {/* ===================================================
           SUCCESS

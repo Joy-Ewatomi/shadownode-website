@@ -242,6 +242,15 @@ CREATE TABLE public.requests (
   training_preferred_completion_date date,
   training_timeline_flexible boolean DEFAULT true,
   custom_description text,
+  custom_details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  billing_country character varying,
+  terms_accepted boolean NOT NULL DEFAULT false,
+  submission_key uuid,
+  admin_recommendation jsonb,
+  super_admin_decision jsonb,
+  internal_decision_reason text,
+  client_facing_status_explanation text,
+  decision_confirmed_at timestamp with time zone,
   preferred_deadline date,
   quote_exchange_rate numeric,
   quote_base_currency character varying,
@@ -259,6 +268,17 @@ CREATE TABLE public.requests (
   CONSTRAINT requests_super_admin_reviewed_by_fkey FOREIGN KEY (super_admin_reviewed_by) REFERENCES public.app_users(id),
   CONSTRAINT requests_training_engagement_fk FOREIGN KEY (converted_training_engagement_id) REFERENCES public.training_engagements(id),
   CONSTRAINT requests_training_engagement_legacy_fk FOREIGN KEY (training_engagement_id) REFERENCES public.training_engagements(id)
+);
+CREATE TABLE public.request_amendments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  request_id uuid NOT NULL,
+  submitted_by uuid NOT NULL,
+  amendment_type character varying NOT NULL DEFAULT 'additional_information'::character varying,
+  content jsonb NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT request_amendments_pkey PRIMARY KEY (id),
+  CONSTRAINT request_amendments_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.requests(id),
+  CONSTRAINT request_amendments_submitted_by_fkey FOREIGN KEY (submitted_by) REFERENCES public.app_users(id)
 );
 CREATE TABLE public.payments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

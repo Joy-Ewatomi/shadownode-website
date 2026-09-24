@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import SuperAdminRequestReviewCard from "@/components/requests/SuperAdminRequestReviewCard"
+import CustomRequestReviewPanel from "@/components/requests/CustomRequestReviewPanel"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type RequestData = {
@@ -11,6 +12,9 @@ type RequestData = {
   service_type: string | null
   description: string | null
   investigation_objective: string | null
+  custom_details: Record<string, unknown> | null
+  supporting_links: unknown
+  admin_recommendation: Record<string, unknown> | null
   status: string
 
   preferred_currency: string | null
@@ -141,6 +145,9 @@ export default async function SuperAdministratorRequestDetailPage({
       service_type,
       description,
       investigation_objective,
+      custom_details,
+      supporting_links,
+      admin_recommendation,
       status,
 
       preferred_currency,
@@ -431,16 +438,18 @@ export default async function SuperAdministratorRequestDetailPage({
 
       {/* Full Super Administrator Review */}
 
-      <SuperAdminRequestReviewCard
-        request={request}
-        aiQuote={aiQuote}
-        adminQuote={adminQuote}
-        quoteHistory={quoteHistory}
-        auditHistory={auditHistory}
-        negotiationHistory={
-          negotiationHistory
-        }
-      />
+      {request.service_type === "custom_service" || request.service_type === "custom" ? (
+        <CustomRequestReviewPanel request={request} role={user.role} />
+      ) : (
+        <SuperAdminRequestReviewCard
+          request={request}
+          aiQuote={aiQuote}
+          adminQuote={adminQuote}
+          quoteHistory={quoteHistory}
+          auditHistory={auditHistory}
+          negotiationHistory={negotiationHistory}
+        />
+      )}
     </div>
   )
 }

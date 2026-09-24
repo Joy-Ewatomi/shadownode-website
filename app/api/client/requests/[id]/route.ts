@@ -451,8 +451,28 @@ export async function GET(
      * =======================================================
      */
 
+    const {
+      admin_recommendation: _adminRecommendation,
+      super_admin_decision: _superAdminDecision,
+      internal_decision_reason: _internalDecisionReason,
+      submission_key: _submissionKey,
+      ...clientSafeRow
+    } = row
+
+    if (row.service_type === "custom_service" || row.service_type === "custom") {
+      delete clientSafeRow.ai_analysis
+      delete clientSafeRow.ai_reasoning
+      delete clientSafeRow.ai_confidence
+      delete clientSafeRow.ai_complexity
+      delete clientSafeRow.ai_estimated_hours
+      delete clientSafeRow.ai_suggested_service
+      delete clientSafeRow.ai_suggested_priority
+      delete clientSafeRow.ai_price_estimate
+      delete clientSafeRow.ai_status
+    }
+
     const normalizedRow = {
-      ...row,
+      ...clientSafeRow,
 
       /**
        * JSONB

@@ -5,6 +5,7 @@ import { query } from "@/lib/db"
 import AdminRequestReviewCard from "@/components/requests/AdminRequestReviewCard"
 import SuperAdminRequestReviewCard from "@/components/requests/SuperAdminRequestReviewCard"
 import RequestReviewCard from "@/components/requests/RequestReviewCard"
+import CustomRequestReviewPanel from "@/components/requests/CustomRequestReviewPanel"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 
 type RequestData = {
@@ -1304,12 +1305,19 @@ workflowHistory =
 
         </div>
 
+        {(request.service_type === "custom_service" || request.service_type === "custom") &&
+          (user.role === "administrator" || user.role === "super_administrator") && (
+            <CustomRequestReviewPanel request={finalRequest} role={user.role} />
+          )}
+
         {/* ===============================================
             SUPER ADMINISTRATOR
             =============================================== */}
 
         {user.role ===
-          "super_administrator" && (
+          "super_administrator" &&
+          request.service_type !== "custom_service" &&
+          request.service_type !== "custom" && (
           <div className="min-w-0 max-w-full overflow-hidden">
 
             <SuperAdminRequestReviewCard
@@ -1341,7 +1349,9 @@ workflowHistory =
             =============================================== */}
 
         {user.role ===
-          "administrator" && (
+          "administrator" &&
+          request.service_type !== "custom_service" &&
+          request.service_type !== "custom" && (
           <div className="min-w-0 max-w-full overflow-hidden">
 
           <AdminRequestReviewCard

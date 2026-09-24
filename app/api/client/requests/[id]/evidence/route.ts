@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { auditLog, getCurrentUser } from "@/lib/auth"
 import { query, withTransaction } from "@/lib/db"
+import { isSameOriginMutation } from "@/lib/security-center"
 import {
   deleteEvidenceFile,
   uploadEvidenceFile,
@@ -47,6 +48,10 @@ export async function POST(
   const uploadedPaths: string[] = []
 
   try {
+    if (!isSameOriginMutation(request)) {
+      return NextResponse.json({ error: "Request could not be verified." }, { status: 403 })
+    }
+
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -128,7 +133,7 @@ export async function POST(
           action: "request_upload",
           actor_id: user.id,
           timestamp: uploadedAt,
-          notes: "Uploaded by the client with the investigation request.",
+          notes: "Uploaded by the client with the service request.",
         }],
       })
     }
