@@ -2,7 +2,14 @@
 
 import { Bell, Volume2, VolumeX } from "lucide-react"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { usePathname } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 import {
   useClientNotifications,
@@ -63,11 +70,16 @@ export default function NotificationBell({
 }) {
   const [open, setOpen] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const pathname = usePathname()
   const { notifications, unreadCount, markRead } = useClientNotifications()
   const notificationsPath =
     userRole === "client"
       ? "/dashboard/client/notifications"
       : "/dashboard/notifications"
+
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
 
   const unreadNotifications = useMemo(
     () =>
@@ -82,13 +94,15 @@ export default function NotificationBell({
   )
 
   return (
-    <div className="relative">
-      <button
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
+      <PopoverTrigger asChild>
+        <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="relative flex h-10 w-10 items-center justify-center rounded-md border border-[#143b28] bg-[#06110f] text-white/75 transition hover:border-[#20dc73]/50 hover:text-[#20dc73]"
+        className="relative flex h-11 w-11 items-center justify-center rounded-md border border-[#143b28] bg-[#06110f] text-white/75 transition hover:border-[#20dc73]/50 hover:text-[#20dc73]"
         aria-label="Notifications"
         aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls="dashboard-notification-panel"
       >
         <Bell className="h-5 w-5" />
 
@@ -97,23 +111,39 @@ export default function NotificationBell({
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
-      </button>
+        </button>
+      </PopoverTrigger>
 
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[26rem] overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
-            <div>
-              <p className="font-semibold text-white">Notifications</p>
+      <PopoverContent
+        id="dashboard-notification-panel"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="dashboard-notification-title"
+        align="end"
+        side="bottom"
+        sideOffset={8}
+        collisionPadding={16}
+        onEscapeKeyDown={() => setOpen(false)}
+        onPointerDownOutside={() => setOpen(false)}
+        className="flex max-w-[26rem] flex-col overflow-hidden border-[#143b28] bg-[#06110f] p-0 text-white shadow-2xl"
+        style={{
+          width: "min(26rem, calc(100vw - 2rem - env(safe-area-inset-left) - env(safe-area-inset-right)))",
+          maxHeight: "min(36rem, calc(100dvh - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)))",
+        }}
+      >
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#143b28] px-3 py-2 sm:px-4 sm:py-3">
+            <div className="min-w-0">
+              <p id="dashboard-notification-title" className="font-semibold text-white">Notifications</p>
               <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-white/35">
                 Unread notifications
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <button
                 type="button"
                 onClick={() => setSoundEnabled((value) => !value)}
-                className="rounded p-1 text-white/45 transition hover:bg-white/5 hover:text-white"
+                className="flex h-11 w-11 items-center justify-center rounded text-white/45 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]"
                 aria-label={
                   soundEnabled
                     ? "Disable notification sound"
@@ -132,12 +162,12 @@ export default function NotificationBell({
             </div>
           </div>
 
-          <div className="max-h-[28rem] overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
             {unreadNotifications.length > 0 ? (
               unreadNotifications.map((item) => (
                 <div
                   key={item.id}
-                  className="border-b border-[#143b28] px-4 py-4 transition hover:bg-white/5"
+                  className="border-b border-[#143b28] transition hover:bg-white/5"
                 >
                   <Link
                     href={notificationHref(item, notificationsPath)}
@@ -153,14 +183,14 @@ export default function NotificationBell({
                         )
                       }
                     }}
-                    className="block"
+                    className="block min-h-11 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#20dc73]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white">
+                        <p className="break-words text-sm font-semibold text-white [overflow-wrap:anywhere]">
                           {item.title}
                         </p>
-                        <p className="mt-1 text-[11px] leading-5 text-white/55">
+                        <p className="mt-1 break-words text-[11px] leading-5 text-white/55 [overflow-wrap:anywhere]">
                           {item.message || "No message provided."}
                         </p>
                         <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-white/30">
@@ -171,7 +201,7 @@ export default function NotificationBell({
                     </div>
 
                     <span
-                      className={`mt-3 inline-flex rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${typeClass(
+                      className={`mt-3 inline-flex max-w-full whitespace-normal break-words rounded border px-2 py-1 text-[10px] uppercase tracking-[0.12em] [overflow-wrap:anywhere] ${typeClass(
                         item.type,
                       )}`}
                     >
@@ -193,18 +223,17 @@ export default function NotificationBell({
             )}
           </div>
 
-          <div className="border-t border-[#143b28] px-4 py-3">
+          <div className="shrink-0 border-t border-[#143b28] px-3 py-2 sm:px-4">
             <Link
               href={notificationsPath}
               onClick={() => setOpen(false)}
-              className="flex items-center justify-between text-xs uppercase tracking-[0.12em] text-[#20dc73] transition hover:text-white"
+              className="flex min-h-11 items-center justify-between gap-3 break-words text-xs uppercase tracking-[0.12em] text-[#20dc73] transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73] [overflow-wrap:anywhere]"
             >
               <span>View all notifications</span>
               <span>→</span>
             </Link>
           </div>
-        </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }
