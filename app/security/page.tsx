@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Clock3,
   KeyRound,
@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-type View = "history" | "devices" | "twoFactor" | null
+type View = "history" | "devices" | "twoFactor" | "password" | "disableTwoFactor" | "recovery" | "deletion" | null
 
 type Session = {
   id: string
@@ -45,29 +45,6 @@ type TwoFactorSetup = {
   qrCodeDataUrl: string
 }
 
-const deferredControls = [
-  {
-    title: "Change Password",
-    description: "Password changes are planned for a later Security Center phase.",
-    icon: LockKeyhole,
-  },
-  {
-    title: "Disable 2FA",
-    description: "Secure 2FA removal is not available in this phase.",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Recovery Codes",
-    description: "Recovery-code management is intentionally deferred.",
-    icon: KeyRound,
-  },
-  {
-    title: "Delete Account Request",
-    description: "Reviewed account-deletion requests are intentionally deferred.",
-    icon: Trash2,
-  },
-]
-
 export default function SecurityPage() {
   const [view, setView] = useState<View>(null)
   const [sessions, setSessions] = useState<Session[]>([])
@@ -81,6 +58,25 @@ export default function SecurityPage() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const panelRef = useRef<HTMLElement | null>(null)
+  const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "", password: "", authCode: "", confirmation: "", reason: "" })
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
+  const [deletionRequest, setDeletionRequest] = useState<{ status: string; requested_at: string; cooling_off_ends_at: string } | null>(null)
+
+  useEffect(() => {
+    if (view) window.setTimeout(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0)
+  }, [view])
+
+  function selectView(next: View) {
+    setView(next)
+    setError("")
+    setMessage("")
+    if (next !== "recovery") setRecoveryCodes([])
+  }
+
+  function updateForm(name: keyof typeof form, value: string) {
+    setForm((current) => ({ ...current, [name]: value }))
+  }
 
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
@@ -90,7 +86,7 @@ export default function SecurityPage() {
   }, [])
 
   async function loadSessions() {
-    setView("devices")
+    selectView("devices")
     setLoading("devices")
     setError("")
     try {
@@ -109,7 +105,7 @@ export default function SecurityPage() {
   }
 
   async function loadHistory(page = 1) {
-    setView("history")
+    selectView("history")
     setLoading("history")
     setError("")
     try {
@@ -130,7 +126,7 @@ export default function SecurityPage() {
   }
 
   async function beginTwoFactorSetup() {
-    setView("twoFactor")
+    selectView("twoFactor")
     setLoading("twoFactor")
     setError("")
     setMessage("")
@@ -193,30 +189,74 @@ export default function SecurityPage() {
     }
   }
 
+  async function submitSecurityAction(endpoint: string, body: object, loadingKey: string) {
+    setLoading(loadingKey)
+    setError("")
+    setMessage("")
+    try {
+      const response = await fetch(endpoint, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "The security action could not be completed.")
+      setMessage(data.message || "Security settings updated.")
+      return data
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The security action could not be completed.")
+      return null
+    } finally { setLoading(null) }
+  }
+
+  async function changePassword() {
+    const data = await submitSecurityAction("/api/auth/change-password", { currentPassword: form.currentPassword, newPassword: form.newPassword, confirmPassword: form.confirmPassword }, "password")
+    if (data) setForm((current) => ({ ...current, currentPassword: "", newPassword: "", confirmPassword: "" }))
+  }
+
+  async function disableTwoFactor() {
+    const data = await submitSecurityAction("/api/auth/2fa/disable", { password: form.password, code: form.authCode }, "disableTwoFactor")
+    if (data) { setTwoFactorEnabled(false); setForm((current) => ({ ...current, password: "", authCode: "" })) }
+  }
+
+  async function regenerateRecoveryCodes() {
+    const data = await submitSecurityAction("/api/auth/2fa/recovery-codes", { password: form.password, code: form.authCode }, "recovery")
+    if (data?.codes) { setRecoveryCodes(data.codes); setForm((current) => ({ ...current, password: "", authCode: "" })) }
+  }
+
+  async function loadDeletion() {
+    selectView("deletion")
+    setLoading("deletion")
+    try {
+      const response = await fetch("/api/auth/account-deletion", { credentials: "include", cache: "no-store" })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Could not load deletion request status.")
+      setDeletionRequest(data.request)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load deletion request status.") }
+    finally { setLoading(null) }
+  }
+
+  async function requestDeletion() {
+    const data = await submitSecurityAction("/api/auth/account-deletion", { password: form.password, confirmation: form.confirmation, reason: form.reason }, "deletion")
+    if (data?.request) { setDeletionRequest(data.request); setForm((current) => ({ ...current, password: "", confirmation: "", reason: "" })) }
+  }
+
+  async function cancelDeletion() {
+    setLoading("deletion")
+    setError("")
+    try {
+      const response = await fetch("/api/auth/account-deletion", { method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" } })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Could not cancel deletion request.")
+      setDeletionRequest(null); setMessage(data.message)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not cancel deletion request.") }
+    finally { setLoading(null) }
+  }
+
   const cards = [
-    {
-      title: "Login History",
-      description: "Review successful and failed password sign-in attempts.",
-      icon: Clock3,
-      action: () => loadHistory(1),
-      disabled: false,
-    },
-    {
-      title: "Devices",
-      description: "Review active sessions. Device descriptions are approximate.",
-      icon: Laptop,
-      action: loadSessions,
-      disabled: false,
-    },
-    {
-      title: twoFactorEnabled ? "2FA Enabled" : "Enable 2FA",
-      description: twoFactorEnabled
-        ? "Your account requires an authenticator code at sign-in."
-        : "Protect sign-in with a time-based authenticator code.",
-      icon: ShieldCheck,
-      action: beginTwoFactorSetup,
-      disabled: twoFactorEnabled !== false,
-    },
+    { id: "history" as View, title: "Login History", description: "Review successful and failed password sign-in attempts.", icon: Clock3, action: () => loadHistory(1), disabled: false },
+    { id: "devices" as View, title: "Devices", description: "Review active sessions. Device descriptions are approximate.", icon: Laptop, action: loadSessions, disabled: false },
+    { id: "twoFactor" as View, title: twoFactorEnabled ? "2FA Enabled" : "Enable 2FA", description: twoFactorEnabled ? "Your account requires an authenticator code at sign-in." : "Protect sign-in with a time-based authenticator code.", icon: ShieldCheck, action: beginTwoFactorSetup, disabled: twoFactorEnabled !== false },
+    { id: "password" as View, title: "Change Password", description: "Verify your current password and choose a stronger replacement.", icon: LockKeyhole, action: () => selectView("password"), disabled: false },
+    { id: "disableTwoFactor" as View, title: "Disable 2FA", description: twoFactorEnabled ? "Requires your password and an authenticator or recovery code." : "Two-factor authentication is not enabled.", icon: ShieldCheck, action: () => selectView("disableTwoFactor"), disabled: twoFactorEnabled !== true },
+    { id: "recovery" as View, title: "Recovery Codes", description: twoFactorEnabled ? "Regenerate one-time recovery codes after reauthentication." : "Enable two-factor authentication first.", icon: KeyRound, action: () => selectView("recovery"), disabled: twoFactorEnabled !== true },
+    { id: "deletion" as View, title: "Delete Account Request", description: "Submit a reviewable request with a 30-day cooling-off period.", icon: Trash2, action: loadDeletion, disabled: false },
   ]
 
   return (
@@ -242,28 +282,16 @@ export default function SecurityPage() {
         </header>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {cards.map(({ title, description, icon: Icon, action, disabled }) => (
+          {cards.map(({ id, title, description, icon: Icon, action, disabled }) => (
             <button
               key={title}
               type="button"
               onClick={action}
               disabled={disabled}
-              className="min-h-36 rounded border border-white/10 bg-[#08110c] p-5 text-left transition hover:border-[#20dc73]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73] disabled:cursor-not-allowed disabled:opacity-60"
+              aria-pressed={view === id}
+              className={`min-h-36 rounded border bg-[#08110c] p-5 text-left transition hover:border-[#20dc73]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73] disabled:cursor-not-allowed disabled:opacity-60 ${view === id ? "border-[#20dc73] bg-[#0d1b13] ring-1 ring-[#20dc73]/35" : "border-white/10"}`}
             >
               <Icon className="h-5 w-5 text-[#7bf69f]" />
-              <h2 className="mt-4 font-semibold">{title}</h2>
-              <p className="mt-2 text-sm text-white/55">{description}</p>
-            </button>
-          ))}
-          {deferredControls.map(({ title, description, icon: Icon }) => (
-            <button
-              key={title}
-              type="button"
-              disabled
-              aria-disabled="true"
-              className="min-h-36 rounded border border-white/10 bg-[#08110c] p-5 text-left opacity-55"
-            >
-              <Icon className="h-5 w-5 text-white/55" />
               <h2 className="mt-4 font-semibold">{title}</h2>
               <p className="mt-2 text-sm text-white/55">{description}</p>
             </button>
@@ -274,7 +302,7 @@ export default function SecurityPage() {
         {message ? <p role="status" className="mt-6 rounded border border-[#20dc73]/30 bg-[#20dc73]/10 p-3 text-sm text-[#c7ffe6]">{message}</p> : null}
 
         {view === "devices" ? (
-          <section className="mt-8 border-t border-white/10 pt-6" aria-labelledby="devices-heading">
+          <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="devices-heading">
             <h2 id="devices-heading" className="text-xl font-semibold">Active sessions</h2>
             <p className="mt-2 text-sm text-white/55">
               Device and browser descriptions are approximate and do not uniquely identify a physical device. Individual revocation is not available in Phase 1.
@@ -297,7 +325,7 @@ export default function SecurityPage() {
         ) : null}
 
         {view === "history" ? (
-          <section className="mt-8 border-t border-white/10 pt-6" aria-labelledby="history-heading">
+          <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="history-heading">
             <h2 id="history-heading" className="text-xl font-semibold">Login history</h2>
             <p className="mt-2 text-sm text-white/55">Browser, device, location, and IP descriptions are approximate.</p>
             <div className="mt-4 space-y-3">
@@ -322,7 +350,7 @@ export default function SecurityPage() {
         ) : null}
 
         {view === "twoFactor" && !twoFactorEnabled ? (
-          <section className="mt-8 border-t border-white/10 pt-6" aria-labelledby="two-factor-heading">
+          <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="two-factor-heading">
             <h2 id="two-factor-heading" className="text-xl font-semibold">Enable two-factor authentication</h2>
             {loading === "twoFactor" ? <Loader2 className="mt-4 h-5 w-5 animate-spin" /> : setup ? (
               <div className="mt-4 max-w-xl">
@@ -338,6 +366,46 @@ export default function SecurityPage() {
                 </Button>
               </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {view === "password" ? (
+          <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="password-heading">
+            <h2 id="password-heading" className="text-xl font-semibold">Change password</h2>
+            <p className="mt-2 text-sm text-white/55">OAuth-only accounts should use password reset first to establish a password they can verify.</p>
+            <div className="mt-4 grid max-w-xl gap-4">
+              <label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.currentPassword} onChange={(event) => updateForm("currentPassword", event.target.value)} className="mt-2" /></label>
+              <label className="text-sm">New password<Input type="password" autoComplete="new-password" value={form.newPassword} onChange={(event) => updateForm("newPassword", event.target.value)} className="mt-2" /></label>
+              <label className="text-sm">Confirm new password<Input type="password" autoComplete="new-password" value={form.confirmPassword} onChange={(event) => updateForm("confirmPassword", event.target.value)} className="mt-2" /></label>
+              <Button type="button" onClick={changePassword} disabled={loading === "password" || !form.currentPassword || !form.newPassword || !form.confirmPassword}>{loading === "password" ? <Loader2 className="animate-spin" /> : null}Change password</Button>
+            </div>
+          </section>
+        ) : null}
+
+        {view === "disableTwoFactor" ? (
+          <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="disable-heading">
+            <h2 id="disable-heading" className="text-xl font-semibold">Disable two-factor authentication</h2>
+            <p className="mt-2 text-sm text-white/55">Confirm with your password and a current authenticator code or unused recovery code.</p>
+            <div className="mt-4 grid max-w-xl gap-4">
+              <label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} className="mt-2" /></label>
+              <label className="text-sm">Authentication or recovery code<Input autoComplete="one-time-code" value={form.authCode} onChange={(event) => updateForm("authCode", event.target.value)} className="mt-2" /></label>
+              <Button type="button" variant="destructive" onClick={disableTwoFactor} disabled={loading === "disableTwoFactor" || !form.password || !form.authCode}>{loading === "disableTwoFactor" ? <Loader2 className="animate-spin" /> : null}Disable 2FA</Button>
+            </div>
+          </section>
+        ) : null}
+
+        {view === "recovery" ? (
+          <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="recovery-heading">
+            <h2 id="recovery-heading" className="text-xl font-semibold">Recovery codes</h2>
+            {recoveryCodes.length ? <div className="mt-4 max-w-xl rounded border border-[#20dc73]/30 bg-[#20dc73]/10 p-4"><p className="text-sm">Store these codes securely. Each works once and they will not be shown again.</p><div className="mt-3 grid grid-cols-2 gap-2 font-mono">{recoveryCodes.map((item) => <code key={item}>{item}</code>)}</div><Button type="button" variant="outline" className="mt-4" onClick={() => setRecoveryCodes([])}>I have stored these codes</Button></div> : <div className="mt-4 grid max-w-xl gap-4"><label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} className="mt-2" /></label><label className="text-sm">Current authenticator code<Input inputMode="numeric" autoComplete="one-time-code" value={form.authCode} onChange={(event) => updateForm("authCode", event.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-2" /></label><Button type="button" onClick={regenerateRecoveryCodes} disabled={loading === "recovery" || !form.password || form.authCode.length !== 6}>{loading === "recovery" ? <Loader2 className="animate-spin" /> : null}Regenerate recovery codes</Button></div>}
+          </section>
+        ) : null}
+
+        {view === "deletion" ? (
+          <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="deletion-heading">
+            <h2 id="deletion-heading" className="text-xl font-semibold">Delete account request</h2>
+            <p className="mt-2 max-w-2xl text-sm text-white/55">This submits a review request with a 30-day cooling-off period. It does not immediately destroy investigation, evidence, financial, audit, or legally retained records.</p>
+            {deletionRequest?.status === "pending" ? <div className="mt-4 max-w-xl rounded border border-amber-300/30 bg-amber-300/10 p-4 text-sm"><p>Pending review. Cooling-off ends {new Date(deletionRequest.cooling_off_ends_at).toLocaleString()}.</p><Button type="button" variant="outline" className="mt-4" onClick={cancelDeletion} disabled={loading === "deletion"}>Cancel request</Button></div> : <div className="mt-4 grid max-w-xl gap-4"><label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} className="mt-2" /></label><label className="text-sm">Reason (optional)<Input value={form.reason} onChange={(event) => updateForm("reason", event.target.value)} className="mt-2" maxLength={1000} /></label><label className="text-sm">Type DELETE to confirm<Input value={form.confirmation} onChange={(event) => updateForm("confirmation", event.target.value)} className="mt-2" /></label><Button type="button" variant="destructive" onClick={requestDeletion} disabled={loading === "deletion" || !form.password || form.confirmation !== "DELETE"}>{loading === "deletion" ? <Loader2 className="animate-spin" /> : null}Submit deletion request</Button></div>}
           </section>
         ) : null}
       </div>
