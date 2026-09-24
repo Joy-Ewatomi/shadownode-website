@@ -435,7 +435,6 @@ type Props = {
   ) => Promise<void>
 
   submitting: boolean
-  anonymous?: boolean
 }
 
 /* ============================================================
@@ -488,13 +487,12 @@ function FormInput({
 export default function InvestigationForm({
   onSubmit,
   submitting,
-  anonymous = false,
 }: Props) {
   const [form, setForm] =
     useState<InvestigationFormData>(
       {
         ...createEmptyForm(),
-        communication_method: anonymous ? "email" : "portal",
+        communication_method: "portal",
       },
     )
 
@@ -2370,7 +2368,7 @@ export default function InvestigationForm({
 
         <div className="rounded-2xl border border-[#143b28] bg-black/20 p-5">
           <CommunicationSection
-            allowPortal={!anonymous}
+            allowPortal
             country={
               form.client_country
             }

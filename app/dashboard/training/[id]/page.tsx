@@ -1183,9 +1183,9 @@ export default async function TrainingEngagementPage({
           />
 
           <WorkspaceLink
-            href={`/dashboard/training/${id}/certificate`}
+            href={`/dashboard/training/${id}/certificates`}
             title="Certificate"
-            description="View and verify the training certificate."
+            description="Issue, download and verify training certificates."
           />
         </div>
       </section>

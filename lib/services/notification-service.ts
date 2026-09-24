@@ -150,7 +150,7 @@ function destinationForResource(
 
     if (targetPage === "client_training_certificate") {
       return staffFacing
-        ? `/dashboard/training/${resourceId}/certificate`
+        ? `/dashboard/training/${resourceId}/certificates`
         : "/dashboard/client/certificates"
     }
 
@@ -164,7 +164,7 @@ function destinationForResource(
 
     if (trainingId) {
       return staffFacing
-        ? `/dashboard/training/${trainingId}/certificate`
+        ? `/dashboard/training/${trainingId}/certificates`
         : "/dashboard/client/certificates"
     }
   }

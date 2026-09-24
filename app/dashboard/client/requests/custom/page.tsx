@@ -9,10 +9,12 @@ export default function ClientCustomRequestPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submittedRef, setSubmittedRef] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
 
   async function submit(data: CustomRequestData) {
     setSubmitting(true)
     setNotice(null)
+    setUploadStatus("Creating your request...")
     try {
       const { files, ...payload } = data
       const response = await fetch("/api/client/requests/custom", {
@@ -28,6 +30,7 @@ export default function ClientCustomRequestPage() {
       }
 
       if (files.length > 0) {
+        setUploadStatus(`Uploading ${files.length} supporting ${files.length === 1 ? "file" : "files"}...`)
         const upload = new FormData()
         files.forEach((file) => upload.append("files", file))
         const uploadResponse = await fetch(`/api/client/requests/${encodeURIComponent(result.id)}/evidence`, {
@@ -37,6 +40,8 @@ export default function ClientCustomRequestPage() {
         })
         if (!uploadResponse.ok) {
           setNotice("Your request was submitted, but one or more supporting files could not be uploaded. You can add them from the request page.")
+        } else {
+          setUploadStatus("Supporting files uploaded successfully.")
         }
       }
       setSubmittedRef(result.case_number || result.id)
@@ -44,6 +49,7 @@ export default function ClientCustomRequestPage() {
       setNotice("Unable to submit the custom request. Please try again.")
     } finally {
       setSubmitting(false)
+      setUploadStatus(null)
     }
   }
 
@@ -59,7 +65,7 @@ export default function ClientCustomRequestPage() {
   return (
     <>
       {notice && <p role="alert" className="mx-auto mt-6 max-w-3xl rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{notice}</p>}
-      <CustomRequestForm submitting={submitting} onSubmit={submit} />
+      <CustomRequestForm submitting={submitting} uploadStatus={uploadStatus} onSubmit={submit} />
     </>
   )
 }

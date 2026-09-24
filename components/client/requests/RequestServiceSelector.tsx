@@ -40,7 +40,7 @@ export default function RequestServiceSelector({ onSelect }: Props) {
 
               <div>
                 <h3 className="text-lg font-semibold text-white">
-                  Open Source Intelligence
+                  OSINT / Investigation Request
                 </h3>
 
                 <p className="mt-2 text-sm text-white/55">
@@ -87,7 +87,7 @@ export default function RequestServiceSelector({ onSelect }: Props) {
 
               <div>
                 <h3 className="text-lg font-semibold text-white">
-                  Cybersecurity Services
+                  Cybersecurity Training Request
                 </h3>
 
                 <p className="mt-2 text-sm text-white/55">
@@ -130,7 +130,7 @@ export default function RequestServiceSelector({ onSelect }: Props) {
                 <Plus className="h-6 w-6 text-[#20dc73]" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Custom Request</h3>
+                <h3 className="text-lg font-semibold text-white">Custom Service Request</h3>
                 <p className="mt-2 text-sm text-white/55">
                   Describe another service or project. The bureau will review it and request the information needed for the suitable workflow.
                 </p>

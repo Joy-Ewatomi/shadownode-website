@@ -887,8 +887,8 @@ export async function issueTrainingCertificate(
           resource_type: "certificate",
           resource_id: certificate.id,
           target_page: "client_training_certificate",
-          destination: `/dashboard/training/${engagement.id}/certificate?certificateId=${certificate.id}`,
-          action: "view_certificate",
+          destination: "/dashboard/client/certificates",
+          action: "download_certificate",
         },
       })
     }

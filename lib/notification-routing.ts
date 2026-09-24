@@ -216,7 +216,7 @@ export function getNotificationDestination(
         return isClient
           ? "/dashboard/client/certificates"
           : trainingId
-            ? `/dashboard/training/${trainingId}/certificate`
+            ? `/dashboard/training/${trainingId}/certificates`
             : "/dashboard/training"
 
       case "admin_request_review":
@@ -374,7 +374,7 @@ export function getNotificationDestination(
     }
 
     return trainingId
-      ? `/dashboard/training/${trainingId}/certificate`
+      ? `/dashboard/training/${trainingId}/certificates`
       : "/dashboard/training"
   }
 

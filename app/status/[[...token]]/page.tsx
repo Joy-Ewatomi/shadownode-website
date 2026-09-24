@@ -8,7 +8,6 @@ import { useParams } from 'next/navigation'
 
 interface Request {
   id: string
-  token: string
   service_type: string
   status: string
   description: string
@@ -161,7 +160,6 @@ export default function StatusPage() {
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <h1 className="text-3xl font-bold mb-2">Case Status</h1>
-                  <p className="text-foreground/60 font-mono text-sm">{request.token}</p>
                 </div>
                 <div className={`px-4 py-2 rounded-lg border ${STATUS_COLORS[presentation!.key].border} ${STATUS_COLORS[presentation!.key].bg}`}>
                   <p className={`font-medium text-sm ${STATUS_COLORS[presentation!.key].color}`}>

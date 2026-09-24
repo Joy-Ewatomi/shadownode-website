@@ -1,413 +1,86 @@
-'use client'
+"use client"
 
-import { PageTransition } from '@/components/animations/PageTransition'
-import { motion } from 'framer-motion'
-import { Shield, UserPlus, KeyRound, ChevronRight, ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
+import { PageTransition } from "@/components/animations/PageTransition"
+import { motion } from "framer-motion"
+import { ArrowLeft, ChevronRight, KeyRound, Search, ShieldCheck, UserPlus, Wrench } from "lucide-react"
+import Link from "next/link"
 
-
-const intakeOptions = [
+const accountOptions = [
   {
-    id: 'anonymous',
-    title: 'Anonymous Submission',
-    description:
-      'Submit your request without creating an account. Receive a tracking token for status updates.',
-    icon: Shield,
-    href: '/request/anonymous',
-  },
-  {
-    id: 'register',
-    title: 'Create Client Account',
-    description:
-      'Register for a secure client portal. Access case updates, encrypted messaging, and document vault.',
+    id: "register",
+    title: "Create Client Account",
+    description: "Register for the secure client portal to submit requests, receive updates and manage documents.",
     icon: UserPlus,
-    href: '/signup',
+    href: "/signup",
   },
   {
-    id: 'login',
-    title: 'Existing Account',
-    description:
-      'Already have a ShadowNode account? Log in to your client portal.',
+    id: "login",
+    title: "Existing Client",
+    description: "Sign in to your client portal to start or manage a service request.",
     icon: KeyRound,
-    href: '/login',
+    href: "/login",
   },
 ]
 
+const serviceTypes = [
+  { title: "OSINT / Investigation Request", icon: Search },
+  { title: "Cybersecurity Training Request", icon: ShieldCheck },
+  { title: "Custom Service Request", icon: Wrench },
+]
 
 export default function RequestPage() {
-
-return (
-
-<PageTransition>
-
-<main className="min-h-screen relative overflow-hidden bg-transparent text-foreground flex flex-col justify-center items-center px-4 py-16">
-
-
-<div className="absolute inset-0 pointer-events-none">
-
-<div className="
-absolute
-inset-0
-bg-[linear-gradient(180deg,rgba(0,0,0,0.08),#000_95%)]
-"/>
-
-</div>
-
-
-
-<div className="relative z-10 w-full max-w-[680px]">
-
-
-<Link 
-href="/"
-className="
-inline-flex
-items-center
-gap-2
-font-mono
-text-xs
-tracking-wider
-text-white/40
-hover:text-primary
-transition
-mb-8
-group
-"
->
-
-<ArrowLeft className="
-h-4
-w-4
-group-hover:-translate-x-1
-transition
-"/>
-
-RETURN TO TERMINAL
-
-</Link>
-
-
-
-
-<div className="mb-10">
-
-
-<div className="
-inline-flex
-items-center
-gap-2
-rounded
-border
-border-primary/30
-bg-primary/5
-px-3
-py-1
-font-mono
-text-xs
-tracking-wider
-text-primary
-mb-6
-">
-
-<span className="
-h-2
-w-2
-rounded-full
-bg-primary
-animate-pulse
-"/>
-
-SECURE INTAKE CHANNEL ONLINE
-
-</div>
-
-
-
-<h1 className="
-font-mono
-text-3xl
-font-bold
-tracking-wide
-text-white
-sm:text-4xl
-uppercase
-">
-
-Initiate Intelligence Request
-
-</h1>
-
-
-<p className="
-mt-3
-font-mono
-text-sm
-text-white/40
-">
-
-How would you like to proceed?
-
-</p>
-
-
-</div>
-
-
-
-
-
-<div className="space-y-4">
-
-
-{
-intakeOptions.map((option,index)=>{
-
-
-const Icon = option.icon
-
-
-
-return (
-
-<motion.div
-
-key={option.id}
-
-initial={{
-opacity:0,
-y:15
-}}
-
-animate={{
-opacity:1,
-y:0
-}}
-
-transition={{
-delay:index*0.08,
-duration:0.4
-}}
-
->
-
-
-
-{
-option.id==="anonymous" ?
-
-
-<Link
-
-href={option.href!}
-
-className="
-group
-flex
-items-center
-justify-between
-rounded-md
-border
-border-primary/15
-bg-[#070c0d]/70
-p-6
-backdrop-blur
-transition-all
-hover:border-primary/50
-hover:bg-primary/[0.02]
-"
-
->
-
-
-<CardContent option={option} Icon={Icon}/>
-
-
-</Link>
-
-
-:
-
-
-<Link
-
-href={option.href!}
-
-className="
-w-full
-group
-flex
-items-center
-justify-between
-rounded-md
-border
-border-primary/15
-bg-[#070c0d]/70
-p-6
-backdrop-blur
-transition-all
-hover:border-primary/50
-hover:bg-primary/[0.02]
-text-left
-"
-
->
-
-
-<CardContent option={option} Icon={Icon}/>
-
-
-</Link>
-
-
-}
-
-
-</motion.div>
-
-
-)
-
-})
-
-}
-
-
-</div>
-
-
-
-
-
-
-<div className="
-mt-8
-text-center
-font-mono
-text-[10px]
-tracking-widest
-text-white/20
-">
-
-SECURE SHA-256 END-TO-END DATA MANAGEMENT PROXIES LAYERED BY DEFAULT
-
-</div>
-
-
-
-</div>
-
-
-
-
-</main>
-
-
-</PageTransition>
-
-
-)
-
-}
-
-
-
-
-function CardContent({
-option,
-Icon
-}:any){
-
-
-return (
-
-<>
-
-
-<div className="flex items-start gap-5">
-
-
-<div className="
-relative
-grid
-h-12
-w-12
-shrink-0
-place-items-center
-rounded
-border
-border-primary/20
-bg-primary/5
-text-primary
-">
-
-
-<Icon 
-className="h-5 w-5"
-strokeWidth={1.5}
-/>
-
-
-</div>
-
-
-
-
-<div className="space-y-1.5 pr-4">
-
-
-<h2 className="
-font-mono
-text-lg
-font-bold
-tracking-wide
-text-primary
-group-hover:text-white
-transition
-">
-
-{option.title}
-
-</h2>
-
-
-
-<p className="
-text-sm
-leading-6
-text-white/50
-group-hover:text-white/70
-">
-
-{option.description}
-
-</p>
-
-
-</div>
-
-
-</div>
-
-
-
-
-<ChevronRight 
-
-className="
-h-5
-w-5
-text-primary/40
-group-hover:text-primary
-group-hover:translate-x-1
-transition
-"
-
-/>
-
-
-</>
-
-)
-
-
+  return (
+    <PageTransition>
+      <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-transparent px-4 py-16 text-foreground">
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),#000_95%)]" />
+        <div className="relative z-10 w-full max-w-[720px]">
+          <Link href="/" className="group mb-8 inline-flex min-h-11 items-center gap-2 font-mono text-xs tracking-wider text-white/40 transition hover:text-primary">
+            <ArrowLeft className="h-4 w-4 transition group-hover:-translate-x-1" aria-hidden="true" />
+            RETURN TO TERMINAL
+          </Link>
+
+          <header className="mb-8">
+            <div className="mb-5 inline-flex items-center gap-2 rounded border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-xs tracking-wider text-primary">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              SECURE CLIENT INTAKE
+            </div>
+            <h1 className="font-mono text-3xl font-bold uppercase text-white sm:text-4xl">Request ShadowNode Services</h1>
+            <p className="mt-3 text-sm leading-6 text-white/45">Service requests are submitted through an authenticated client account.</p>
+          </header>
+
+          <section aria-labelledby="available-services" className="mb-6 rounded-md border border-primary/15 bg-[#070c0d]/70 p-5">
+            <h2 id="available-services" className="font-mono text-xs uppercase tracking-wider text-primary">Available request types</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {serviceTypes.map(({ title, icon: Icon }) => (
+                <div key={title} className="flex min-h-20 items-center gap-3 rounded border border-white/10 bg-black/25 p-3">
+                  <Icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="text-sm font-medium leading-5 text-white/75">{title}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <div className="space-y-4">
+            {accountOptions.map((option, index) => {
+              const Icon = option.icon
+              return (
+                <motion.div key={option.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.08, duration: 0.3 }}>
+                  <Link href={option.href} className="group flex min-h-24 items-center justify-between rounded-md border border-primary/15 bg-[#070c0d]/70 p-5 transition hover:border-primary/50 hover:bg-primary/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:p-6">
+                    <span className="flex min-w-0 items-start gap-4">
+                      <span className="rounded-md bg-primary/10 p-3"><Icon className="h-5 w-5 text-primary" aria-hidden="true" /></span>
+                      <span className="min-w-0">
+                        <span className="block text-base font-semibold text-white">{option.title}</span>
+                        <span className="mt-1 block text-sm leading-6 text-white/45">{option.description}</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="ml-3 h-5 w-5 shrink-0 text-white/25 transition group-hover:text-primary" aria-hidden="true" />
+                  </Link>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      </main>
+    </PageTransition>
+  )
 }

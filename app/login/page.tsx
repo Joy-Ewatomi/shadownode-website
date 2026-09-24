@@ -249,8 +249,7 @@ export default function AuthPage() {
         </section>
 
         <div className="text-center font-serif text-sm text-white/45">
-          <p>Prefer anonymous submission? <Link href="/request" className="text-[#20e978] hover:underline">Submit a request</Link></p>
-          <p className="mt-2 text-xs text-white/30">Your credentials are encrypted in transit and at rest.</p>
+          <p className="text-xs text-white/30">Your credentials are encrypted in transit and at rest.</p>
         </div>
       </div>
     </main>

@@ -86,8 +86,8 @@ export default function AdministratorDashboard() {
       title="Administrator Dashboard"
       description="Manage client requests, prepare investigation quotes, review operational workflow, and coordinate active bureau assignments."
       primaryAction={{
-        label: "Create Request",
-        href: "/request/anonymous",
+        label: "Review Requests",
+        href: "/dashboard/requests?status=review",
       }}
       metrics={[
         {

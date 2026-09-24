@@ -293,7 +293,6 @@ const STEPS: StepDefinition[] = [
 
 type Props = {
   submitting: boolean
-  anonymous?: boolean
 
   onSubmit: (
     data: CybersecurityTrainingFormData,
@@ -307,13 +306,12 @@ type Props = {
 export default function CybersecurityTrainingForm({
   submitting,
   onSubmit,
-  anonymous = false,
 }: Props) {
   const [form, setForm] =
     useState<CybersecurityTrainingFormData>(
       {
         ...EMPTY_FORM,
-        communication_method: anonymous ? "email" : "portal",
+        communication_method: "portal",
       },
     )
 
@@ -583,7 +581,6 @@ export default function CybersecurityTrainingForm({
       case 3:
         return (
           <CommunicationStep
-            anonymous={anonymous}
             form={form}
             set={updateForm}
           />

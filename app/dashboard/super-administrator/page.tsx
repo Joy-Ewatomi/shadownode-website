@@ -104,8 +104,8 @@ export default function SuperAdministratorDashboard() {
         title="Super Administrator Dashboard"
         description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
         primaryAction={{
-          label: "Create Request",
-          href: "/request/anonymous",
+          label: "Review Requests",
+          href: "/dashboard/requests?status=review",
         }}
         metrics={[
           {
@@ -153,8 +153,8 @@ export default function SuperAdministratorDashboard() {
       title="Super Administrator Dashboard"
       description="Monitor platform health, user governance, audit posture, and security controls across the ShadowNode operating environment."
       primaryAction={{
-        label: "Create Request",
-        href: "/request/anonymous",
+        label: "Review Requests",
+        href: "/dashboard/requests?status=review",
       }}
       metrics={[
         {

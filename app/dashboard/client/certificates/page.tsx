@@ -67,7 +67,6 @@ export default async function ClientCertificatesPage() {
         tc.issued_at,
         tc.status,
         tc.verification_url,
-        tc.pdf_url,
         te.engagement_number
       FROM training_certificates tc
       JOIN training_engagements te
@@ -123,10 +122,6 @@ export default async function ClientCertificatesPage() {
         toNullableString(
           row.verification_url,
         ),
-      pdf_url:
-        toNullableString(
-          row.pdf_url,
-        ),
       engagement_number:
         toNullableString(
           row.engagement_number,
@@ -145,8 +140,8 @@ export default async function ClientCertificatesPage() {
             Certificates
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
-            View issued training certificates, open the
-            printable certificate, and verify each credential
+            Download issued certificates as official PDF files
+            or high-resolution PNG images, and verify each credential
             through the public ShadowNode registry.
           </p>
         </div>
