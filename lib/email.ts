@@ -4,7 +4,7 @@ import {
   renderShadowNodeEmail,
   type EmailTemplateInput,
 } from "@/lib/email-template"
-import { validMailbox } from "@/lib/communication-channels"
+import { validMailbox } from "@/lib/email-address"
 
 export type EmailAttachment = {
   filename: string

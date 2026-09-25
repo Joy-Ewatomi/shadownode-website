@@ -1,4 +1,11 @@
-import { isValidPhoneNumber, parsePhoneNumber } from "react-phone-number-input"
+import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js/min"
+import {
+  operationalEmailFrom,
+  validMailbox,
+  validReplyTo,
+} from "@/lib/email-address"
+
+export { operationalEmailFrom, validMailbox, validReplyTo }
 
 export const COMMUNICATION_PREFERENCES = ["portal", "email", "whatsapp"] as const
 export type CommunicationPreference = (typeof COMMUNICATION_PREFERENCES)[number]
@@ -44,23 +51,4 @@ export function maskWhatsAppNumber(value: string) {
   const digits = value.replace(/\D/g, "")
   if (digits.length < 5) return "Hidden"
   return `+${digits.slice(0, 3)}••••${digits.slice(-3)}`
-}
-
-export function validMailbox(value: string | undefined) {
-  const mailbox = value?.trim() || ""
-  if (!mailbox || /[\r\n]/.test(mailbox)) return null
-  const match = mailbox.match(/^(?:[^<>]{1,100}\s*)?<([^<>\s@]+@[^<>\s@]+\.[^<>\s@]+)>$/)
-  const address = match?.[1] || mailbox
-  return /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(address) ? mailbox : null
-}
-
-export function validReplyTo(value: string | undefined) {
-  const mailbox = validMailbox(value)
-  if (!mailbox) return null
-  const match = mailbox.match(/<([^<>]+)>$/)
-  return match?.[1] || mailbox
-}
-
-export function operationalEmailFrom() {
-  return validMailbox(process.env.CLIENT_SERVICES_EMAIL_FROM) || validMailbox(process.env.EMAIL_FROM)
 }

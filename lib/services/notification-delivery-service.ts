@@ -1,7 +1,8 @@
 import { sendEmail } from "@/lib/email"
+import { operationalEmailFrom, validReplyTo } from "@/lib/email-address"
 import { getEmailApplicationOrigin, type EmailTemplateInput } from "@/lib/email-template"
 import { query } from "@/lib/db"
-import { normalizeCommunicationPreference, normalizeWhatsAppNumber, operationalEmailFrom, validReplyTo, type CommunicationPreference } from "@/lib/communication-channels"
+import { normalizeCommunicationPreference, normalizeWhatsAppNumber, type CommunicationPreference } from "@/lib/communication-channels"
 import { manualWhatsAppProvider } from "@/lib/services/whatsapp-delivery-provider"
 
 type DeliveryPreference = CommunicationPreference
