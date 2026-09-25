@@ -2,6 +2,7 @@ import { randomUUID } from "crypto"
 
 import { withTransaction } from "@/lib/db"
 import { notifyUser } from "@/lib/services/notification-service"
+import { markAcceptedQuoteVersion } from "@/lib/services/commercial-history-service"
 import { isTrainingRequest } from "@/lib/services/request-engagement-classification"
 import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
 
@@ -117,6 +118,11 @@ export async function convertAcceptedRequestToTrainingEngagement(
     if (!String(item.approved_quote_currency || "").trim()) {
       throw new Error("The approved quote currency is missing")
     }
+
+    await markAcceptedQuoteVersion(client, {
+      requestId, userId: actorUserId, amount: quoteAmount,
+      currency: String(item.approved_quote_currency),
+    })
 
     const profile = await client.query<{
       id: string

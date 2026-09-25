@@ -89,12 +89,36 @@ export async function GET() {
         training_preferred_completion_date,
         training_timeline_flexible,
 
-        created_at,
-        updated_at
+        r.created_at,
+        r.updated_at,
+        CASE
+          WHEN EXISTS (
+            SELECT 1 FROM payments p
+            WHERE p.request_id = r.id
+              AND p.quote_version_id = r.accepted_quote_version_id
+              AND p.status = 'paid'
+              AND p.verified_at IS NOT NULL
+          ) THEN 'Paid'
+          WHEN EXISTS (
+            SELECT 1 FROM payments p
+            WHERE p.request_id = r.id
+              AND p.quote_version_id = r.accepted_quote_version_id
+              AND p.status IN ('failed', 'cancelled')
+          ) THEN 'Payment issue'
+          WHEN r.accepted_quote_version_id IS NOT NULL THEN 'Awaiting payment'
+          WHEN EXISTS (
+            SELECT 1 FROM quote_negotiations qn
+            WHERE qn.request_id = r.id
+              AND qn.status NOT IN ('accepted', 'rejected', 'cancelled')
+          ) THEN 'Negotiation'
+          WHEN EXISTS (SELECT 1 FROM quote_versions qv WHERE qv.request_id = r.id)
+            THEN 'Quotation ready'
+          ELSE 'Awaiting quotation'
+        END AS commercial_status
 
-      FROM requests
+      FROM requests r
 
-      WHERE user_id = $1
+      WHERE r.user_id = $1
 
       ORDER BY created_at DESC
       `,
@@ -114,6 +138,7 @@ export async function GET() {
       service_type: row.service_type ?? null,
       description: row.description ?? null,
       status: row.status ?? "pending_admin_review",
+      commercial_status: row.commercial_status ?? "Awaiting quotation",
       priority: row.priority ?? null,
       timeline: row.timeline ?? null,
 

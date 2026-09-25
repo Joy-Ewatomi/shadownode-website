@@ -57,6 +57,7 @@ export type CybersecurityTrainingFormData = {
   communication_country_code: string
   communication_phone: string
   communication_whatsapp: string
+  whatsapp_consent: boolean
 
   communication_signal: string
 

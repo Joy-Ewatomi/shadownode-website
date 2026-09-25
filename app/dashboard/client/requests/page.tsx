@@ -14,6 +14,7 @@ type ClientRequest = {
   service_type: string | null
   description: string | null
   status: string
+  commercial_status: string
   priority?: string | null
   timeline?: string | null
   price_notes?: string | null
@@ -234,6 +235,9 @@ export default function ClientRequestsPage() {
           {" · "}
           {request.service_type || "service"}
         </p>
+        <span className="mt-2 inline-flex rounded border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] font-medium text-white/65">
+          {request.commercial_status}
+        </span>
       </div>
 
       <span className="shrink-0 text-white/30 transition group-hover:text-[#20dc73]">

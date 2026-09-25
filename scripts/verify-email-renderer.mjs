@@ -1,10 +1,13 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { execFileSync } from "node:child_process"
+import { rmSync } from "node:fs"
+import { pathToFileURL } from "node:url"
 
-import {
-  createEmailActionUrl,
-  renderShadowNodeEmail,
-} from "../lib/email-template.ts"
+const out = "/tmp/shadownode-email-renderer-test"
+rmSync(out, { recursive: true, force: true })
+execFileSync("npm", ["exec", "tsc", "--", "lib/email-template.ts", "lib/app-origin.ts", "--outDir", out, "--module", "commonjs", "--target", "es2022", "--esModuleInterop", "--skipLibCheck"], { stdio: "inherit" })
+const { createEmailActionUrl, renderShadowNodeEmail } = await import(pathToFileURL(out + "/email-template.js"))
 
 process.env.NETLIFY = "true"
 process.env.URL = "https://shadownodebureau.netlify.app"

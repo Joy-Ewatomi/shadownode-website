@@ -4,6 +4,7 @@ import {
   renderShadowNodeEmail,
   type EmailTemplateInput,
 } from "@/lib/email-template"
+import { validMailbox } from "@/lib/communication-channels"
 
 export type EmailAttachment = {
   filename: string
@@ -16,9 +17,11 @@ export async function sendEmail(options: {
   subject: string
   content: EmailTemplateInput
   attachments?: EmailAttachment[]
+  replyTo?: string
+  from?: string
 }) {
   const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM
+  const from = validMailbox(options.from || process.env.EMAIL_FROM)
   if (!apiKey || !from) return false
 
   const rendered = renderShadowNodeEmail(options.content)
@@ -28,6 +31,7 @@ export async function sendEmail(options: {
     subject: string
     html: string
     text: string
+    reply_to?: string
     attachments?: Array<{ filename: string; type: string; data: string }>
   } = {
     from,
@@ -36,6 +40,8 @@ export async function sendEmail(options: {
     html: rendered.html,
     text: rendered.text,
   }
+
+  if (options.replyTo) body.reply_to = options.replyTo
 
   if (options.attachments?.length) {
     body.attachments = options.attachments.map((attachment) => ({
@@ -121,6 +127,40 @@ export async function sendPasswordResetEmail(
       },
       expiryNotice: "This secure link expires in 15 minutes and can only be used once.",
       securityNotice: "If you did not request this reset, ignore this email and consider reviewing your account security.",
+    },
+  })
+}
+
+export async function sendWelcomeEmail(
+  email: string,
+  recipientName?: string | null,
+) {
+  const firstName = recipientName?.trim().split(/\s+/)[0] || null
+  const portalUrl = createEmailActionUrl("/dashboard/client", {})
+  if (!portalUrl) return false
+
+  return sendEmail({
+    to: email,
+    subject: "Welcome to ShadowNode Operations Bureau",
+    content: {
+      preheader: "Your secure ShadowNode client account is ready.",
+      category: "Client account",
+      heading: "Welcome to ShadowNode Operations Bureau",
+      recipientName: firstName,
+      paragraphs: [
+        "Welcome to ShadowNode Operations Bureau Limited. Your secure client account is ready.",
+        "Use the portal to submit and track service requests, review quotations and decisions, communicate through approved channels, and access reports, training information and certificates.",
+        "Requests remain subject to review and are not automatically accepted.",
+      ],
+      cta: { label: "Open client portal", url: portalUrl },
+      securityNotice: "Keep your login credentials private, enable two-factor authentication, and access sensitive information only through the official secure portal.",
+      closingLines: [
+        "Warm regards,",
+        "",
+        "Joy Ewatomi",
+        "Chief Executive Officer",
+        "ShadowNode Operations Bureau Limited",
+      ],
     },
   })
 }

@@ -21,6 +21,7 @@ export default function AuthPage() {
   const [success, setSuccess] = useState('')
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [twoFactorCode, setTwoFactorCode] = useState('')
+  const [twoFactorMethod, setTwoFactorMethod] = useState<'totp' | 'recovery'>('totp')
 
   const passwordChecks = useMemo(() => {
     const policy = evaluatePassword(password)
@@ -80,7 +81,7 @@ export default function AuthPage() {
 
     const endpoint = twoFactorRequired ? '/api/auth/2fa/verify' : tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
     const bodyData = tab === 'login'
-      ? twoFactorRequired ? { code: twoFactorCode } : { username, password, rememberDevice }
+      ? twoFactorRequired ? { code: twoFactorCode, method: twoFactorMethod } : { username, password, rememberDevice }
       : { email, username, password: submittedPassword, confirmPassword: submittedConfirmation }
 
     try {
@@ -158,9 +159,14 @@ export default function AuthPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className={isSignup ? 'grid gap-4 md:grid-cols-2' : 'space-y-4'}>
                 {twoFactorRequired ? (
-                  <Field label="Authentication code" required>
-                    <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black" inputMode="numeric" autoComplete="one-time-code" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} placeholder="123456" required minLength={6} maxLength={6} />
-                  </Field>
+                  <div className="space-y-3">
+                    <Field label={twoFactorMethod === 'totp' ? 'Authentication code' : 'Recovery code'} required>
+                      <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black" inputMode={twoFactorMethod === 'totp' ? 'numeric' : 'text'} autoComplete="one-time-code" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} placeholder={twoFactorMethod === 'totp' ? '123456' : 'XXXX-XXXX-XXXX-XXXX'} required minLength={twoFactorMethod === 'totp' ? 6 : 16} maxLength={twoFactorMethod === 'totp' ? 6 : 19} />
+                    </Field>
+                    <button type="button" className="text-sm text-[#20e978] hover:underline" onClick={() => { setTwoFactorMethod((current) => current === 'totp' ? 'recovery' : 'totp'); setTwoFactorCode(''); setError('') }}>
+                      {twoFactorMethod === 'totp' ? 'Use a recovery code' : 'Use an authenticator code'}
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <Field label="Username" required>
@@ -177,11 +183,11 @@ export default function AuthPage() {
                   </>
                 )}
 
-                <Field label="Password" required>
+                {!twoFactorRequired && <Field label="Password" required>
                   <InputShell icon={<Lock className="h-4 w-4" />} trailing={<Eye className="h-4 w-4" />}>
                     <Input className="h-10 border-0 bg-transparent px-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="password" name={isSignup ? "newPassword" : "password"} autoComplete={isSignup ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••••" required minLength={isSignup ? PASSWORD_MIN_LENGTH : undefined} maxLength={isSignup ? PASSWORD_MAX_LENGTH : undefined} />
                   </InputShell>
-                </Field>
+                </Field>}
 
                 {isSignup && (
                   <Field label="Confirm Password" required>

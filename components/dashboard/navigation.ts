@@ -13,6 +13,8 @@ import {
   History,
   GraduationCap,
   Award,
+  Send,
+  MailSearch,
 } from "lucide-react"
 import type { ElementType } from "react"
 
@@ -200,6 +202,14 @@ export function getNavigation(role: string): NavigationItem[] {
       icon: Bell,
       permission: "notifications:view",
     },
+
+    ...((isAdministrator || isSuperAdministrator)
+      ? [{ label: "Communication Queue", href: "/dashboard/communication-deliveries", icon: Send, permission: "notifications:view" as Permission }]
+      : []),
+
+    ...((isAdministrator || isSuperAdministrator)
+      ? [{ label: "Service Launch Interests", href: "/dashboard/service-launch-interests", icon: MailSearch, permission: "audit:view" as Permission }]
+      : []),
 
     // =====================================================
     // SETTINGS

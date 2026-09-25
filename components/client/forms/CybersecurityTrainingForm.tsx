@@ -87,6 +87,7 @@ export type CybersecurityTrainingFormData = {
   communication_email: string
   communication_phone: string
   communication_whatsapp: string
+  whatsapp_consent: boolean
   communication_signal: string
 
   authorization_confirmed: boolean
@@ -230,6 +231,7 @@ const EMPTY_FORM: CybersecurityTrainingFormData = {
   communication_email: "",
   communication_phone: "",
   communication_whatsapp: "",
+  whatsapp_consent: false,
   communication_signal: "",
 
   authorization_confirmed: false,
@@ -439,7 +441,7 @@ export default function CybersecurityTrainingForm({
         ) {
           return Boolean(
             form.communication_whatsapp,
-          )
+          ) && form.whatsapp_consent
         }
 
         if (

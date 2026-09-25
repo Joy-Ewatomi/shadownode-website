@@ -1,11 +1,10 @@
 import { sendEmail } from "@/lib/email"
 import { getEmailApplicationOrigin, type EmailTemplateInput } from "@/lib/email-template"
 import { query } from "@/lib/db"
+import { normalizeCommunicationPreference, normalizeWhatsAppNumber, operationalEmailFrom, validReplyTo, type CommunicationPreference } from "@/lib/communication-channels"
+import { manualWhatsAppProvider } from "@/lib/services/whatsapp-delivery-provider"
 
-type DeliveryPreference =
-  | "email"
-  | "whatsapp"
-  | "portal"
+type DeliveryPreference = CommunicationPreference
 
 type DeliverySensitivity =
   | "detailed"
@@ -30,6 +29,10 @@ type RecipientDeliveryContext = {
   communication_method: string | null
   communication_email: string | null
   communication_whatsapp: string | null
+  profile_preference: string | null
+  whatsapp_number_e164: string | null
+  whatsapp_consent_at: string | null
+  whatsapp_consent_withdrawn_at: string | null
 }
 
 const EXTERNALLY_DELIVERABLE_TYPES = new Set([
@@ -85,41 +88,6 @@ function asString(value: unknown) {
   }
 
   return null
-}
-
-function normalizePreference(
-  value: string | null | undefined,
-): DeliveryPreference {
-  const text = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_")
-
-  if (
-    text === "email" ||
-    text === "email_updates" ||
-    text === "email_notification"
-  ) {
-    return "email"
-  }
-
-  if (
-    text === "whatsapp" ||
-    text === "whats_app" ||
-    text === "whatsapp_updates"
-  ) {
-    return "whatsapp"
-  }
-
-  if (
-    text === "portal" ||
-    text === "portal_notification" ||
-    text === "portal_only"
-  ) {
-    return "portal"
-  }
-
-  return "portal"
 }
 
 function safeUuid(value: string | null) {
@@ -272,16 +240,6 @@ function normalizeEmail(value: string | null) {
   return null
 }
 
-function normalizeWhatsAppNumber(value: string | null) {
-  const compact =
-    value?.replace(/[^\d+]/g, "") || ""
-  if (/^\+[1-9]\d{7,14}$/.test(compact)) {
-    return compact
-  }
-
-  return null
-}
-
 function briefText(type: string) {
   if (type.includes("quote")) {
     return "A quote update is available in your ShadowNode portal."
@@ -400,6 +358,10 @@ async function recipientContext(
           au.email,
           au.email_verified_at,
           up.full_name,
+          up.communication_preference AS profile_preference,
+          up.whatsapp_number_e164,
+          up.whatsapp_consent_at,
+          up.whatsapp_consent_withdrawn_at,
           r.communication_method,
           r.communication_email,
           r.communication_whatsapp
@@ -432,7 +394,7 @@ async function createAttempt(input: {
   notification: PortalNotification
   channel: "email" | "whatsapp"
   destination: string | null
-  status?: "pending" | "sent" | "delivered" | "failed" | "skipped"
+  status?: "pending" | "sent" | "delivered" | "failed" | "skipped" | "ready"
   provider?: string | null
   preference: DeliveryPreference
   sensitivity: DeliverySensitivity
@@ -545,53 +507,6 @@ async function markAttempt(
   })
 }
 
-function whatsappConfigured() {
-  return Boolean(
-    process.env.WHATSAPP_PROVIDER_APPROVED ===
-      "true" &&
-      process.env.WHATSAPP_API_URL &&
-      process.env.WHATSAPP_API_TOKEN,
-  )
-}
-
-async function sendWhatsApp(input: {
-  to: string
-  message: string
-}) {
-  if (!whatsappConfigured()) {
-    return {
-      ok: false,
-      skipped: true,
-      error: "WhatsApp provider is not configured or approved.",
-    }
-  }
-
-  const response = await fetch(
-    String(process.env.WHATSAPP_API_URL),
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.WHATSAPP_API_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to: input.to,
-        message: input.message,
-      }),
-    },
-  )
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      skipped: false,
-      error: `WhatsApp provider returned ${response.status}`,
-    }
-  }
-
-  return { ok: true, skipped: false }
-}
-
 async function deliverEmail(input: {
   notification: PortalNotification
   context: RecipientDeliveryContext
@@ -601,10 +516,7 @@ async function deliverEmail(input: {
   fallbackOf?: string | null
 }) {
   const destination =
-    normalizeEmail(
-      input.context.communication_email ||
-        input.context.email,
-    )
+    normalizeEmail(input.context.email)
 
   if (
     !destination ||
@@ -657,6 +569,8 @@ async function deliverEmail(input: {
       to: destination,
       subject: template.subject,
       content: template.content,
+      from: operationalEmailFrom() || undefined,
+      replyTo: validReplyTo(process.env.CLIENT_SERVICES_REPLY_TO) || undefined,
     })
 
     await markAttempt(
@@ -681,72 +595,27 @@ async function deliverWhatsApp(input: {
   preference: DeliveryPreference
   sensitivity: DeliverySensitivity
 }) {
-  const destination = normalizeWhatsAppNumber(
-    input.context.communication_whatsapp,
-  )
-
+  const destination = normalizeWhatsAppNumber(input.context.whatsapp_number_e164)
+  const hasConsent = Boolean(input.context.whatsapp_consent_at && !input.context.whatsapp_consent_withdrawn_at)
   const attemptId = await createAttempt({
-    notification: input.notification,
-    channel: "whatsapp",
+    notification: input.notification, channel: "whatsapp", destination,
+    provider: "manual_whatsapp_business", preference: input.preference, sensitivity: input.sensitivity,
+    status: destination && hasConsent ? "pending" : "failed",
+    errorCode: destination && hasConsent ? null : "whatsapp_missing_number_or_consent",
+    errorMessage: destination && hasConsent ? null : "Recipient WhatsApp number or transactional consent is unavailable.",
+  })
+  if (!destination || !hasConsent || !attemptId) return
+  const portalUrl = absolutePortalUrl(asString(input.notification.metadata?.destination))
+  const prepared = manualWhatsAppProvider.prepare({
     destination,
-    provider: "configured_whatsapp_provider",
-    preference: input.preference,
-    sensitivity: input.sensitivity,
-    status: destination ? "pending" : "skipped",
-    errorCode: destination
-      ? null
-      : "whatsapp_missing_or_invalid",
-    errorMessage: destination
-      ? null
-      : "Recipient WhatsApp number is missing or invalid.",
+    message: whatsappText(input.notification, input.sensitivity, portalUrl),
   })
-
-  if (!destination) {
-    await deliverEmail({
-      notification: input.notification,
-      context: input.context,
-      preference: input.preference,
-      sensitivity: "brief",
-      forceBrief: true,
-      fallbackOf: attemptId,
-    })
-    return
-  }
-
-  const portalUrl = absolutePortalUrl(
-    asString(
-      input.notification.metadata?.destination,
-    ),
+  await query(
+    `UPDATE notification_delivery_attempts
+     SET status = 'ready', prepared_message = $2, prepared_at = now(), error_code = NULL, error_message = NULL
+     WHERE id = $1 AND status = 'pending'`,
+    [attemptId, prepared.message],
   )
-
-  const result = await sendWhatsApp({
-    to: destination,
-    message: whatsappText(
-      input.notification,
-      input.sensitivity,
-      portalUrl,
-    ),
-  })
-
-  if (result.ok) {
-    await markAttempt(attemptId, "sent")
-    return
-  }
-
-  await markAttempt(
-    attemptId,
-    result.skipped ? "skipped" : "failed",
-    result.error,
-  )
-
-  await deliverEmail({
-    notification: input.notification,
-    context: input.context,
-    preference: input.preference,
-    sensitivity: "brief",
-    forceBrief: true,
-    fallbackOf: attemptId,
-  })
 }
 
 export async function deliverExternalNotification(
@@ -772,9 +641,12 @@ export async function deliverExternalNotification(
 
   if (!context) return
 
-  const preference = normalizePreference(
-    context.communication_method,
-  )
+  let preference: DeliveryPreference
+  try {
+    preference = normalizeCommunicationPreference(context.profile_preference || context.communication_method || "portal")
+  } catch {
+    preference = "portal"
+  }
 
   if (
     sensitivity === "secure_email" ||
@@ -799,13 +671,7 @@ export async function deliverExternalNotification(
     return
   }
 
-  await deliverEmail({
-    notification,
-    context,
-    preference,
-    sensitivity: "brief",
-    forceBrief: true,
-  })
+  // Portal remains the canonical record; portal-only means no additional copy.
 }
 
 export async function deliverExternalNotificationsForIds(

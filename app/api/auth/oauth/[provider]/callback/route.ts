@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth"
 
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { deliverWelcomeEmail, registerWelcomeEmailEligibility } from "@/lib/welcome-email"
 import { clearOAuthStateCookie, getOAuthBaseUrl, getOAuthCallbackUrl, getOAuthStateCookieName, oauthJson, oauthRedirect, safeOAuthErrorCode, verifyOAuthCallback, type OAuthProvider as Provider } from "@/lib/oauth"
 
 import {
@@ -424,6 +425,7 @@ export async function GET(
       )
     }
 
+
     let user =
       linked?.app_users as
         | unknown as
@@ -505,6 +507,8 @@ export async function GET(
             email,
             role: "client",
 
+            password_login_enabled: false,
+
             password_hash:
               await hashPassword(
                 crypto
@@ -551,6 +555,7 @@ export async function GET(
 
       user =
         created as OAuthUser
+      await registerWelcomeEmailEligibility(user.id)
     }
 
     // --------------------------------
@@ -596,6 +601,13 @@ export async function GET(
         }
       )
     }
+
+    await deliverWelcomeEmail({
+      userId: user.id,
+      email: user.email,
+      recipientName: typeof profile.name === "string" ? profile.name : null,
+      registerEligibility: false,
+    })
 
     // --------------------------------
     // TWO FACTOR AUTHENTICATION

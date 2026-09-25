@@ -8,6 +8,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
 import CustomRequestAdditionalInformation from "@/components/requests/CustomRequestAdditionalInformation"
+import CommercialHistoryPanel from "@/components/requests/CommercialHistoryPanel"
 
 type ClientRequest = {
   [key: string]: unknown
@@ -66,7 +67,9 @@ type ClientRequest = {
   created_at?: string | null
   updated_at?: string | null
 
-    client_negotiation?: {
+    commercial_history?: React.ComponentProps<typeof CommercialHistoryPanel>["history"]
+
+  client_negotiation?: {
     id: string
     request_id: string
     round_number: number
@@ -2642,6 +2645,8 @@ console.log("EVIDENCE:", request.evidence_files)
       </p>
 
     </div>
+
+    <CommercialHistoryPanel history={request.commercial_history} />
 
     {request.client_negotiation ? (
       <div className="mt-5 space-y-5">

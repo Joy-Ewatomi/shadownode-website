@@ -21,6 +21,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { type FormEvent, useMemo, useRef, useState } from "react"
+import WhatsAppPreferenceFields from "@/components/communications/WhatsAppPreferenceFields"
 
 export type CustomRequestData = {
   submissionKey: string
@@ -51,6 +52,7 @@ export type CustomRequestData = {
   communicationMethod: string
   communicationEmail: string
   communicationWhatsapp: string
+  whatsappConsent: boolean
   additionalNotes: string
   authorizationConfirmed: boolean
   termsAccepted: boolean
@@ -107,7 +109,7 @@ function emptyData(submissionKey: string): CustomFormState {
     urgency: "", budgetAmount: "", budgetCurrency: "USD", billingCountry: "",
     preferredCurrency: "USD", confidentialityRequirements: "", complianceRequirements: "",
     accessibilityRequirements: "", communicationMethod: "portal_notification",
-    communicationEmail: "", communicationWhatsapp: "", additionalNotes: "", existingReferences: "",
+    communicationEmail: "", communicationWhatsapp: "", whatsappConsent: false, additionalNotes: "", existingReferences: "",
     authorizationConfirmed: false, termsAccepted: false, files: [],
   }
 }
@@ -177,6 +179,7 @@ export default function CustomRequestForm({
     if (target === 2) {
       if (data.communicationMethod === "email" && !data.communicationEmail.trim()) next.communicationEmail = "Enter the email address to use."
       if (data.communicationMethod === "whatsapp" && !data.communicationWhatsapp.trim()) next.communicationWhatsapp = "Enter the WhatsApp number to use."
+      if (data.communicationMethod === "whatsapp" && !data.whatsappConsent) next.whatsappConsent = "WhatsApp consent is required."
     }
     if (target === 3) {
       const invalidLink = data.supportingLinks.find((link) => {
@@ -317,7 +320,7 @@ export default function CustomRequestForm({
             {[["portal_notification", "Portal"], ["email", "Email"], ["whatsapp", "WhatsApp"]].map(([value, label]) => <button key={value} type="button" aria-pressed={data.communicationMethod === value} onClick={() => update("communicationMethod", value)} className={`min-h-11 rounded-xl border px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73] ${data.communicationMethod === value ? "border-[#20dc73] bg-[#20dc73]/10 text-[#20dc73]" : "border-[#143b28] text-white/60 hover:text-white"}`}>{label}</button>)}
           </div>
           {data.communicationMethod === "email" && <div className="mt-4"><Field label="Communication email" error={errors.communicationEmail}><input type="email" autoComplete="email" aria-invalid={Boolean(errors.communicationEmail)} value={data.communicationEmail} onChange={(event) => update("communicationEmail", event.target.value)} className={inputClass} /></Field></div>}
-          {data.communicationMethod === "whatsapp" && <div className="mt-4"><Field label="WhatsApp number" error={errors.communicationWhatsapp}><input type="tel" autoComplete="tel" aria-invalid={Boolean(errors.communicationWhatsapp)} value={data.communicationWhatsapp} onChange={(event) => update("communicationWhatsapp", event.target.value)} className={inputClass} /></Field></div>}
+          {data.communicationMethod === "whatsapp" && <div className="mt-4"><WhatsAppPreferenceFields value={data.communicationWhatsapp} consent={data.whatsappConsent} onValueChange={(value) => update("communicationWhatsapp", value)} onConsentChange={(value) => update("whatsappConsent", value)} numberError={errors.communicationWhatsapp} consentError={errors.whatsappConsent} /></div>}
         </fieldset>
       </div>
     )

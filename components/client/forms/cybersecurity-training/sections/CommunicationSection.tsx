@@ -3,8 +3,7 @@
 import { useMemo } from "react"
 import useCountryList from "react-select-country-list"
 
-import PhoneInput from "react-phone-number-input"
-import "react-phone-number-input/style.css"
+import WhatsAppPreferenceFields from "@/components/communications/WhatsAppPreferenceFields"
 
 import {
   MessageSquareText,
@@ -21,6 +20,7 @@ type Props = {
 
   email: string
   whatsapp: string
+  whatsappConsent: boolean
   signal: string
 
   onCountryChange: (value: string) => void
@@ -30,6 +30,7 @@ type Props = {
 
   onEmailChange: (value: string) => void
   onWhatsappChange: (value: string) => void
+  onWhatsappConsentChange: (value: boolean) => void
   onSignalChange: (value: string) => void
   allowPortal?: boolean
 }
@@ -44,6 +45,7 @@ export default function CommunicationSection({
 
   email,
   whatsapp,
+  whatsappConsent,
   signal: _signal,
 
   onCountryChange,
@@ -53,6 +55,7 @@ export default function CommunicationSection({
 
   onEmailChange,
   onWhatsappChange,
+  onWhatsappConsentChange,
   onSignalChange: _onSignalChange,
   allowPortal = true,
 
@@ -326,36 +329,14 @@ focus:border-[#20dc73]/50
 
 
 {/* WHATSAPP */}
-
-{
-communicationMethod==="whatsapp" && (
-
-<div>
-
-<label className="mb-2 block text-xs uppercase tracking-[0.12em] text-white/50">
-WhatsApp Number
-</label>
-
-
-<PhoneInput
-
-international
-
-defaultCountry="GB"
-
-value={whatsapp}
-
-onChange={(value)=>
-onWhatsappChange(value || "")
-}
-
-/>
-
-
-</div>
-
-)
-}
+{communicationMethod === "whatsapp" && (
+  <WhatsAppPreferenceFields
+    value={whatsapp}
+    consent={whatsappConsent}
+    onValueChange={onWhatsappChange}
+    onConsentChange={onWhatsappConsentChange}
+  />
+)}
 </div>
 
 )

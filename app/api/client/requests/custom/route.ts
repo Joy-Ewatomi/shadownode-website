@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { auditLog, getCurrentUser } from "@/lib/auth"
 import { withTransaction } from "@/lib/db"
+import { CommunicationPreferenceError } from "@/lib/communication-channels"
 import { isSameOriginMutation } from "@/lib/security-center"
 import {
   CUSTOM_SERVICE_TYPE,
@@ -63,6 +64,14 @@ export async function POST(request: NextRequest) {
           "Advisory triage only. Human review is required.",
         ],
       )
+      await client.query(
+        `UPDATE user_profiles SET communication_preference = $2,
+         whatsapp_number_e164 = CASE WHEN $2 = 'whatsapp' THEN $3 ELSE whatsapp_number_e164 END,
+         whatsapp_consent_at = CASE WHEN $2 = 'whatsapp' THEN COALESCE(whatsapp_consent_at, now()) ELSE whatsapp_consent_at END,
+         whatsapp_consent_withdrawn_at = CASE WHEN $2 = 'whatsapp' THEN NULL ELSE whatsapp_consent_withdrawn_at END,
+         updated_at = now() WHERE user_id = $1`,
+        [user.id, input.communicationMethod === "portal_notification" ? "portal" : input.communicationMethod, input.communicationWhatsapp],
+      )
       const row = inserted.rows[0]
       if (!row) throw new Error("CREATE_FAILED")
       if (row.created) {
@@ -98,7 +107,7 @@ export async function POST(request: NextRequest) {
       { status: created.created ? 201 : 200, headers: NO_STORE },
     )
   } catch (error) {
-    if (error instanceof CustomRequestValidationError) {
+    if (error instanceof CustomRequestValidationError || error instanceof CommunicationPreferenceError) {
       return NextResponse.json({ error: error.message }, { status: 400, headers: NO_STORE })
     }
     if (error instanceof SyntaxError) {

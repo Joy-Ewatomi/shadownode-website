@@ -7,6 +7,8 @@ import SuperAdminRequestReviewCard from "@/components/requests/SuperAdminRequest
 import RequestReviewCard from "@/components/requests/RequestReviewCard"
 import CustomRequestReviewPanel from "@/components/requests/CustomRequestReviewPanel"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
+import CommercialHistoryPanel from "@/components/requests/CommercialHistoryPanel"
+import { getCommercialHistory } from "@/lib/services/commercial-history-service"
 
 type RequestData = {
   id: string
@@ -1137,6 +1139,8 @@ workflowHistory =
       ),
     )
 
+  const commercialHistory = await getCommercialHistory(id)
+
   const serializedNegotiationHistory =
     JSON.parse(
       JSON.stringify(
@@ -1289,6 +1293,10 @@ workflowHistory =
       {/* =================================================
           REQUEST ACTIONS
           ================================================= */}
+
+      {(user.role === "administrator" || user.role === "super_administrator") && (
+        <CommercialHistoryPanel history={commercialHistory} />
+      )}
 
       <section className="min-w-0 overflow-hidden rounded-md border border-[#143b28] bg-[#06110f] p-5 sm:p-6">
 

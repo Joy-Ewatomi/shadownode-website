@@ -87,23 +87,26 @@ export async function POST(
       approved_quote_currency:
         | string
         | null
+      accepted_quote_version_id: string | null
     }>(
       `
       SELECT
-        id,
-        user_id,
-        title,
-        status,
-        converted_case_id,
-        converted_training_engagement_id,
-        approved_quote_amount,
-        approved_quote_currency
-      FROM requests
-      WHERE id = $1
-        AND user_id = $2
+        r.id,
+        r.user_id,
+        r.title,
+        r.status,
+        r.converted_case_id,
+        r.converted_training_engagement_id,
+        q.price AS approved_quote_amount,
+        q.currency AS approved_quote_currency,
+        r.accepted_quote_version_id
+      FROM requests r
+      LEFT JOIN quote_versions q ON q.id = r.accepted_quote_version_id AND q.request_id = r.id
+      WHERE r.id = $1
+        AND r.user_id = $2
         AND (
-          converted_case_id IS NOT NULL
-          OR converted_training_engagement_id IS NOT NULL
+          r.converted_case_id IS NOT NULL
+          OR r.converted_training_engagement_id IS NOT NULL
         )
       LIMIT 1
       `,
@@ -220,6 +223,10 @@ export async function POST(
     // =========================================================
     // 6. VALIDATE QUOTE AMOUNT
     // =========================================================
+
+    if (!item.accepted_quote_version_id) {
+      return NextResponse.json({ error: "No accepted quotation is available for payment" }, { status: 409 })
+    }
 
     if (
       item.approved_quote_amount ===
@@ -662,77 +669,19 @@ export async function POST(
       }>(
         `
         WITH payable AS (
-          SELECT
-            c.organization_id
-          FROM cases c
-          WHERE $7 = 'case'
-            AND c.id = $1
-            AND c.status = 'awaiting_payment'
-            AND c.payment_status <> 'paid'
-
+          SELECT c.organization_id FROM cases c
+          WHERE $7 = 'case' AND c.id = $1 AND c.status = 'awaiting_payment' AND c.payment_status <> 'paid'
           UNION ALL
-
-          SELECT
-            te.organization_id
-          FROM training_engagements te
-          WHERE $7 = 'training'
-            AND te.id = $6
-            AND te.status = 'awaiting_payment'
-            AND te.payment_status <> 'paid'
-        ),
-        existing AS (
-          SELECT p.id
-          FROM payments p
-          WHERE p.request_id = $5
-            AND p.status IN ('pending', 'unpaid', 'awaiting_payment', 'failed')
-          ORDER BY p.created_at DESC
-          LIMIT 1
-        ),
-        updated AS (
-          UPDATE payments p
-          SET
-            case_id = $1,
-            amount = $2,
-            currency = $3,
-            provider = 'paystack',
-            transaction_id = $4,
-            status = 'pending',
-            organization_id = payable.organization_id,
-            training_engagement_id = $6
-          FROM existing, payable
-          WHERE p.id = existing.id
-          RETURNING p.id
-        ),
-        inserted AS (
-          INSERT INTO payments (
-            case_id,
-            amount,
-            currency,
-            provider,
-            transaction_id,
-            status,
-            organization_id,
-            request_id,
-            training_engagement_id
-          )
-          SELECT
-            $1,
-            $2,
-            $3,
-            'paystack',
-            $4,
-            'pending',
-            payable.organization_id,
-            $5,
-            $6
-          FROM payable
-          WHERE NOT EXISTS (SELECT 1 FROM updated)
-          RETURNING id
+          SELECT te.organization_id FROM training_engagements te
+          WHERE $7 = 'training' AND te.id = $6 AND te.status = 'awaiting_payment' AND te.payment_status <> 'paid'
         )
-        SELECT id FROM updated
-        UNION ALL
-        SELECT id FROM inserted
-        LIMIT 1
+        INSERT INTO payments (
+          case_id, amount, currency, provider, transaction_id, status, organization_id,
+          request_id, training_engagement_id, quote_version_id, provider_reference
+        )
+        SELECT $1, $2, $3, 'paystack', $4, 'pending', payable.organization_id, $5, $6, $8, $4
+        FROM payable
+        RETURNING id
         `,
         [
           paymentType === "case"
@@ -747,6 +696,7 @@ export async function POST(
             ? item.converted_training_engagement_id
             : null,
           paymentType,
+          item.accepted_quote_version_id,
         ],
       )
 

@@ -1,3 +1,4 @@
+import { validateCommunicationSelection } from "@/lib/communication-channels"
 export const CUSTOM_SERVICE_TYPE = "custom_service"
 
 export const CUSTOM_REQUEST_STATUSES = [
@@ -68,6 +69,7 @@ export type ParsedCustomRequest = {
   communicationMethod: "portal_notification" | "email" | "whatsapp"
   communicationEmail: string | null
   communicationWhatsapp: string | null
+  whatsappConsent: boolean
   supportingLinks: string[]
   authorizationConfirmed: true
   termsAccepted: true
@@ -129,10 +131,12 @@ export function parseCustomRequestInput(body: unknown): ParsedCustomRequest {
   if (input.authorizationConfirmed !== true || input.termsAccepted !== true) {
     throw new CustomRequestValidationError("Authorization and terms acceptance are required.")
   }
-  const communicationMethod = input.communicationMethod
-  if (!new Set(["portal_notification", "email", "whatsapp"]).has(String(communicationMethod))) {
-    throw new CustomRequestValidationError("Select a valid communication method.")
-  }
+  const communication = validateCommunicationSelection({
+    preference: input.communicationMethod,
+    whatsappNumber: input.communicationWhatsapp,
+    whatsappConsent: input.whatsappConsent,
+  })
+  const communicationMethod = communication.preference
   const preferredStartDate = optionalDate(input.preferredStartDate)
   const preferredEndDate = optionalDate(input.preferredEndDate)
   if (preferredStartDate && preferredEndDate && preferredEndDate < preferredStartDate) {
@@ -149,9 +153,10 @@ export function parseCustomRequestInput(body: unknown): ParsedCustomRequest {
     objective: requiredText(input.objective, 10_000, "Describe what you would like ShadowNode to do."),
     billingCountry,
     preferredCurrency,
-    communicationMethod: communicationMethod as ParsedCustomRequest["communicationMethod"],
+    communicationMethod: communicationMethod === "portal" ? "portal_notification" : communicationMethod,
     communicationEmail: optionalText(input.communicationEmail, 254),
-    communicationWhatsapp: optionalText(input.communicationWhatsapp, 40),
+    communicationWhatsapp: communication.whatsappNumber,
+    whatsappConsent: communication.whatsappConsent,
     supportingLinks: parseLinks(input.supportingLinks),
     authorizationConfirmed: true,
     termsAccepted: true,

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
+import CommunicationPreferences from "@/components/settings/CommunicationPreferences"
 
 type ProfileRow = {
   id: string | null
@@ -123,6 +124,8 @@ export default async function SettingsPage() {
       </section>
 
       {user.role === "client" ? (
+        <>
+        <CommunicationPreferences />
         <section className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -148,6 +151,7 @@ export default async function SettingsPage() {
             <Info label="Verification" value={user.email_verified_at ? "email verified" : "email not verified"} />
           </div>
         </section>
+        </>
       ) : null}
 
       <section className="rounded-md border border-[#143b28] bg-[#06110f]">

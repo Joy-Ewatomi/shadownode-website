@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireUser } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { getCommercialHistory } from "@/lib/services/commercial-history-service"
 
 /**
  * =========================================================
@@ -471,8 +472,11 @@ export async function GET(
       delete clientSafeRow.ai_status
     }
 
+    const commercialHistory = await getCommercialHistory(id)
+
     const normalizedRow = {
       ...clientSafeRow,
+      commercial_history: commercialHistory,
 
       /**
        * JSONB

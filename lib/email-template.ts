@@ -22,6 +22,7 @@ export type EmailTemplateInput = {
   details?: EmailDetail[]
   expiryNotice?: string
   securityNotice?: string
+  closingLines?: string[]
 }
 
 export type RenderedEmail = {
@@ -92,8 +93,12 @@ export function renderShadowNodeEmail(input: EmailTemplateInput): RenderedEmail 
   const notice = (label: string, value?: string) => value
     ? `<p style="margin:12px 0 0;color:#526176;font-size:13px;line-height:1.55;"><strong>${escapeEmailHtml(label)}:</strong> ${escapeEmailHtml(value)}</p>`
     : ""
+  const closingHtml = input.closingLines?.length
+    ? `<div style="margin-top:24px;color:#253044;font-size:16px;line-height:1.65;">${input.closingLines.map((line) => line ? `<div>${escapeEmailHtml(line)}</div>` : `<div style="height:12px;"></div>`).join("")}</div>`
+    : ""
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#edf1f5;"><div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeEmailHtml(input.preheader)}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#edf1f5;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#ffffff;border-collapse:collapse;"><tr><td style="padding:24px 28px;background:#101827;border-bottom:4px solid #b8964e;"><div style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;">ShadowNode</div><div style="margin-top:4px;color:#d7dde7;font-family:Arial,Helvetica,sans-serif;font-size:12px;">Operations Bureau</div></td></tr><tr><td style="padding:32px 28px;font-family:Arial,Helvetica,sans-serif;"><p style="margin:0 0 10px;color:#8a6b2f;font-size:12px;font-weight:700;text-transform:uppercase;">${escapeEmailHtml(input.category)}</p><h1 style="margin:0 0 22px;color:#101827;font-size:26px;line-height:1.25;">${escapeEmailHtml(input.heading)}</h1><p style="margin:0 0 16px;color:#253044;font-size:16px;line-height:1.65;">${escapeEmailHtml(greeting)}</p>${bodyHtml}${detailsHtml}${ctaHtml}${notice("Expiry", input.expiryNotice)}${notice("Security", input.securityNotice)}</td></tr><tr><td style="padding:22px 28px;background:#f5f7fa;border-top:1px solid #d9e0e8;font-family:Arial,Helvetica,sans-serif;color:#526176;font-size:12px;line-height:1.6;"><strong style="color:#253044;">${EMAIL_LEGAL_NAME}</strong><br><a href="${escapeEmailHtml(origin)}" style="color:#245b91;">${escapeEmailHtml(origin)}</a><br><br>This is an automated service notification. Replies are not monitored.<br>&copy; ${year} ${EMAIL_LEGAL_NAME}.</td></tr></table></td></tr></table></body></html>`
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#edf1f5;"><div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeEmailHtml(input.preheader)}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#edf1f5;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#ffffff;border-collapse:collapse;"><tr><td style="padding:24px 28px;background:#101827;border-bottom:4px solid #b8964e;"><div style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;">ShadowNode</div><div style="margin-top:4px;color:#d7dde7;font-family:Arial,Helvetica,sans-serif;font-size:12px;">Operations Bureau</div></td></tr><tr><td style="padding:32px 28px;font-family:Arial,Helvetica,sans-serif;"><p style="margin:0 0 10px;color:#8a6b2f;font-size:12px;font-weight:700;text-transform:uppercase;">${escapeEmailHtml(input.category)}</p><h1 style="margin:0 0 22px;color:#101827;font-size:26px;line-height:1.25;">${escapeEmailHtml(input.heading)}</h1><p style="margin:0 0 16px;color:#253044;font-size:16px;line-height:1.65;">${escapeEmailHtml(greeting)}</p>${bodyHtml}${detailsHtml}${ctaHtml}${notice("Expiry", input.expiryNotice)}${notice("Security", input.securityNotice)}${closingHtml}</td></tr><tr><td style="padding:22px 28px;background:#f5f7fa;border-top:1px solid #d9e0e8;font-family:Arial,Helvetica,sans-serif;color:#526176;font-size:12px;line-height:1.6;"><strong style="color:#253044;">${EMAIL_LEGAL_NAME}</strong><br><a href="${escapeEmailHtml(origin)}" style="color:#245b91;">${escapeEmailHtml(origin)}</a><br><br>This is an automated service notification. Replies are not monitored.<br>&copy; ${year} ${EMAIL_LEGAL_NAME}.</td></tr></table></td></tr></table></body></html>`
 
   const lines = [
     EMAIL_BRAND_NAME,
@@ -108,6 +113,8 @@ export function renderShadowNodeEmail(input: EmailTemplateInput): RenderedEmail 
     ...(input.cta && ctaUrl ? [`${input.cta.label}: ${ctaUrl}`, ""] : []),
     ...(input.expiryNotice ? [`Expiry: ${input.expiryNotice}`, ""] : []),
     ...(input.securityNotice ? [`Security: ${input.securityNotice}`, ""] : []),
+    ...(input.closingLines || []),
+    ...(input.closingLines?.length ? [""] : []),
     EMAIL_LEGAL_NAME,
     origin,
     "This is an automated service notification. Replies are not monitored.",

@@ -7,7 +7,7 @@ import {
   canConfirmTwoFactorSetup,
   isSameOriginMutation,
   performLogoutAll,
-} from "./security-center.js"
+} from "../lib/security-center.ts"
 
 function request(origin, headers = {}) {
   return {

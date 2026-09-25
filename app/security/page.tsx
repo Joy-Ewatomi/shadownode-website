@@ -59,12 +59,15 @@ export default function SecurityPage() {
   const [historyPage, setHistoryPage] = useState(1)
   const [historyPages, setHistoryPages] = useState(1)
   const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean | null>(null)
+  const [passwordLoginEnabled, setPasswordLoginEnabled] = useState<boolean | null>(null)
   const [setup, setSetup] = useState<TwoFactorSetup | null>(null)
   const [code, setCode] = useState("")
   const [loading, setLoading] = useState<string | null>(null)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const [confirmDisable, setConfirmDisable] = useState(false)
+  const [confirmRecovery, setConfirmRecovery] = useState(false)
   const panelRef = useRef<HTMLElement | null>(null)
   const [form, setForm] = useState({ password: "", authCode: "", confirmation: "", reason: "" })
   const [newPasswordForChecklist, setNewPasswordForChecklist] = useState("")
@@ -89,7 +92,10 @@ export default function SecurityPage() {
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then((response) => response.json())
-      .then((data) => setTwoFactorEnabled(Boolean(data.user?.twoFactorEnabled)))
+      .then((data) => {
+        setTwoFactorEnabled(Boolean(data.user?.twoFactorEnabled))
+        setPasswordLoginEnabled(data.user?.passwordLoginEnabled === true)
+      })
       .catch(() => setError("Could not load account security status."))
   }, [])
 
@@ -238,12 +244,28 @@ export default function SecurityPage() {
 
   async function disableTwoFactor() {
     const data = await submitSecurityAction("/api/auth/2fa/disable", { password: form.password, code: form.authCode }, "disableTwoFactor")
-    if (data) { setTwoFactorEnabled(false); setForm((current) => ({ ...current, password: "", authCode: "" })) }
+    setConfirmDisable(false)
+    if (data) { setTwoFactorEnabled(false); setRecoveryCodes([]); setForm((current) => ({ ...current, password: "", authCode: "" })) }
   }
 
   async function regenerateRecoveryCodes() {
     const data = await submitSecurityAction("/api/auth/2fa/recovery-codes", { password: form.password, code: form.authCode }, "recovery")
+    setConfirmRecovery(false)
     if (data?.codes) { setRecoveryCodes(data.codes); setForm((current) => ({ ...current, password: "", authCode: "" })) }
+  }
+
+  async function copyRecoveryCodes() {
+    await navigator.clipboard.writeText(recoveryCodes.join("\n"))
+    setMessage("Recovery codes copied. Store them offline securely.")
+  }
+
+  function downloadRecoveryCodes() {
+    const url = URL.createObjectURL(new Blob([`${recoveryCodes.join("\n")}\n`], { type: "text/plain" }))
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = "shadownode-recovery-codes.txt"
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   async function loadDeletion() {
@@ -280,8 +302,8 @@ export default function SecurityPage() {
     { id: "devices" as View, title: "Devices", description: "Review active sessions. Device descriptions are approximate.", icon: Laptop, action: loadSessions, disabled: false },
     { id: "twoFactor" as View, title: twoFactorEnabled ? "2FA Enabled" : "Enable 2FA", description: twoFactorEnabled ? "Your account requires an authenticator code at sign-in." : "Protect sign-in with a time-based authenticator code.", icon: ShieldCheck, action: beginTwoFactorSetup, disabled: twoFactorEnabled !== false },
     { id: "password" as View, title: "Change Password", description: "Verify your current password and choose a stronger replacement.", icon: LockKeyhole, action: () => selectView("password"), disabled: false },
-    { id: "disableTwoFactor" as View, title: "Disable 2FA", description: twoFactorEnabled ? "Requires your password and an authenticator or recovery code." : "Two-factor authentication is not enabled.", icon: ShieldCheck, action: () => selectView("disableTwoFactor"), disabled: twoFactorEnabled !== true },
-    { id: "recovery" as View, title: "Recovery Codes", description: twoFactorEnabled ? "Regenerate one-time recovery codes after reauthentication." : "Enable two-factor authentication first.", icon: KeyRound, action: () => selectView("recovery"), disabled: twoFactorEnabled !== true },
+    { id: "disableTwoFactor" as View, title: "Disable 2FA", description: twoFactorEnabled ? passwordLoginEnabled ? "Requires your password and an authenticator or recovery code." : "Unavailable for OAuth-only accounts until secure provider reauthentication is supported." : "Two-factor authentication is not enabled.", icon: ShieldCheck, action: () => selectView("disableTwoFactor"), disabled: twoFactorEnabled !== true || passwordLoginEnabled !== true },
+    { id: "recovery" as View, title: "Recovery Codes", description: twoFactorEnabled ? passwordLoginEnabled ? "Regenerate one-time recovery codes after reauthentication." : "Unavailable for OAuth-only accounts until secure provider reauthentication is supported." : "Enable two-factor authentication first.", icon: KeyRound, action: () => selectView("recovery"), disabled: twoFactorEnabled !== true || passwordLoginEnabled !== true },
     { id: "deletion" as View, title: "Delete Account Request", description: "Submit a reviewable request with a 30-day cooling-off period.", icon: Trash2, action: loadDeletion, disabled: false },
   ]
 
@@ -424,7 +446,7 @@ export default function SecurityPage() {
             <div className="mt-4 grid max-w-xl gap-4">
               <label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} className="mt-2" /></label>
               <label className="text-sm">Authentication or recovery code<Input autoComplete="one-time-code" value={form.authCode} onChange={(event) => updateForm("authCode", event.target.value)} className="mt-2" /></label>
-              <Button type="button" variant="destructive" onClick={disableTwoFactor} disabled={loading === "disableTwoFactor" || !form.password || !form.authCode}>{loading === "disableTwoFactor" ? <Loader2 className="animate-spin" /> : null}Disable 2FA</Button>
+              <Button type="button" variant="destructive" onClick={() => setConfirmDisable(true)} disabled={loading === "disableTwoFactor" || !form.password || !form.authCode}>{loading === "disableTwoFactor" ? <Loader2 className="animate-spin" /> : null}Disable 2FA</Button>
             </div>
           </section>
         ) : null}
@@ -432,7 +454,7 @@ export default function SecurityPage() {
         {view === "recovery" ? (
           <section ref={panelRef} className="mt-8 scroll-mt-6 border-t border-white/10 pt-6" aria-labelledby="recovery-heading">
             <h2 id="recovery-heading" className="text-xl font-semibold">Recovery codes</h2>
-            {recoveryCodes.length ? <div className="mt-4 max-w-xl rounded border border-[#20dc73]/30 bg-[#20dc73]/10 p-4"><p className="text-sm">Store these codes securely. Each works once and they will not be shown again.</p><div className="mt-3 grid grid-cols-2 gap-2 font-mono">{recoveryCodes.map((item) => <code key={item}>{item}</code>)}</div><Button type="button" variant="outline" className="mt-4" onClick={() => setRecoveryCodes([])}>I have stored these codes</Button></div> : <div className="mt-4 grid max-w-xl gap-4"><label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} className="mt-2" /></label><label className="text-sm">Current authenticator code<Input inputMode="numeric" autoComplete="one-time-code" value={form.authCode} onChange={(event) => updateForm("authCode", event.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-2" /></label><Button type="button" onClick={regenerateRecoveryCodes} disabled={loading === "recovery" || !form.password || form.authCode.length !== 6}>{loading === "recovery" ? <Loader2 className="animate-spin" /> : null}Regenerate recovery codes</Button></div>}
+            {recoveryCodes.length ? <div className="mt-4 max-w-xl rounded border border-[#20dc73]/30 bg-[#20dc73]/10 p-4"><p className="text-sm">Store these codes securely. Each works once and they will not be shown again.</p><div className="mt-3 grid grid-cols-2 gap-2 font-mono">{recoveryCodes.map((item) => <code key={item}>{item}</code>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={copyRecoveryCodes}>Copy all</Button><Button type="button" variant="outline" onClick={downloadRecoveryCodes}>Download as text</Button><Button type="button" variant="outline" onClick={() => setRecoveryCodes([])}>I have stored these codes</Button></div></div> : <div className="mt-4 grid max-w-xl gap-4"><label className="text-sm">Current password<Input type="password" autoComplete="current-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} className="mt-2" /></label><label className="text-sm">Current authenticator code<Input inputMode="numeric" autoComplete="one-time-code" value={form.authCode} onChange={(event) => updateForm("authCode", event.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-2" /></label><Button type="button" onClick={() => setConfirmRecovery(true)} disabled={loading === "recovery" || !form.password || form.authCode.length !== 6}>{loading === "recovery" ? <Loader2 className="animate-spin" /> : null}Regenerate recovery codes</Button></div>}
           </section>
         ) : null}
 
@@ -444,6 +466,26 @@ export default function SecurityPage() {
           </section>
         ) : null}
       </div>
+
+      {confirmDisable ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-labelledby="disable-confirm-title">
+          <div className="w-full max-w-md rounded border border-white/15 bg-[#08110c] p-6">
+            <h2 id="disable-confirm-title" className="text-xl font-semibold">Disable two-factor authentication?</h2>
+            <p className="mt-3 text-sm text-white/65">Your account will lose its second authentication factor. All recovery codes and pending 2FA challenges will be invalidated. Your current session will remain active.</p>
+            <div className="mt-6 flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setConfirmDisable(false)}>Cancel</Button><Button type="button" variant="destructive" onClick={disableTwoFactor}>Disable 2FA</Button></div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmRecovery ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-labelledby="recovery-confirm-title">
+          <div className="w-full max-w-md rounded border border-white/15 bg-[#08110c] p-6">
+            <h2 id="recovery-confirm-title" className="text-xl font-semibold">Replace recovery codes?</h2>
+            <p className="mt-3 text-sm text-white/65">Every old recovery code will stop working immediately. The new codes will be shown only once.</p>
+            <div className="mt-6 flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setConfirmRecovery(false)}>Cancel</Button><Button type="button" onClick={regenerateRecoveryCodes}>Replace codes</Button></div>
+          </div>
+        </div>
+      ) : null}
 
       {confirmLogout ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-labelledby="logout-title">

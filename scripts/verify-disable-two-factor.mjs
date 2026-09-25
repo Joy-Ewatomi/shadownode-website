@@ -1,0 +1,20 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+
+const route = readFileSync("app/api/auth/2fa/disable/route.ts", "utf8")
+const ui = readFileSync("app/security/page.tsx", "utf8")
+assert.match(route, /isSameOriginMutation/)
+assert.match(route, /withTransaction/)
+assert.match(route, /FOR UPDATE/)
+assert.match(route, /verifyPassword/)
+assert.match(route, /verifyTotp/)
+assert.match(route, /consumeRecoveryCode/)
+assert.match(route, /password_login_enabled/)
+assert.match(route, /DELETE FROM two_factor_recovery_codes/)
+assert.match(route, /UPDATE pending_two_factor_challenges/)
+assert.match(route, /totp_secret_encrypted = NULL/)
+assert.match(route, /current session remains active/i)
+assert.match(ui, /OAuth-only accounts until secure provider reauthentication is supported/)
+assert.match(ui, /Your account will lose its second authentication factor/)
+assert.doesNotMatch(route, /console\.(?:log|warn|error)/)
+console.log("Disable-2FA security checks passed.")

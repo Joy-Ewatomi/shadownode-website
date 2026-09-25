@@ -254,6 +254,7 @@ export type InvestigationFormData = {
   communication_country_code: string
   communication_phone: string
   communication_whatsapp: string
+  whatsapp_consent: boolean
   communication_signal: string
   client_country: string
   preferred_currency: string
@@ -333,6 +334,7 @@ function createEmptyForm(): InvestigationFormData {
     communication_country_code: "",
     communication_phone: "",
     communication_whatsapp: "",
+    whatsapp_consent: false,
     communication_signal: "",
 
     client_country: "",
@@ -787,7 +789,7 @@ export default function InvestigationForm({
           case "whatsapp":
             return Boolean(
               form.communication_whatsapp.trim(),
-            )
+            ) && form.whatsapp_consent
 
           case "portal":
           case "portal_notification":
@@ -2381,9 +2383,8 @@ export default function InvestigationForm({
             email={
               form.communication_email
             }
-            whatsapp={
-              form.communication_whatsapp
-            }
+            whatsapp={form.communication_whatsapp}
+            whatsappConsent={form.whatsapp_consent}
             signal={
               form.communication_signal
             }
@@ -2432,14 +2433,8 @@ export default function InvestigationForm({
                   value,
               })
             }
-            onWhatsappChange={(
-              value: string,
-            ) =>
-              set({
-                communication_whatsapp:
-                  value,
-              })
-            }
+            onWhatsappChange={(value: string) => set({ communication_whatsapp: value })}
+            onWhatsappConsentChange={(value: boolean) => set({ whatsapp_consent: value })}
             onSignalChange={(
               value: string,
             ) =>

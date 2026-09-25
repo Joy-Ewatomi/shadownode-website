@@ -36,6 +36,21 @@ type VerifyResult = {
   message?: string
 }
 
+async function recordPaymentReviewFailure(paymentId: string, requestId: string | null, category: string) {
+  const changed = await query<{ id: string }>(
+    `UPDATE payments SET status = 'failed', failure_reason_category = $2
+     WHERE id = $1 AND status <> 'paid' AND failure_reason_category IS DISTINCT FROM $2 RETURNING id`,
+    [paymentId, category],
+  )
+  if (changed.rows[0]) {
+    await notifySuperAdmins({
+      type: "payment_review_required", title: "Payment requires review",
+      message: "A verified payment attempt did not match its accepted quotation.",
+      metadata: { payment_id: paymentId, request_id: requestId, resource_type: "request", resource_id: requestId, audience: "super_administrator" },
+    }).catch(() => undefined)
+  }
+}
+
 /**
  * Verify a Paystack payment and activate the
  * associated investigation case or training engagement.
@@ -98,19 +113,23 @@ export async function verifyAndCompletePaystackPayment(
       amount: number | string
       currency: string | null
       status: string | null
+      quote_version_id: string | null
+      quote_price: number | string | null
+      quote_currency: string | null
+      quote_status: string | null
+      accepted_quote_version_id: string | null
+      request_user_id: string | null
     }>(
       `
       SELECT
-        id,
-        case_id,
-        request_id,
-        training_engagement_id,
-        amount,
-        currency,
-        status
-      FROM payments
-      WHERE provider = 'paystack'
-        AND transaction_id = $1
+        p.id, p.case_id, p.request_id, p.training_engagement_id, p.amount, p.currency, p.status,
+        p.quote_version_id, q.price AS quote_price, q.currency AS quote_currency, q.status AS quote_status,
+        r.accepted_quote_version_id, r.user_id AS request_user_id
+      FROM payments p
+      JOIN requests r ON r.id = p.request_id
+      JOIN quote_versions q ON q.id = p.quote_version_id AND q.request_id = r.id
+      WHERE p.provider = 'paystack'
+        AND p.transaction_id = $1
       LIMIT 1
       `,
       [cleanReference],
@@ -127,6 +146,14 @@ export async function verifyAndCompletePaystackPayment(
 
   const payment =
     localPayment.rows[0]
+
+  if (!payment?.quote_version_id || payment.accepted_quote_version_id !== payment.quote_version_id || !["accepted", "paid"].includes(String(payment.quote_status))) {
+    throw new Error("Payment is not linked to the accepted quotation")
+  }
+  if (Number(payment.amount) !== Number(payment.quote_price) || String(payment.currency || "").toUpperCase() !== String(payment.quote_currency || "").toUpperCase()) {
+    await recordPaymentReviewFailure(payment.id, payment.request_id, "quote_mismatch")
+    throw new Error("Payment does not match the accepted quotation")
+  }
 
   if (!payment) {
     throw new Error(
@@ -302,6 +329,8 @@ export async function verifyAndCompletePaystackPayment(
       },
     )
 
+    await recordPaymentReviewFailure(payment.id, payment.request_id, "provider_not_successful")
+
     return {
       success: false,
       payment_id:
@@ -373,6 +402,7 @@ export async function verifyAndCompletePaystackPayment(
       },
     )
 
+    await recordPaymentReviewFailure(payment.id, payment.request_id, "amount_mismatch")
     throw new Error(
       "Payment amount does not match the approved quote",
     )
@@ -410,6 +440,7 @@ export async function verifyAndCompletePaystackPayment(
       },
     )
 
+    await recordPaymentReviewFailure(payment.id, payment.request_id, "currency_mismatch")
     throw new Error(
       "Payment currency does not match the approved quote",
     )
@@ -452,20 +483,22 @@ export async function verifyAndCompletePaystackPayment(
               training_engagement_id:
                 | string
                 | null
-              status:
-                | string
-                | null
+              status: string | null
+              quote_version_id: string | null
+              amount: number | string
+              currency: string | null
+              quote_price: number | string | null
+              quote_currency: string | null
+              accepted_quote_version_id: string | null
             }>(
               `
-              SELECT
-                id,
-                case_id,
-                request_id,
-                training_engagement_id,
-                status
-              FROM payments
-              WHERE id = $1
-              FOR UPDATE
+              SELECT p.id, p.case_id, p.request_id, p.training_engagement_id, p.status, p.quote_version_id,
+                     p.amount, p.currency, q.price AS quote_price, q.currency AS quote_currency, r.accepted_quote_version_id
+              FROM payments p
+              JOIN requests r ON r.id = p.request_id
+              JOIN quote_versions q ON q.id = p.quote_version_id AND q.request_id = r.id
+              WHERE p.id = $1
+              FOR UPDATE OF p, q, r
               `,
               [payment.id],
             )
@@ -499,6 +532,8 @@ export async function verifyAndCompletePaystackPayment(
             UPDATE payments
             SET
               status = 'paid',
+              verified_at = NOW(),
+              failure_reason_category = NULL,
               paid_at = COALESCE(
                 $2::timestamptz,
                 NOW()
@@ -545,6 +580,16 @@ export async function verifyAndCompletePaystackPayment(
               current.case_id,
               current.training_engagement_id,
             ],
+          )
+
+          if (!current.quote_version_id || current.quote_version_id !== current.accepted_quote_version_id ||
+              Number(current.amount) !== Number(current.quote_price) ||
+              String(current.currency || "").toUpperCase() !== String(current.quote_currency || "").toUpperCase()) {
+            throw new Error("Payment quote linkage changed during verification")
+          }
+          await client.query(
+            `UPDATE quote_versions SET status = 'paid' WHERE id = $1 AND status IN ('accepted', 'paid')`,
+            [current.quote_version_id],
           )
 
           // =================================================

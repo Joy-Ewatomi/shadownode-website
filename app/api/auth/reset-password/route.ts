@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       [reset.id],
     )
     if (!consumed.rows[0]) return null
-    await client.query("UPDATE app_users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [await hashPassword(password), reset.user_id])
+    await client.query("UPDATE app_users SET password_hash = $1, password_login_enabled = true, updated_at = NOW() WHERE id = $2", [await hashPassword(password), reset.user_id])
     await client.query("DELETE FROM sessions WHERE user_id = $1", [reset.user_id])
     return reset.user_id
   })

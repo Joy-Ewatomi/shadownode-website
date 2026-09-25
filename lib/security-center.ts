@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server"
-import crypto from "crypto"
 
 export function isSameOriginMutation(request: NextRequest) {
   const requestOrigin = request.nextUrl.origin
@@ -76,46 +75,6 @@ export function canConfirmTwoFactorSetup(
   return !alreadyEnabled && codeValid
 }
 
-
-const RECOVERY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-
-export function generateRecoveryCodes(count = 10) {
-  return Array.from({ length: count }, () => {
-    const bytes = crypto.randomBytes(8)
-    const value = Array.from(bytes, (byte) => RECOVERY_ALPHABET[byte % RECOVERY_ALPHABET.length]).join("")
-    return `${value.slice(0, 4)}-${value.slice(4)}`
-  })
-}
-
-export function normalizeRecoveryCode(value: string) {
-  return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase()
-}
-
-export function hashRecoveryCode(value: string) {
-  return crypto.createHash("sha256").update(normalizeRecoveryCode(value)).digest("hex")
-}
-
-export function serializeRecoveryCodeHashes(codes: string[]) {
-  return JSON.stringify(codes.map(hashRecoveryCode))
-}
-
-export function consumeRecoveryCode(stored: string | null, candidate: string) {
-  if (!stored || !candidate) return { valid: false, remaining: stored }
-  try {
-    const hashes: unknown = JSON.parse(stored)
-    if (!Array.isArray(hashes) || !hashes.every((value) => typeof value === "string")) return { valid: false, remaining: stored }
-    const candidateHash = hashRecoveryCode(candidate)
-    const index = hashes.findIndex((value) => {
-      const left = Buffer.from(value)
-      const right = Buffer.from(candidateHash)
-      return left.length === right.length && crypto.timingSafeEqual(left, right)
-    })
-    if (index < 0) return { valid: false, remaining: stored }
-    return { valid: true, remaining: JSON.stringify(hashes.filter((_, itemIndex) => itemIndex !== index)) }
-  } catch {
-    return { valid: false, remaining: stored }
-  }
-}
 
 export function deletionCoolingOffDate(now = new Date(), days = 30) {
   return new Date(now.getTime() + days * 24 * 60 * 60 * 1000)

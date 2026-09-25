@@ -227,6 +227,7 @@ export const EMPTY_FORM: CybersecurityTrainingFormData = {
   communication_country_code: "",
   communication_phone: "",
   communication_whatsapp: "",
+  whatsapp_consent: false,
   communication_signal: "",
 
   authorization_confirmed: false,

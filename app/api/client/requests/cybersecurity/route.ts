@@ -2,7 +2,8 @@ import { nanoid } from "nanoid"
 import { NextRequest, NextResponse } from "next/server"
 
 import { auditLog, getCurrentUser } from "@/lib/auth"
-import { query } from "@/lib/db"
+import { query, withTransaction } from "@/lib/db"
+import { CommunicationPreferenceError, validateCommunicationSelection } from "@/lib/communication-channels"
 import { createQuoteVersion } from "@/lib/services/quote-version-service"
 import { analyzeCybersecurityTrainingRequest } from "@/lib/services/cybersecurity-training-analysis-service"
 import { notifyAdmins } from "@/lib/services/notification-service"
@@ -635,12 +636,12 @@ export async function POST(
           "portal",
       )
 
-    const communication_method =
-      normalizeCommunicationMethod(
-        body.communication_method ||
-          body.communication_channel ||
-          contact_method,
-      )
+    const communication = validateCommunicationSelection({
+      preference: body.communication_method || body.communication_channel || contact_method,
+      whatsappNumber: body.communication_whatsapp,
+      whatsappConsent: body.whatsapp_consent,
+    })
+    const communication_method = communication.preference
 
     const communication_email =
       clean(
@@ -657,10 +658,7 @@ export async function POST(
         body.communication_phone,
       )
 
-    const communication_whatsapp =
-      clean(
-        body.communication_whatsapp,
-      )
+    const communication_whatsapp = communication.whatsappNumber || ""
 
     const communication_signal =
       clean(
@@ -1130,8 +1128,8 @@ export async function POST(
     // INSERT REQUEST
     // ========================================================
 
-    const inserted =
-      await query<{
+    const inserted = await withTransaction(async (client) => {
+      const result = await client.query<{
         id: string
         case_number: string
       }>(
@@ -1506,7 +1504,16 @@ export async function POST(
           timeline,
         ],
       )
-
+      await client.query(
+        `UPDATE user_profiles SET communication_preference = $2,
+         whatsapp_number_e164 = CASE WHEN $2 = 'whatsapp' THEN $3 ELSE whatsapp_number_e164 END,
+         whatsapp_consent_at = CASE WHEN $2 = 'whatsapp' THEN COALESCE(whatsapp_consent_at, now()) ELSE whatsapp_consent_at END,
+         whatsapp_consent_withdrawn_at = CASE WHEN $2 = 'whatsapp' THEN NULL ELSE whatsapp_consent_withdrawn_at END,
+         updated_at = now() WHERE user_id = $1`,
+        [user.id, communication_method, communication_whatsapp],
+      )
+      return result
+    })
     console.log(
       "=== CYBERSECURITY REQUEST INSERTED ===",
       {
@@ -1776,6 +1783,9 @@ export async function POST(
       },
     )
   } catch (error) {
+    if (error instanceof CommunicationPreferenceError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error(
       "CYBERSECURITY REQUEST POST ERROR",
       error,

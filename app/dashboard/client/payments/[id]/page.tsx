@@ -28,7 +28,10 @@ type RequestData = {
     | string
     | null
   status?: string | null
+  commercial_history?: { status?: string | null } | null
 }
+
+type PaymentProvider = "paystack" | "flutterwave"
 
 export default function ClientPaymentDetailPage({
   params,
@@ -53,6 +56,9 @@ export default function ClientPaymentDetailPage({
     paying,
     setPaying,
   ] = useState(false)
+
+  const [provider, setProvider] = useState<PaymentProvider>("paystack")
+  const [providers, setProviders] = useState({ paystack: true, flutterwave: false })
 
   const [
     error,
@@ -123,6 +129,13 @@ export default function ClientPaymentDetailPage({
 
         if (!cancelled) {
           setRequest(data)
+          const providerResponse = await fetch(`/api/client/payments/providers?request_id=${encodeURIComponent(data.id)}`, { credentials: "include", cache: "no-store" })
+          const providerData = await providerResponse.json().catch(() => null)
+          if (providerResponse.ok && providerData?.providers) {
+            const available = { paystack: Boolean(providerData.providers.paystack?.available), flutterwave: Boolean(providerData.providers.flutterwave?.available) }
+            setProviders(available)
+            if (!available.paystack && available.flutterwave) setProvider("flutterwave")
+          }
         }
       } catch (err) {
         console.error(
@@ -193,7 +206,7 @@ export default function ClientPaymentDetailPage({
     try {
       const response =
         await fetch(
-          "/api/client/payments/initialize",
+          provider === "flutterwave" ? "/api/client/payments/flutterwave/initialize" : "/api/client/payments/initialize",
           {
             method: "POST",
             headers: {
@@ -221,11 +234,6 @@ export default function ClientPaymentDetailPage({
         response.status,
       )
 
-      console.log(
-        "PAYMENT INITIALIZE DATA:",
-        data,
-      )
-
       if (!response.ok) {
         throw new Error(
           data?.error ||
@@ -234,21 +242,14 @@ export default function ClientPaymentDetailPage({
       }
 
       if (
-        !data?.authorization_url
+        !(data?.authorization_url || data?.checkout_url)
       ) {
         throw new Error(
-          "Paystack did not return a checkout URL",
+          "The payment provider did not return a checkout URL",
         )
       }
 
-      console.log(
-        "PAYSTACK AUTHORIZATION URL:",
-        data.authorization_url,
-      )
-
-      window.location.assign(
-        data.authorization_url,
-      )
+      window.location.assign(data.authorization_url || data.checkout_url)
     } catch (err) {
       console.error(
         "PAYMENT INITIALIZATION ERROR",
@@ -301,15 +302,9 @@ export default function ClientPaymentDetailPage({
   // PAYMENT STATUS
   // =========================================================
 
-  const isPaymentSuccess =
-    paymentResult === "success"
-
-  const isRequestActive =
-    request.status === "active"
-
-  const isPaid =
-    isPaymentSuccess ||
-    isRequestActive
+  // Redirect query parameters are informational only. Paid state comes from
+  // the server-owned commercial history and verified payment record.
+  const isPaid = request.commercial_history?.status === "paid"
 
   const canPay =
     request.status ===
@@ -402,7 +397,7 @@ export default function ClientPaymentDetailPage({
           ===================================================== */}
 
       {paymentResult ===
-        "success" && (
+        "success" && isPaid && (
         <div className="rounded-md border border-[#20dc73]/40 bg-[#20dc73]/10 p-5">
           <p className="font-semibold text-[#20dc73]">
             Payment confirmed
@@ -531,7 +526,7 @@ export default function ClientPaymentDetailPage({
                 "training"
                 ? "Payment has been confirmed. ShadowNode can now proceed with your training engagement."
                 : "Payment has been confirmed. ShadowNode can now proceed with your investigation."
-              : "Complete payment through Paystack. Your request will only become active after the payment is verified by our server."}
+              : "Complete payment through your selected hosted provider. Your request becomes active only after server verification."}
           </p>
         </div>
 
@@ -539,17 +534,28 @@ export default function ClientPaymentDetailPage({
             ACTIONS
             =================================================== */}
 
+       {!isPaid && (
+         <fieldset className="space-y-3">
+           <legend className="text-sm font-semibold text-white">Payment provider</legend>
+           <div className="flex flex-wrap gap-3">
+             {providers.paystack && <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded border border-[#143b28] px-4 py-3"><input type="radio" name="payment-provider" checked={provider === "paystack"} onChange={() => setProvider("paystack")} /> Paystack</label>}
+             {providers.flutterwave && <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded border border-[#143b28] px-4 py-3"><input type="radio" name="payment-provider" checked={provider === "flutterwave"} onChange={() => setProvider("flutterwave")} /> Flutterwave</label>}
+           </div>
+           {provider === "flutterwave" && <p className="text-sm leading-6 text-white/55">Available payment methods are determined securely by Flutterwave based on your country, currency and merchant configuration.</p>}
+         </fieldset>
+       )}
+
        <div className="flex flex-wrap gap-3">
   {!isPaid && (
     <button
       type="button"
-      disabled={paying}
+      disabled={paying || (!providers.paystack && !providers.flutterwave)}
       onClick={handlePayment}
       className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {paying
-        ? "Opening Paystack..."
-        : "Pay Now"}
+        ? `Opening ${provider === "flutterwave" ? "Flutterwave" : "Paystack"}...`
+        : `Pay with ${provider === "flutterwave" ? "Flutterwave" : "Paystack"}`}
     </button>
   )}
 

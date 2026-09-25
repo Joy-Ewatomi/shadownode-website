@@ -44,9 +44,8 @@ form.communication_email
 }
 
 
-whatsapp={
-form.communication_whatsapp
-}
+whatsapp={form.communication_whatsapp}
+whatsappConsent={form.whatsapp_consent}
 
 
 signal={
@@ -91,11 +90,8 @@ communication_email:value
 
 
 
-onWhatsappChange={(value)=>
-set({
-communication_whatsapp:value
-})
-}
+onWhatsappChange={(value)=> set({ communication_whatsapp:value })}
+onWhatsappConsentChange={(value)=> set({ whatsapp_consent:value })}
 
 
 
