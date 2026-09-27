@@ -657,6 +657,38 @@ export async function notifyAdmins(
   }
 }
 
+/** Notify every active role that can review newly submitted client requests. */
+export async function notifyRequestReviewers(event: NotificationEvent) {
+  try {
+    const users = await query<{ id: string; role: string }>(
+      `SELECT id, role
+       FROM app_users
+       WHERE role IN ('administrator', 'super_administrator', 'super-administrator')
+         AND status = 'active'`,
+    )
+    await Promise.all(users.rows.map((user) => {
+      const superAdministrator =
+        user.role === "super_administrator" ||
+        user.role === "super-administrator"
+      return notifyUser(user.id, {
+        ...event,
+        metadata: {
+          ...(event.metadata || {}),
+          audience: superAdministrator ? "super_administrator" : "administrator",
+          target_page: superAdministrator
+            ? "super_admin_request_review"
+            : "admin_request_review",
+        },
+      })
+    }))
+  } catch (error) {
+    console.error(
+      "REQUEST REVIEWER NOTIFICATION ERROR:",
+      error instanceof Error ? error.message : "Notification fan-out failed",
+    )
+  }
+}
+
 /* =======================================================
    Super Administrator Notifications
    ======================================================= */

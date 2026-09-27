@@ -38,6 +38,7 @@ type RecipientDeliveryContext = {
 
 const EXTERNALLY_DELIVERABLE_TYPES = new Set([
   "request_received",
+  "client_request",
   "request_submitted",
   "request_under_review",
   "request_more_information_required",
@@ -155,7 +156,12 @@ function isExternallyDeliverable(
     asString(metadata.audience) ||
     asString(metadata.recipient_role)
 
+  const forcedReviewerEmail =
+    type === "client_request" &&
+    metadata.force_email === true
+
   if (
+    !forcedReviewerEmail &&
     audience &&
     STAFF_ONLY_AUDIENCES.has(
       audience.toLowerCase(),
@@ -295,6 +301,13 @@ function emailTemplate(
       heading: notification.title,
       recipientName,
       paragraphs: [message],
+      details: normalizeEventType(notification.type) === "client_request"
+        ? [
+            { label: "Request reference", value: asString(notification.metadata?.request_reference) || "Available in portal" },
+            { label: "Service category", value: asString(notification.metadata?.service_category) || "Service request" },
+            { label: "Submitted", value: asString(notification.metadata?.submitted_at) || "Recently" },
+          ]
+        : undefined,
       cta: portalUrl
         ? {
             label: "Open secure portal",
@@ -649,7 +662,12 @@ export async function deliverExternalNotification(
     preference = "portal"
   }
 
+  const forceEmail =
+    normalizeEventType(notification.type) === "client_request" &&
+    notification.metadata?.force_email === true
+
   if (
+    forceEmail ||
     sensitivity === "secure_email" ||
     preference === "email"
   ) {

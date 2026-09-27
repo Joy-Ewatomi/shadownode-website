@@ -11,6 +11,7 @@ import RequestSubmitted from "@/components/client/RequestSubmitted"
 export default function CybersecurityRequestPage() {
 
   const [submitting, setSubmitting] = useState(false)
+  const [submissionKey] = useState(() => crypto.randomUUID())
   const [submittedRef, setSubmittedRef] =
     useState<string | null>(null)
 
@@ -28,7 +29,7 @@ export default function CybersecurityRequestPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify({ ...data, submission_key: submissionKey }),
         },
       )
 

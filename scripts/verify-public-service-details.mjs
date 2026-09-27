@@ -8,7 +8,7 @@ const route = read("app/api/public/service-launch-interest/route.ts")
 const migration = read("scripts/service-launch-interests.sql")
 
 for (const key of ["osint", "forensics", "hacking", "gov", "correctional", "legal", "research", "opsec"]) {
-  assert.match(page, new RegExp(`handleTrackToggle\\('${key}'\\)`))
+  assert.match(page, new RegExp(`handleTrackToggle\\("${key}"\\)`))
   assert.match(details, new RegExp(`\\b${key}: \\{`))
 }
 
@@ -44,8 +44,8 @@ assert.match(details, /autoComplete="email"/)
 assert.match(details, /role="alert"/)
 assert.match(page, /role="dialog"/)
 assert.match(page, /aria-modal="true"/)
-assert.match(page, /event\.key === 'Escape'/)
-assert.match(page, /event\.key === 'Tab'/)
+assert.match(page, /event\.key === "Escape"/)
+assert.match(page, /event\.key === "Tab"/)
 assert.match(page, /useReducedMotion/)
 assert.match(page, /max-h-\[calc\(100dvh-2rem\)\]/)
 assert.match(details, /href="\/request"/)

@@ -1,39 +1,49 @@
-import type { Metadata } from 'next'
-import { ThreatNodeNetwork } from '@/components/animations/ThreatNodeNetwork'
-import './globals.css'
+import type { Metadata } from "next";
+import { ThreatNodeNetwork } from "@/components/animations/ThreatNodeNetwork";
+import { getTrustedApplicationOrigin } from "@/lib/app-origin";
+import "./globals.css";
+
+const applicationOrigin = getTrustedApplicationOrigin();
 
 export const metadata: Metadata = {
-  title: 'Shadownode Operations Bureau',
+  metadataBase: applicationOrigin ? new URL(applicationOrigin) : undefined,
+  title: {
+    default: "ShadowNode Operations Bureau Limited",
+    template: "%s | ShadowNode Operations Bureau",
+  },
   description:
-    'ShadowNode Operations Bureau | Professional investigations and intelligence services for individuals and businesses. Expert analysis, surveillance, and risk assessment to protect your interests',
-  icons: {
-    icon: [
-      {
-        url: '/real1shadownodelogo.png',
-        media: '(prefers-color-scheme: dark)',
-      },
+    "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
+  alternates: applicationOrigin ? { canonical: "/" } : undefined,
+  icons: { icon: "/real1shadownodelogo.png" },
+  openGraph: {
+    title: "ShadowNode Operations Bureau Limited",
+    description:
+      "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
+    type: "website",
+    images: [
+      { url: "/real1shadownodelogo.png", alt: "ShadowNode Operations Bureau" },
     ],
   },
-}
+  twitter: {
+    card: "summary",
+    title: "ShadowNode Operations Bureau Limited",
+    description:
+      "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
+    images: ["/real1shadownodelogo.png"],
+  },
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en" className="dark scroll-smooth">
       <body className="font-sans antialiased text-foreground min-h-screen relative overflow-x-hidden">
-        
-        {/* Global Particle Core Network Matrix */}
         <ThreatNodeNetwork />
-        
-        {/* Active Page Route Entry/Exit Transitions */}
-        <div className="relative z-10 w-full">
-          {children}
-        </div>
-
+        <div className="relative z-10 w-full">{children}</div>
       </body>
     </html>
-  )
+  );
 }

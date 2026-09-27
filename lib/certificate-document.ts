@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises"
+import path from "node:path"
+
 import QRCode from "qrcode"
 import sharp from "sharp"
 
@@ -9,6 +12,14 @@ import { ensureAccess } from "@/lib/services/training-operations-service"
 
 export const CERTIFICATE_WIDTH = 3508
 export const CERTIFICATE_HEIGHT = 2480
+const CERTIFICATE_FONT_PATH = path.join(process.cwd(), "assets/fonts/Geist-Regular.ttf")
+
+let certificateFontData: Promise<string> | null = null
+
+function loadCertificateFont() {
+  certificateFontData ||= readFile(CERTIFICATE_FONT_PATH).then((font) => font.toString("base64"))
+  return certificateFontData
+}
 
 export type CertificateDocument = {
   id: string
@@ -119,40 +130,52 @@ function wrappedLines(value: string, maxCharacters: number, maximumLines = 2) {
 }
 
 export async function createCertificateSvg(document: CertificateDocument) {
-  const qr = await QRCode.toDataURL(document.verificationUrl, { errorCorrectionLevel: "M", margin: 1, width: 420 })
-  const titleLines = wrappedLines(document.trainingTitle, 45)
+  const [font, qr] = await Promise.all([
+    loadCertificateFont(),
+    QRCode.toDataURL(document.verificationUrl, { errorCorrectionLevel: "M", margin: 1, width: 660 }),
+  ])
+  const titleLines = wrappedLines(document.trainingTitle, 48, 3)
   const recipientLines = wrappedLines(document.recipientName, 38)
   const trainerBlock = document.trainerName
     ? `<text x="2730" y="1980" text-anchor="middle" class="meta strong">${xml(document.trainerName)}</text><line x1="2410" y1="2015" x2="3050" y2="2015" class="line"/><text x="2730" y="2070" text-anchor="middle" class="label">TRAINER</text>`
     : ""
   return Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${CERTIFICATE_WIDTH}" height="${CERTIFICATE_HEIGHT}" viewBox="0 0 ${CERTIFICATE_WIDTH} ${CERTIFICATE_HEIGHT}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${CERTIFICATE_WIDTH}" height="${CERTIFICATE_HEIGHT}" viewBox="0 0 ${CERTIFICATE_WIDTH} ${CERTIFICATE_HEIGHT}">
+  <defs>
+    <style>
+      @font-face { font-family: 'ShadowNode Certificate'; src: url(data:font/ttf;base64,${font}) format('truetype'); font-style: normal; font-weight: 100 900; }
+      .serif,.sans,.label,.meta{font-family:'ShadowNode Certificate',sans-serif}
+      .label{font-size:25px;fill:#496159;letter-spacing:5px}.meta{font-size:31px;fill:#173e35}.strong{font-weight:700}.line{stroke:#8aa197;stroke-width:2}
+    </style>
+  </defs>
   <rect width="3508" height="2480" fill="#f8faf9"/>
   <rect x="70" y="70" width="3368" height="2340" rx="8" fill="none" stroke="#071a17" stroke-width="18"/>
   <rect x="105" y="105" width="3298" height="2270" rx="4" fill="none" stroke="#b58a2b" stroke-width="5"/>
   <rect x="145" y="145" width="3218" height="2190" fill="none" stroke="#173e35" stroke-width="2"/>
   <path d="M145 430 H3363 M145 2180 H3363" stroke="#b58a2b" stroke-width="4"/>
   <rect x="145" y="145" width="3218" height="285" fill="#071a17"/>
-  <text x="1754" y="265" text-anchor="middle" fill="#f8faf9" font-family="Arial,Helvetica,sans-serif" font-size="70" font-weight="700">SHADOWNODE OPERATIONS BUREAU</text>
-  <text x="1754" y="350" text-anchor="middle" fill="#d2b15b" font-family="Arial,Helvetica,sans-serif" font-size="30" letter-spacing="8">CERTIFICATE REGISTRY</text>
-  <style>.serif{font-family:Georgia,'Times New Roman',serif}.sans{font-family:Arial,Helvetica,sans-serif}.label{font-family:Arial,Helvetica,sans-serif;font-size:25px;fill:#496159;letter-spacing:5px}.meta{font-family:Arial,Helvetica,sans-serif;font-size:31px;fill:#173e35}.strong{font-weight:700}.line{stroke:#8aa197;stroke-width:2}</style>
+  <text x="1754" y="265" text-anchor="middle" fill="#f8faf9" font-family="ShadowNode Certificate,sans-serif" font-size="70" font-weight="700">SHADOWNODE OPERATIONS BUREAU</text>
+  <text x="1754" y="350" text-anchor="middle" fill="#d2b15b" font-family="ShadowNode Certificate,sans-serif" font-size="30" letter-spacing="8">CERTIFICATE REGISTRY</text>
   <text x="1754" y="650" text-anchor="middle" class="serif" font-size="104" fill="#071a17">Certificate of Completion</text>
   <text x="1754" y="770" text-anchor="middle" class="label">THIS CERTIFIES THAT</text>
   ${recipientLines.map((line, index) => `<text x="1754" y="${930 + index * 104}" text-anchor="middle" class="serif" font-size="82" font-weight="700" fill="#173e35">${xml(line)}</text>`).join("")}
   ${document.organizationName ? `<text x="1754" y="1135" text-anchor="middle" class="sans" font-size="34" fill="#496159">${xml(document.organizationName)}</text>` : ""}
   <text x="1754" y="1290" text-anchor="middle" class="sans" font-size="36" fill="#496159">has completed</text>
   ${titleLines.map((line, index) => `<text x="1754" y="${1410 + index * 75}" text-anchor="middle" class="sans" font-size="57" font-weight="700" fill="#071a17">${xml(line)}</text>`).join("")}
-  ${document.trainingType ? `<text x="1754" y="1595" text-anchor="middle" class="label">${xml(document.trainingType.toUpperCase())}</text>` : ""}
+  ${document.trainingType ? `<text x="1754" y="1655" text-anchor="middle" class="label">${xml(document.trainingType.toUpperCase())}</text>` : ""}
   <text x="820" y="1980" text-anchor="middle" class="meta strong">${xml(formattedDate(document.completionDate))}</text><line x1="500" y1="2015" x2="1140" y2="2015" class="line"/><text x="820" y="2070" text-anchor="middle" class="label">COMPLETION DATE</text>
   ${trainerBlock}
-  <image href="${qr}" x="1450" y="1720" width="330" height="330"/>
+  <image href="${qr}" xlink:href="${qr}" x="1450" y="1720" width="330" height="330" image-rendering="pixelated"/>
   <text x="1615" y="2090" text-anchor="middle" class="label" font-size="20">VERIFY</text>
   <text x="1754" y="2255" text-anchor="middle" class="sans" font-size="27" fill="#496159">Certificate ${xml(document.certificateNumber)} - Issued ${xml(formattedDate(document.issueDate))}</text>
 </svg>`)
 }
 
 export async function renderCertificatePng(document: CertificateDocument) {
-  return sharp(await createCertificateSvg(document), { density: 300 }).png({ compressionLevel: 9 }).toBuffer()
+  return sharp(await createCertificateSvg(document), { limitInputPixels: CERTIFICATE_WIDTH * CERTIFICATE_HEIGHT })
+    .resize(CERTIFICATE_WIDTH, CERTIFICATE_HEIGHT, { fit: "fill" })
+    .png({ compressionLevel: 9 })
+    .toBuffer()
 }
 
 function pdfString(value: string) {
@@ -184,7 +207,11 @@ function buildPdf(jpeg: Buffer, title: string, certificateNumber: string) {
 }
 
 export async function renderCertificatePdf(document: CertificateDocument) {
-  const jpeg = await sharp(await createCertificateSvg(document), { density: 300 }).jpeg({ quality: 94, chromaSubsampling: "4:4:4" }).toBuffer()
+  const jpeg = await sharp(await createCertificateSvg(document), { limitInputPixels: CERTIFICATE_WIDTH * CERTIFICATE_HEIGHT })
+    .resize(CERTIFICATE_WIDTH, CERTIFICATE_HEIGHT, { fit: "fill" })
+    .flatten({ background: "#f8faf9" })
+    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+    .toBuffer()
   return buildPdf(jpeg, `${document.recipientName} - ${document.trainingTitle}`, document.certificateNumber)
 }
 

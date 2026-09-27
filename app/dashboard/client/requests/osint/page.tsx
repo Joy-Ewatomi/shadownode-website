@@ -10,6 +10,7 @@ import RequestSubmitted from "@/components/client/RequestSubmitted"
 
 export default function OsintRequestPage() {
   const [submitting, setSubmitting] = useState(false)
+  const [submissionKey] = useState(() => crypto.randomUUID())
   const [submittedRef, setSubmittedRef] =
     useState<string | null>(null)
 
@@ -25,6 +26,7 @@ export default function OsintRequestPage() {
 
       const requestPayload = {
         ...data,
+        submission_key: submissionKey,
         // Evidence metadata is written only after the server has stored and
         // hashed each binary file.
         evidence_files: [],

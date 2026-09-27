@@ -6,8 +6,9 @@ import { query, withTransaction } from "@/lib/db"
 import { CommunicationPreferenceError, validateCommunicationSelection } from "@/lib/communication-channels"
 import { createQuoteVersion } from "@/lib/services/quote-version-service"
 import { analyzeRequest } from "@/lib/services/request-analysis-service"
-import { notifyAdmins } from "@/lib/services/notification-service"
+import { notifyRequestReviewers, notifyUser } from "@/lib/services/notification-service"
 import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
+import { isSameOriginMutation } from "@/lib/security-center"
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
@@ -37,6 +38,10 @@ function nullableDate(value: unknown): string | null {
 }
 
 export async function POST(request: NextRequest) {
+  if (!isSameOriginMutation(request)) {
+    return NextResponse.json({ error: "Request could not be verified." }, { status: 403 })
+  }
+
   try {
     const user = await getCurrentUser()
 
@@ -55,6 +60,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    const submissionKey = clean(body.submission_key)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(submissionKey)) {
+      return NextResponse.json({ error: "Invalid submission key." }, { status: 400 })
+    }
 
     /*
      * ========================================================
@@ -374,6 +383,7 @@ export async function POST(request: NextRequest) {
       const result = await client.query<{
       id: string
       case_number: string
+      created: boolean
     }>(
       `
       INSERT INTO requests (
@@ -479,6 +489,7 @@ export async function POST(request: NextRequest) {
         subject_ip_addresses,
         subject_vehicle_registration,
 
+        submission_key,
         timeline
       )
 
@@ -585,12 +596,16 @@ export async function POST(request: NextRequest) {
         $71,
         $72,
 
-        $73
+        $73,
+        $74
       )
+      ON CONFLICT (user_id, submission_key) WHERE submission_key IS NOT NULL
+      DO UPDATE SET submission_key = EXCLUDED.submission_key
 
       RETURNING
         id,
-        case_number
+        case_number,
+        (xmax = 0) AS created
       `,
       [
         // 1-5
@@ -697,7 +712,8 @@ export async function POST(request: NextRequest) {
         nullableString(body.subject_ip_addresses),
         nullableString(body.subject_vehicle_registration),
 
-        // 73
+        // 73-74
+        submissionKey,
         timeline,
       ],
       )
@@ -719,6 +735,13 @@ export async function POST(request: NextRequest) {
 
     const requestId =
       inserted.rows[0].id
+
+    if (!inserted.rows[0].created) {
+      return NextResponse.json(
+        { id: requestId, case_number: inserted.rows[0].case_number, duplicate: true },
+        { status: 200 },
+      )
+    }
 
     /*
      * ========================================================
@@ -745,13 +768,12 @@ export async function POST(request: NextRequest) {
      * ========================================================
      */
 
-    await notifyAdmins({
+    await notifyRequestReviewers({
       type: "client_request",
       title:
         "New OSINT investigation request",
       message:
-        `${user.username || user.email} submitted ` +
-        `${title} (${trackingNumber}) - ${service_type}`,
+        `Request ${trackingNumber} is awaiting review.`,
       metadata: {
         request_id: requestId,
         resource_type: "request",
@@ -761,7 +783,18 @@ export async function POST(request: NextRequest) {
           "admin_request_review",
         action:
           "review_request",
+        force_email: true,
+        request_reference: trackingNumber,
+        service_category: "OSINT / Investigation",
+        submitted_at: new Date().toISOString(),
       },
+    })
+
+    await notifyUser(user.id, {
+      type: "request_submitted",
+      title: "Investigation request received",
+      message: "Your request has been received and is awaiting review.",
+      metadata: { request_id: requestId, resource_type: "request", resource_id: requestId },
     })
 
     /*
@@ -1221,26 +1254,10 @@ additional_notes:
       error,
     )
 
-    if (error instanceof Error) {
-      console.error(
-        "MESSAGE:",
-        error.message,
-      )
-
-      console.error(
-        "STACK:",
-        error.stack,
-      )
-    }
-
     return NextResponse.json(
       {
         error:
           "Failed to create OSINT request",
-        details:
-          error instanceof Error
-            ? error.message
-            : String(error),
       },
       { status: 500 },
     )

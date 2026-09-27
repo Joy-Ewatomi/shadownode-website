@@ -10,7 +10,7 @@ import {
   buildCustomTriageRecommendation,
   parseCustomRequestInput,
 } from "@/lib/custom-request-workflow"
-import { notifyAdmins, notifyUser } from "@/lib/services/notification-service"
+import { notifyRequestReviewers, notifyUser } from "@/lib/services/notification-service"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -86,11 +86,11 @@ export async function POST(request: NextRequest) {
 
     if (created.created) {
       await Promise.allSettled([
-        notifyAdmins({
+        notifyRequestReviewers({
           type: "client_request",
           title: "New custom service request",
           message: "A custom service request requires administrator review.",
-          metadata: { request_id: created.id, resource_type: "request", resource_id: created.id, audience: "administrator", target_page: "admin_request_review" },
+          metadata: { request_id: created.id, resource_type: "request", resource_id: created.id, audience: "administrator", target_page: "admin_request_review", force_email: true, request_reference: created.case_number, service_category: "Custom Service", submitted_at: new Date().toISOString() },
         }),
         notifyUser(user.id, {
           type: "request_submitted",

@@ -1,0 +1,26 @@
+# Launch Record
+
+- Launch date/time (UTC):
+- Launch date/time (Africa/Lagos):
+- Deployer:
+- Git commit:
+- Netlify deploy ID:
+- Canonical URL:
+- Database backup reference:
+- Migrations applied (filename/checksum/time/operator):
+- Environment checklist completed by:
+- Resend verification/operational test result:
+- OSINT request smoke result:
+- Training request smoke result:
+- Custom Service request smoke result:
+- Administrator notification result:
+- Super-administrator notification result:
+- Attachment valid/rejected-file result:
+- Paystack initialization/verification result:
+- Certificate PDF result:
+- Certificate PNG result:
+- Certificate QR decode result:
+- Public verification result:
+- Known limitations:
+- Rollback decision/reference:
+- Final go/no-go decision and approver:

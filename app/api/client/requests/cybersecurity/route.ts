@@ -6,8 +6,9 @@ import { query, withTransaction } from "@/lib/db"
 import { CommunicationPreferenceError, validateCommunicationSelection } from "@/lib/communication-channels"
 import { createQuoteVersion } from "@/lib/services/quote-version-service"
 import { analyzeCybersecurityTrainingRequest } from "@/lib/services/cybersecurity-training-analysis-service"
-import { notifyAdmins } from "@/lib/services/notification-service"
+import { notifyRequestReviewers, notifyUser } from "@/lib/services/notification-service"
 import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
+import { isSameOriginMutation } from "@/lib/security-center"
 
 // ============================================================
 // HELPERS
@@ -153,6 +154,10 @@ function normalizeStoredServiceType(
 export async function POST(
   request: NextRequest,
 ) {
+  if (!isSameOriginMutation(request)) {
+    return NextResponse.json({ error: "Request could not be verified." }, { status: 403 })
+  }
+
   try {
     // ========================================================
     // AUTHENTICATION
@@ -188,8 +193,10 @@ export async function POST(
 
     const body =
       await request.json()
-
-  
+    const submissionKey = clean(body.submission_key)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(submissionKey)) {
+      return NextResponse.json({ error: "Invalid submission key." }, { status: 400 })
+    }
 
     // ========================================================
     // BASIC SERVICE INFORMATION
@@ -1132,6 +1139,7 @@ export async function POST(
       const result = await client.query<{
         id: string
         case_number: string
+        created: boolean
       }>(
         `
         INSERT INTO requests (
@@ -1210,6 +1218,7 @@ export async function POST(
           training_preferred_completion_date,
           training_timeline_flexible,
 
+          submission_key,
           timeline
         )
 
@@ -1289,10 +1298,13 @@ export async function POST(
           $54,
           $55,
 
-          $56
+          $56,
+          $57
         )
+        ON CONFLICT (user_id, submission_key) WHERE submission_key IS NOT NULL
+        DO UPDATE SET submission_key = EXCLUDED.submission_key
 
-        RETURNING id, case_number
+        RETURNING id, case_number, (xmax = 0) AS created
         `,
         [
           // ==================================================
@@ -1498,9 +1510,10 @@ export async function POST(
           training_timeline_flexible,
 
           // ==================================================
-          // 56 TIMELINE
+          // 56-57 IDEMPOTENCY / TIMELINE
           // ==================================================
 
+          submissionKey,
           timeline,
         ],
       )
@@ -1514,20 +1527,6 @@ export async function POST(
       )
       return result
     })
-    console.log(
-      "=== CYBERSECURITY REQUEST INSERTED ===",
-      {
-        ...inserted.rows[0],
-
-        service_type,
-
-        training_preferred_start_date,
-
-        training_preferred_completion_date,
-
-        training_timeline_flexible,
-      },
-    )
 
     // ========================================================
     // REQUEST ID
@@ -1535,6 +1534,13 @@ export async function POST(
 
     const requestId =
       inserted.rows[0].id
+
+    if (!inserted.rows[0].created) {
+      return NextResponse.json(
+        { id: requestId, case_number: inserted.rows[0].case_number, duplicate: true },
+        { status: 200 },
+      )
+    }
 
     // ========================================================
     // CREATE AI QUOTE VERSION
@@ -1571,7 +1577,7 @@ export async function POST(
     // NOTIFY ADMINS
     // ========================================================
 
-    await notifyAdmins({
+    await notifyRequestReviewers({
       type:
         "client_request",
 
@@ -1579,9 +1585,7 @@ export async function POST(
         "New cybersecurity training request",
 
       message:
-        `${user.username || user.email} submitted ` +
-        `${title} (${trackingNumber}) - ` +
-        `${service_type}`,
+        `Request ${trackingNumber} is awaiting review.`,
 
       metadata: {
         request_id:
@@ -1598,6 +1602,10 @@ export async function POST(
 
         action:
           "review_request",
+        force_email: true,
+        request_reference: trackingNumber,
+        service_category: "Cybersecurity Training",
+        submitted_at: new Date().toISOString(),
 
         category:
           category,
@@ -1605,6 +1613,13 @@ export async function POST(
         service_type:
           service_type,
       },
+    })
+
+    await notifyUser(user.id, {
+      type: "request_submitted",
+      title: "Training request received",
+      message: "Your request has been received and is awaiting review.",
+      metadata: { request_id: requestId, resource_type: "request", resource_id: requestId },
     })
 
     // ========================================================
@@ -1791,27 +1806,10 @@ export async function POST(
       error,
     )
 
-    if (error instanceof Error) {
-      console.error(
-        "MESSAGE:",
-        error.message,
-      )
-
-      console.error(
-        "STACK:",
-        error.stack,
-      )
-    }
-
     return NextResponse.json(
       {
         error:
           "Failed to create cybersecurity training request",
-
-        details:
-          error instanceof Error
-            ? error.message
-            : String(error),
       },
       {
         status: 500,
