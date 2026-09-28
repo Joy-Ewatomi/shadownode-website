@@ -204,7 +204,7 @@ export async function GET(
     return NextResponse.json(
       {
         error:
-          "Failed to load staged OSINT results. Has scripts/osint-graph-workspace.sql been applied?",
+          "Failed to load staged OSINT results. Verify the deployed OSINT database schema.",
       },
       { status: 500 },
     )
@@ -367,7 +367,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Failed to stage OSINT result. Has scripts/osint-graph-workspace.sql been applied?",
+          "Failed to stage OSINT result. Verify the deployed OSINT database schema.",
       },
       { status: 500 },
     )
@@ -725,7 +725,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         error:
-          "Failed to update staged OSINT result. Has scripts/osint-graph-workspace.sql been applied?",
+          "Failed to update staged OSINT result. Verify the deployed OSINT database schema.",
       },
       { status: 500 },
     )

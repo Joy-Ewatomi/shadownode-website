@@ -116,7 +116,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         error:
-          "Failed to save graph positions. Has scripts/osint-graph-workspace.sql been applied?",
+          "Failed to save graph positions. Verify the deployed OSINT database schema.",
       },
       { status: 500 },
     )

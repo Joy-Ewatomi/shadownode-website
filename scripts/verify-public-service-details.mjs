@@ -5,7 +5,6 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 const page = read("app/page.tsx")
 const details = read("components/public/ServiceTrackDetails.tsx")
 const route = read("app/api/public/service-launch-interest/route.ts")
-const migration = read("scripts/service-launch-interests.sql")
 
 for (const key of ["osint", "forensics", "hacking", "gov", "correctional", "legal", "research", "opsec"]) {
   assert.match(page, new RegExp(`handleTrackToggle\\("${key}"\\)`))
@@ -27,7 +26,6 @@ for (const key of [
 ]) {
   assert.match(details, new RegExp(`serviceKey: "${key}"`))
   assert.match(route, new RegExp(`"${key}"`))
-  assert.match(migration, new RegExp(`'${key}'`))
 }
 
 assert.match(route, /isSameOriginMutation/)
@@ -49,7 +47,6 @@ assert.match(page, /event\.key === "Tab"/)
 assert.match(page, /useReducedMotion/)
 assert.match(page, /max-h-\[calc\(100dvh-2rem\)\]/)
 assert.match(details, /href="\/request"/)
-assert.match(migration, /CREATE TABLE IF NOT EXISTS service_launch_interests/)
 assert.doesNotMatch(page + details, /\/api\/notifications|\/api\/client\/requests/)
 
 console.log("Public service details and launch-interest verifier passed.")

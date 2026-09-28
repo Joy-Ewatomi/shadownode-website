@@ -92,7 +92,7 @@ export async function GET(
     return NextResponse.json(
       {
         error:
-          "Failed to load graph provenance. Has scripts/osint-graph-workspace.sql been applied?",
+          "Failed to load graph provenance. Verify the deployed OSINT database schema.",
       },
       { status: 500 },
     )
@@ -321,7 +321,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Failed to link graph provenance. Has scripts/osint-graph-workspace.sql been applied?",
+          "Failed to link graph provenance. Verify the deployed OSINT database schema.",
       },
       { status: 500 },
     )

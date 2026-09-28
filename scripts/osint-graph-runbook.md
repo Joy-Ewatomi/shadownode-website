@@ -12,11 +12,9 @@ npm run build
 
 The production build may require an environment that allows Next/Turbopack to create its internal worker process/socket.
 
-## 2. Database Migration
+## 2. Database Requirements
 
-Apply the SQL in `scripts/osint-graph-workspace.sql` through the Supabase SQL Editor for the target project.
-
-After applying it, confirm the SQL editor reports success before running the case graph smoke test.
+Before running the case graph smoke test, confirm the deployed database contains the OSINT search, provenance, evidence-link, and unique entity-position structures recorded in the private canonical schema backup. Database changes are managed outside this repository through the approved backup and change process.
 
 ## 3. Case Graph Smoke Test
 

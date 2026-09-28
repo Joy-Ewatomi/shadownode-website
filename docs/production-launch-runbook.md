@@ -12,21 +12,9 @@ This runbook contains no credentials. ShadowNode Operations Bureau Limited must 
 - [ ] Confirm active administrator and super-administrator accounts and verified email addresses.
 - [ ] Confirm the private evidence bucket and retention/access policy.
 
-## Migration Register
+## Database Schema Verification
 
-Inspect before applying. Apply through the approved process only after backup. A code rollback does not safely reverse data migrations; prefer reviewed forward fixes.
-
-| Order | Migration | Purpose / dependency | Criticality | Inspection and post-check |
-|---:|---|---|---|---|
-| 1 | secure-pending-two-factor-challenges.sql | Pending 2FA challenges; depends on app_users | Authentication critical | Check information_schema.tables for pending_two_factor_challenges; test valid, expired and replayed challenges. |
-| 2 | secure-recovery-codes-and-welcome-email.sql | One-time recovery codes, password-login state, welcome-email idempotency | Authentication critical when features enabled | Check two_factor_recovery_codes, welcome_email_deliveries and app_users.password_login_enabled; regenerate/use one code once. |
-| 3 | custom-service-workflow.sql | Custom fields, submission_key uniqueness and amendments; depends on requests/app_users | Launch critical for all three idempotent request routes | Check requests.submission_key and pg_indexes.idx_requests_custom_submission_key; submit and retry each request type. |
-| 4 | communication-channels-phase1.sql | Preferences, consent and delivery-attempt queue; depends on user_profiles, notification_delivery_attempts, app_users | Launch critical for external notifications | Check added columns/constraints/indexes; test portal, email and consented WhatsApp queue behavior. |
-| 5 | request-commercial-history.sql | Quote/payment lineage; depends on quote_versions, quote_negotiations, requests, payments | Commercial critical | Check accepted_quote_version_id and payment provider-reference indexes; accept a quote and verify history. |
-| 6 | flutterwave-payment-provider.sql | Provider transaction fields; depends on payments and commercial history | Optional while Flutterwave disabled | Check payment columns/index; provider must remain hidden when configuration is incomplete. |
-| 7 | service-launch-interests.sql | Public launch-interest records and persistent throttling | Public-page critical if form is enabled | Check both tables/index; submit once and confirm duplicate/rate handling. |
-| 8 | account-deletion-requests.sql | Reviewable deletion requests | Security Center feature | Check table/index; create/cancel a test request without deleting retained records. |
-| 9 | osint-graph-workspace.sql | Internal graph provenance/evidence structures | Not public-launch critical | Apply only with internal workspace rollout; verify existing graph foreign keys first. |
+Database definitions and backups are maintained privately outside this repository. Before deployment, compare the deployed database with the protected canonical schema and confirm all required tables, constraints, foreign-key actions, and indexes are present. Apply database changes only through the approved process after a restorable backup. A code rollback does not safely reverse data changes; prefer reviewed forward fixes.
 
 Example read-only inspection pattern (substitute reviewed names only):
 
@@ -43,7 +31,7 @@ WHERE schemaname = 'public' AND indexname IN ('idx_requests_custom_submission_ke
 
 ## Deployment
 
-1. Apply reviewed migrations in order through the approved process.
+1. Confirm the deployed database matches the reviewed private canonical schema.
 2. Deploy the exact recorded commit and record deploy ID/time.
 3. Confirm the build completed and function configuration loaded.
 4. Run the production smoke sequence from the launch record.

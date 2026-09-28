@@ -10,18 +10,6 @@ function read(path) {
 
 const checks = [
   {
-    file: "scripts/osint-graph-workspace.sql",
-    patterns: [
-      "CREATE TABLE IF NOT EXISTS osint_search_results",
-      "CREATE TABLE IF NOT EXISTS relationship_sources",
-      "CREATE TABLE IF NOT EXISTS entity_evidence",
-      "CREATE TABLE IF NOT EXISTS relationship_evidence",
-      "CREATE UNIQUE INDEX IF NOT EXISTS entity_positions_entity_unique",
-      "investigation_entities_original_result_fk",
-      "search_time_ms integer",
-    ],
-  },
-  {
     file: "scripts/osint-graph-audit.md",
     patterns: [
       "Existing Graph Surfaces",
@@ -33,7 +21,7 @@ const checks = [
   {
     file: "scripts/osint-graph-runbook.md",
     patterns: [
-      "scripts/osint-graph-workspace.sql",
+      "Database Requirements",
       "Case Graph Smoke Test",
       "Provider Safety",
       "manual_open_source_review",

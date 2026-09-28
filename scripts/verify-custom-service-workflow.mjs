@@ -10,7 +10,6 @@ const decisionRoute = read("app/api/admin/requests/[id]/custom-decision/route.ts
 const amendmentRoute = read("app/api/client/requests/[id]/additional-information/route.ts")
 const clientRoute = read("app/api/client/requests/[id]/route.ts")
 const form = read("components/requests/CustomRequestForm.tsx")
-const migration = read("scripts/custom-service-workflow.sql")
 
 assert.match(workflow, /objective: requiredText/)
 assert.match(workflow, /authorizationConfirmed !== true \|\| input\.termsAccepted !== true/)
@@ -46,10 +45,6 @@ assert.match(form, /authorizationConfirmed/)
 assert.match(form, /termsAccepted/)
 assert.match(form, /billingCountry/)
 assert.match(form, /supporting files/i)
-
-assert.match(migration, /ADD COLUMN IF NOT EXISTS custom_details/)
-assert.match(migration, /CREATE TABLE IF NOT EXISTS request_amendments/)
-assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_requests_custom_submission_key/)
 
 const sensitiveClientFields = ["internal_decision_reason", "admin_recommendation", "super_admin_decision", "submission_key"]
 for (const field of sensitiveClientFields) {

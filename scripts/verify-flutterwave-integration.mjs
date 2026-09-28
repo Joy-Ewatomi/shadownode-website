@@ -10,7 +10,6 @@ const verification = read("lib/services/flutterwave-payment-service.ts")
 const completion = read("lib/services/payment-completion-service.ts")
 const providers = read("app/api/client/payments/providers/route.ts")
 const paymentPage = read("app/dashboard/client/payments/[id]/page.tsx")
-const migration = read("scripts/flutterwave-payment-provider.sql")
 const history = read("lib/services/commercial-history-service.ts")
 
 assert.match(config, /FLWSECK_TEST-/)
@@ -49,8 +48,6 @@ assert.match(providers, /flutterwaveSupportsCurrency\(currency\)/)
 assert.match(paymentPage, /PaymentProvider = "paystack" \| "flutterwave"/)
 assert.match(paymentPage, /request\.commercial_history\?\.status === "paid"/)
 assert.match(history, /provider/)
-assert.match(migration, /provider_transaction_id/)
-assert.match(migration, /initiated_at/)
 
 const forbidden = ["FLWSECK_TEST-actual", "FLWSECK_LIVE-", "card_number", "cvv", "mobile_money_pin"]
 for (const value of forbidden) {
