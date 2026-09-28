@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs"
 import { deletionCoolingOffDate } from "../lib/security-center.ts"
 
 assert.equal(deletionCoolingOffDate(new Date("2026-01-01T00:00:00Z")).toISOString(), "2026-01-31T00:00:00.000Z")
-const page = readFileSync("app/security/page.tsx", "utf8")
+const page = readFileSync("app/account/security/page.tsx", "utf8")
 for (const label of ["Change Password", "Disable 2FA", "Recovery Codes", "Delete Account Request"]) assert.ok(page.includes(label))
 assert.ok(page.includes("scrollIntoView"))
 assert.ok(page.includes("aria-pressed"))

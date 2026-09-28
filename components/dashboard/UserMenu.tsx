@@ -23,7 +23,7 @@ export default function UserMenu({ user }: { user: AppUser }) {
             <p className="font-semibold text-white">{user.username}</p>
             <p className="truncate text-xs text-white/45">{user.email}</p>
           </div>
-          <a href="/security" className="mt-2 flex items-center gap-2 rounded px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
+          <a href="/account/security" className="mt-2 flex items-center gap-2 rounded px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
             <Shield className="h-4 w-4" />
             Security Settings
           </a>

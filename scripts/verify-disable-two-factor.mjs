@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 
 const route = readFileSync("app/api/auth/2fa/disable/route.ts", "utf8")
-const ui = readFileSync("app/security/page.tsx", "utf8")
+const ui = readFileSync("app/account/security/page.tsx", "utf8")
 assert.match(route, /isSameOriginMutation/)
 assert.match(route, /withTransaction/)
 assert.match(route, /FOR UPDATE/)

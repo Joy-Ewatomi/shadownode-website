@@ -885,7 +885,7 @@ export default function Home() {
                 Terms of Service
               </Link>
               <Link
-                href="/security-policy"
+                href="/security"
                 className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 Security

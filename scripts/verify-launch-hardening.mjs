@@ -8,7 +8,7 @@ for (const file of [
   "app/global-error.tsx",
   "app/privacy/page.tsx",
   "app/terms/page.tsx",
-  "app/security-policy/page.tsx",
+  "app/security/page.tsx",
   "app/contact/page.tsx",
   "app/robots.ts",
   "app/sitemap.ts",
@@ -22,7 +22,7 @@ assert.doesNotMatch(
   home,
   /guarantee absolute courtroom admissibility|Strictly compliant|Zero-knowledge/i,
 );
-for (const href of ["/privacy", "/terms", "/security-policy", "/contact"]) {
+for (const href of ["/privacy", "/terms", "/security", "/contact"]) {
   assert.ok(home.includes("href=\"" + href + "\""));
 }
 
