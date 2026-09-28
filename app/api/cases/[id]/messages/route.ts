@@ -1,38 +1,34 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth"
-import { query, withTransaction, type DatabasePoolClient } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth";
+import { query, withTransaction, type DatabasePoolClient } from "@/lib/db";
 import {
+  ensureCaseWritable,
   optionalText,
   profileIdForUser,
-} from "@/lib/investigation-workspace"
+} from "@/lib/investigation-workspace";
 import {
   createMessageReceipts,
   syncConversationParticipants,
-} from "@/lib/services/message-receipts-service"
+} from "@/lib/services/message-receipts-service";
 import {
   createCaseMessageNotifications,
   dispatchCaseMessageExternalNotifications,
-} from "@/lib/services/message-notifications-service"
-import { canCaseFunctionMessage } from "@/lib/role-access"
+} from "@/lib/services/message-notifications-service";
+import { canCaseFunctionMessage } from "@/lib/role-access";
 
-function isSuperAdmin(
-  role: string | null | undefined,
-): boolean {
-  return (
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
+function isSuperAdmin(role: string | null | undefined): boolean {
+  return role === "super_administrator" || role === "super-administrator";
 }
 
 type CaseMessagingPermission = {
-  can_view: boolean
-  can_reply: boolean
-  is_assigned: boolean
-  is_client: boolean
-  is_super_admin: boolean
-  assignment_role: string | null
-}
+  can_view: boolean;
+  can_reply: boolean;
+  is_assigned: boolean;
+  is_client: boolean;
+  is_super_admin: boolean;
+  assignment_role: string | null;
+};
 
 async function getCaseMessagingPermission(
   userId: string,
@@ -41,11 +37,11 @@ async function getCaseMessagingPermission(
   caseId: string,
 ): Promise<CaseMessagingPermission | null> {
   const result = await query<{
-    case_id: string
-    client_profile_id: string | null
-    client_user_id: string | null
-    is_assigned: boolean
-    assignment_role: string | null
+    case_id: string;
+    client_profile_id: string | null;
+    client_user_id: string | null;
+    is_assigned: boolean;
+    assignment_role: string | null;
   }>(
     `
     SELECT
@@ -83,40 +79,35 @@ async function getCaseMessagingPermission(
     LIMIT 1
     `,
     [caseId, profileId],
-  )
+  );
 
-  const row = result.rows[0]
+  const row = result.rows[0];
 
   if (!row) {
-    return null
+    return null;
   }
 
   const isClient =
     role === "client" &&
-    (
-      row.client_user_id === userId ||
-      row.client_profile_id === profileId
-    )
+    (row.client_user_id === userId || row.client_profile_id === profileId);
 
-  const isAssigned = Boolean(row.is_assigned)
-  const canMessage =
-    isAssigned &&
-    canCaseFunctionMessage(row.assignment_role)
+  const isAssigned = Boolean(row.is_assigned);
+  const canMessage = isAssigned && canCaseFunctionMessage(row.assignment_role);
 
-  const isSuperAdmin = isSuperAdminRole(role)
+  const isSuperAdmin = isSuperAdminRole(role);
 
-  let canView = false
-  let canReply = false
+  let canView = false;
+  let canReply = false;
 
   if (role === "client") {
-    canView = isClient
-    canReply = isClient
+    canView = isClient;
+    canReply = isClient;
   } else if (isSuperAdmin) {
-    canView = true
-    canReply = canMessage
+    canView = true;
+    canReply = canMessage;
   } else {
-    canView = isAssigned
-    canReply = canMessage
+    canView = isAssigned;
+    canReply = canMessage;
   }
 
   return {
@@ -126,16 +117,11 @@ async function getCaseMessagingPermission(
     is_client: isClient,
     is_super_admin: isSuperAdmin,
     assignment_role: row.assignment_role,
-  }
+  };
 }
 
-function isSuperAdminRole(
-  role: string | null | undefined,
-): boolean {
-  return (
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
+function isSuperAdminRole(role: string | null | undefined): boolean {
+  return role === "super_administrator" || role === "super-administrator";
 }
 
 async function getOrCreateCaseConversation(
@@ -144,7 +130,7 @@ async function getOrCreateCaseConversation(
   executor: Pick<DatabasePoolClient, "query"> = { query },
 ) {
   const existing = await executor.query<{
-    id: string
+    id: string;
   }>(
     `
     SELECT id
@@ -154,13 +140,13 @@ async function getOrCreateCaseConversation(
     LIMIT 1
     `,
     [caseId],
-  )
+  );
 
-  let conversationId = existing.rows[0]?.id
+  let conversationId = existing.rows[0]?.id;
 
   if (!conversationId) {
     const created = await executor.query<{
-      id: string
+      id: string;
     }>(
       `
       INSERT INTO conversations (
@@ -173,9 +159,9 @@ async function getOrCreateCaseConversation(
       RETURNING id
       `,
       [caseId],
-    )
+    );
 
-    conversationId = created.rows[0].id
+    conversationId = created.rows[0].id;
   }
 
   // Sender
@@ -189,7 +175,7 @@ async function getOrCreateCaseConversation(
     ON CONFLICT DO NOTHING
     `,
     [conversationId, senderUserId],
-  )
+  );
 
   // Client
   await executor.query(
@@ -213,7 +199,7 @@ async function getOrCreateCaseConversation(
     ON CONFLICT DO NOTHING
     `,
     [conversationId, caseId],
-  )
+  );
 
   // Active/approved assignees only
   await executor.query(
@@ -239,9 +225,9 @@ async function getOrCreateCaseConversation(
     ON CONFLICT DO NOTHING
     `,
     [conversationId, caseId],
-  )
+  );
 
-  return conversationId
+  return conversationId;
 }
 
 // ============================================================
@@ -254,14 +240,14 @@ export async function GET(
     params,
   }: {
     params: Promise<{
-      id: string
-    }>
+      id: string;
+    }>;
   },
 ) {
   try {
-    const { id: caseId } = await params
+    const { id: caseId } = await params;
 
-    const user = await getCurrentUser()
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -271,11 +257,10 @@ export async function GET(
         {
           status: 401,
         },
-      )
+      );
     }
 
-    const profileId =
-      await profileIdForUser(user.id)
+    const profileId = await profileIdForUser(user.id);
 
     if (!profileId) {
       return NextResponse.json(
@@ -285,16 +270,15 @@ export async function GET(
         {
           status: 500,
         },
-      )
+      );
     }
 
-    const permission =
-      await getCaseMessagingPermission(
-        user.id,
-        profileId,
-        user.role,
-        caseId,
-      )
+    const permission = await getCaseMessagingPermission(
+      user.id,
+      profileId,
+      user.role,
+      caseId,
+    );
 
     if (!permission) {
       return NextResponse.json(
@@ -304,23 +288,22 @@ export async function GET(
         {
           status: 404,
         },
-      )
+      );
     }
 
     if (!permission.can_view) {
       return NextResponse.json(
         {
-          error:
-            "You are not permitted to view this case conversation",
+          error: "You are not permitted to view this case conversation",
         },
         {
           status: 403,
         },
-      )
+      );
     }
 
     const conversation = await query<{
-      id: string
+      id: string;
     }>(
       `
       SELECT id
@@ -330,10 +313,9 @@ export async function GET(
       LIMIT 1
       `,
       [caseId],
-    )
+    );
 
-    const conversationId =
-      conversation.rows[0]?.id ?? null
+    const conversationId = conversation.rows[0]?.id ?? null;
 
     const result = await query(
       `
@@ -367,11 +349,8 @@ export async function GET(
 
       ORDER BY m.created_at ASC
       `,
-      [
-        caseId,
-        user.id,
-      ],
-    )
+      [caseId, user.id],
+    );
 
     return NextResponse.json(
       {
@@ -382,22 +361,18 @@ export async function GET(
       {
         status: 200,
       },
-    )
+    );
   } catch (error) {
-    console.error(
-      "CASE MESSAGES GET ERROR:",
-      error,
-    )
+    console.error("CASE MESSAGES GET ERROR:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Failed loading case messages",
+        error: "Failed loading case messages",
       },
       {
         status: 500,
       },
-    )
+    );
   }
 }
 
@@ -411,14 +386,14 @@ export async function POST(
     params,
   }: {
     params: Promise<{
-      id: string
-    }>
+      id: string;
+    }>;
   },
 ) {
   try {
-    const { id: caseId } = await params
+    const { id: caseId } = await params;
 
-    const user = await getCurrentUser()
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -428,11 +403,10 @@ export async function POST(
         {
           status: 401,
         },
-      )
+      );
     }
 
-    const profileId =
-      await profileIdForUser(user.id)
+    const profileId = await profileIdForUser(user.id);
 
     if (!profileId) {
       return NextResponse.json(
@@ -442,16 +416,15 @@ export async function POST(
         {
           status: 500,
         },
-      )
+      );
     }
 
-    const permission =
-      await getCaseMessagingPermission(
-        user.id,
-        profileId,
-        user.role,
-        caseId,
-      )
+    const permission = await getCaseMessagingPermission(
+      user.id,
+      profileId,
+      user.role,
+      caseId,
+    );
 
     if (!permission) {
       return NextResponse.json(
@@ -461,25 +434,30 @@ export async function POST(
         {
           status: 404,
         },
-      )
+      );
     }
 
     if (!permission.can_reply) {
       return NextResponse.json(
         {
-          error:
-            "You are not permitted to reply in this case",
+          error: "You are not permitted to reply in this case",
         },
         {
           status: 403,
         },
-      )
+      );
     }
 
-    const body = await request.json()
+    if (!(await ensureCaseWritable(caseId))) {
+      return NextResponse.json(
+        { error: "This case is complete and is now read-only." },
+        { status: 409 },
+      );
+    }
 
-    const content =
-      optionalText(body?.message)
+    const body = await request.json();
+
+    const content = optionalText(body?.message);
 
     if (!content) {
       return NextResponse.json(
@@ -489,34 +467,29 @@ export async function POST(
         {
           status: 400,
         },
-      )
+      );
     }
 
     const transactionResult = await withTransaction(async (client) => {
-      const conversationId =
-        await getOrCreateCaseConversation(
-          caseId,
-          user.id,
-          client,
-        )
-
-      await syncConversationParticipants(
-        conversationId,
+      const conversationId = await getOrCreateCaseConversation(
         caseId,
+        user.id,
         client,
-      )
+      );
+
+      await syncConversationParticipants(conversationId, caseId, client);
 
       const inserted = await client.query<{
-      id: string
-      conversation_id: string
-      case_id: string
-      sender_id: string
-      sender_type: string | null
-      message: string
-      created_at: string
-      read_at: string | null
-    }>(
-      `
+        id: string;
+        conversation_id: string;
+        case_id: string;
+        sender_id: string;
+        sender_type: string | null;
+        message: string;
+        created_at: string;
+        read_at: string | null;
+      }>(
+        `
       INSERT INTO messages (
         conversation_id,
         case_id,
@@ -547,16 +520,10 @@ export async function POST(
         created_at,
         read_at
       `,
-      [
-        conversationId,
-        caseId,
-        profileId,
-        user.role,
-        content,
-      ],
-      )
+        [conversationId, caseId, profileId, user.role, content],
+      );
 
-      const row = inserted.rows[0]
+      const row = inserted.rows[0];
 
       await createMessageReceipts(
         {
@@ -566,10 +533,9 @@ export async function POST(
           senderProfileId: profileId,
         },
         client,
-      )
+      );
 
-      const notificationIds =
-        await createCaseMessageNotifications(
+      const notificationIds = await createCaseMessageNotifications(
         {
           messageId: row.id,
           conversationId: row.conversation_id,
@@ -578,25 +544,25 @@ export async function POST(
           senderRole: user.role,
         },
         client,
-      )
+      );
 
       return {
         message: row,
         notificationIds,
-      }
-    })
+      };
+    });
 
-    const result = transactionResult.message
+    const result = transactionResult.message;
 
     await dispatchCaseMessageExternalNotifications(
       transactionResult.notificationIds,
-    )
+    );
 
     const sender = await query<{
-      full_name: string | null
-      username: string | null
-      email: string | null
-      role: string | null
+      full_name: string | null;
+      username: string | null;
+      email: string | null;
+      role: string | null;
     }>(
       `
       SELECT
@@ -615,10 +581,9 @@ export async function POST(
       LIMIT 1
       `,
       [profileId],
-    )
+    );
 
-    const senderRow =
-      sender.rows[0]
+    const senderRow = sender.rows[0];
 
     return NextResponse.json(
       {
@@ -633,17 +598,11 @@ export async function POST(
             senderRow?.email ??
             "Operator",
 
-          username:
-            senderRow?.username ??
-            null,
+          username: senderRow?.username ?? null,
 
-          sender_email:
-            senderRow?.email ??
-            null,
+          sender_email: senderRow?.email ?? null,
 
-          sender_role:
-            senderRow?.role ??
-            user.role,
+          sender_role: senderRow?.role ?? user.role,
         },
 
         permissions: permission,
@@ -651,21 +610,17 @@ export async function POST(
       {
         status: 201,
       },
-    )
+    );
   } catch (error) {
-    console.error(
-      "CASE MESSAGE POST ERROR:",
-      error,
-    )
+    console.error("CASE MESSAGE POST ERROR:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Failed sending message",
+        error: "Failed sending message",
       },
       {
         status: 500,
       },
-    )
+    );
   }
 }

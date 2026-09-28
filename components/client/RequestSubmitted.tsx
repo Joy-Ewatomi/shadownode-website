@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import { CheckCircle2, FileSpreadsheet } from "lucide-react"
-import Link from "next/link"
+import { CheckCircle2, FileSpreadsheet } from "lucide-react";
+import Link from "next/link";
 
 type Props = {
-  referenceId: string
-}
+  referenceId: string;
+};
 
 export default function RequestSubmitted({ referenceId }: Props) {
   return (
@@ -14,22 +14,27 @@ export default function RequestSubmitted({ referenceId }: Props) {
         <CheckCircle2 className="h-8 w-8 text-[#20dc73]" />
       </div>
 
-      <h2 className="mt-6 text-2xl font-bold text-white">Request Submitted Successfully</h2>
+      <h2 className="mt-6 text-2xl font-bold text-white">
+        Request Submitted Successfully
+      </h2>
       <p className="mt-3 max-w-xl mx-auto text-sm text-white/60">
-        Thank you for submitting your investigation request to ShadowNode Operations Bureau.
+        Thank you for submitting your investigation request to SHADOWNODE
+        OPERATIONS BUREAU LIMITED.
       </p>
       <p className="mt-2 max-w-xl mx-auto text-sm text-white/60">
         Our analysts will review your request.
       </p>
       <p className="mt-2 max-w-xl mx-auto text-sm text-white/60">
-        Your official quotation, estimated completion timeline, and next steps will be delivered using your
-        selected communication method.
+        Your official quotation, estimated completion timeline, and next steps
+        will be delivered using your selected communication method.
       </p>
 
       <div className="mx-auto mt-6 inline-flex items-center gap-2 rounded-md border border-[#143b28] bg-black/30 px-5 py-3">
         <FileSpreadsheet className="h-5 w-5 text-[#20dc73]" />
         <span className="text-sm text-white/70">Reference ID:</span>
-        <span className="font-mono font-bold text-[#20dc73]">{referenceId}</span>
+        <span className="font-mono font-bold text-[#20dc73]">
+          {referenceId}
+        </span>
       </div>
 
       <div className="mt-6">
@@ -53,5 +58,5 @@ export default function RequestSubmitted({ referenceId }: Props) {
         </Link>
       </div>
     </div>
-  )
+  );
 }

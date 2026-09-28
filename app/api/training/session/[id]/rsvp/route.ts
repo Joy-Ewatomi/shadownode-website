@@ -1,25 +1,24 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getCurrentUser } from "@/lib/auth"
-import { query } from "@/lib/db"
-import { getUserProfileId } from "@/lib/services/training-operations-service"
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
+import { query } from "@/lib/db";
+import {
+  getUserProfileId,
+  ensureAccess,
+} from "@/lib/services/training-operations-service";
 
-const CLIENT_RSVP_VALUES = [
-  "ACCEPTED",
-  "DECLINED",
-  "TENTATIVE",
-] as const
+const CLIENT_RSVP_VALUES = ["ACCEPTED", "DECLINED", "TENTATIVE"] as const;
 
-type ClientRsvp = (typeof CLIENT_RSVP_VALUES)[number]
+type ClientRsvp = (typeof CLIENT_RSVP_VALUES)[number];
 
 export async function POST(
   req: NextRequest,
   context: {
     params: Promise<{
-      id: string
-    }>
+      id: string;
+    }>;
   },
 ) {
-  const user = await getCurrentUser()
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json(
@@ -29,7 +28,7 @@ export async function POST(
       {
         status: 401,
       },
-    )
+    );
   }
 
   /*
@@ -41,17 +40,16 @@ export async function POST(
   if (user.role !== "client") {
     return NextResponse.json(
       {
-        error:
-          "Only the client can respond to a training session.",
+        error: "Only the client can respond to a training session.",
       },
       {
         status: 403,
       },
-    )
+    );
   }
 
   try {
-    const { id } = await context.params
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json(
@@ -61,7 +59,7 @@ export async function POST(
         {
           status: 400,
         },
-      )
+      );
     }
 
     /*
@@ -71,11 +69,11 @@ export async function POST(
      */
 
     let body: {
-      partstat?: unknown
-    }
+      partstat?: unknown;
+    };
 
     try {
-      body = await req.json()
+      body = await req.json();
     } catch {
       return NextResponse.json(
         {
@@ -84,27 +82,21 @@ export async function POST(
         {
           status: 400,
         },
-      )
+      );
     }
 
-    const partstat = String(
-      body?.partstat || "",
-    ).toUpperCase() as ClientRsvp | ""
+    const partstat = String(body?.partstat || "").toUpperCase() as
+      ClientRsvp | "";
 
-    if (
-      !CLIENT_RSVP_VALUES.includes(
-        partstat as ClientRsvp,
-      )
-    ) {
+    if (!CLIENT_RSVP_VALUES.includes(partstat as ClientRsvp)) {
       return NextResponse.json(
         {
-          error:
-            "Invalid RSVP. Choose ACCEPTED, TENTATIVE, or DECLINED.",
+          error: "Invalid RSVP. Choose ACCEPTED, TENTATIVE, or DECLINED.",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
     /*
@@ -114,9 +106,9 @@ export async function POST(
      */
 
     const sessionRes = await query<{
-      id: string
-      training_engagement_id: string
-      status: string | null
+      id: string;
+      training_engagement_id: string;
+      status: string | null;
     }>(
       `
         SELECT
@@ -128,9 +120,9 @@ export async function POST(
         LIMIT 1
       `,
       [id],
-    )
+    );
 
-    const session = sessionRes.rows[0]
+    const session = sessionRes.rows[0];
 
     if (!session) {
       return NextResponse.json(
@@ -140,11 +132,12 @@ export async function POST(
         {
           status: 404,
         },
-      )
+      );
     }
 
-    const engagementId =
-      session.training_engagement_id
+    const engagementId = session.training_engagement_id;
+
+    await ensureAccess(engagementId, user, false, "write");
 
     /*
      * ================================================================
@@ -152,19 +145,17 @@ export async function POST(
      * ================================================================
      */
 
-    const profileId =
-      await getUserProfileId(user.id)
+    const profileId = await getUserProfileId(user.id);
 
     if (!profileId) {
       return NextResponse.json(
         {
-          error:
-            "Your client profile could not be identified.",
+          error: "Your client profile could not be identified.",
         },
         {
           status: 403,
         },
-      )
+      );
     }
 
     /*
@@ -174,9 +165,9 @@ export async function POST(
      */
 
     const engagementRes = await query<{
-      id: string
-      client_profile_id: string | null
-      status: string | null
+      id: string;
+      client_profile_id: string | null;
+      status: string | null;
     }>(
       `
         SELECT
@@ -188,36 +179,30 @@ export async function POST(
         LIMIT 1
       `,
       [engagementId],
-    )
+    );
 
-    const engagement =
-      engagementRes.rows[0]
+    const engagement = engagementRes.rows[0];
 
     if (!engagement) {
       return NextResponse.json(
         {
-          error:
-            "Training engagement not found.",
+          error: "Training engagement not found.",
         },
         {
           status: 404,
         },
-      )
+      );
     }
 
-    if (
-      engagement.client_profile_id !==
-      profileId
-    ) {
+    if (engagement.client_profile_id !== profileId) {
       return NextResponse.json(
         {
-          error:
-            "You are not authorized to respond to this training session.",
+          error: "You are not authorized to respond to this training session.",
         },
         {
           status: 403,
         },
-      )
+      );
     }
 
     /*
@@ -226,20 +211,15 @@ export async function POST(
      * ================================================================
      */
 
-    if (
-      session.status &&
-      session.status.toLowerCase() ===
-        "cancelled"
-    ) {
+    if (session.status && session.status.toLowerCase() === "cancelled") {
       return NextResponse.json(
         {
-          error:
-            "This training session has been cancelled.",
+          error: "This training session has been cancelled.",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
     /*
@@ -260,7 +240,7 @@ export async function POST(
      */
 
     const existingRes = await query<{
-      partstat: ClientRsvp
+      partstat: ClientRsvp;
     }>(
       `
         SELECT
@@ -270,27 +250,21 @@ export async function POST(
           AND user_id = $2
         LIMIT 1
       `,
-      [
-        id,
-        user.id,
-      ],
-    )
+      [id, user.id],
+    );
 
-    const existingResponse =
-      existingRes.rows[0]
+    const existingResponse = existingRes.rows[0];
 
     if (existingResponse) {
       return NextResponse.json(
         {
-          error:
-            "You have already responded to this training session.",
-          partstat:
-            existingResponse.partstat,
+          error: "You have already responded to this training session.",
+          partstat: existingResponse.partstat,
         },
         {
           status: 409,
         },
-      )
+      );
     }
 
     /*
@@ -299,8 +273,7 @@ export async function POST(
      * ================================================================
      */
 
-    const now =
-      new Date().toISOString()
+    const now = new Date().toISOString();
 
     await query(
       `
@@ -337,38 +310,24 @@ export async function POST(
           responded_at = EXCLUDED.responded_at,
           updated_at = NOW()
       `,
-      [
-        id,
-        engagementId,
-        profileId,
-        user.id,
-        user.email || null,
-        partstat,
-        now,
-      ],
-    )
+      [id, engagementId, profileId, user.id, user.email || null, partstat, now],
+    );
 
     return NextResponse.json({
       success: true,
       partstat,
       locked: true,
-    })
+    });
   } catch (error: unknown) {
-    console.error(
-      "TRAINING SESSION RSVP ERROR:",
-      error,
-    )
+    console.error("TRAINING SESSION RSVP ERROR:", error);
 
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to update RSVP",
+        error: error instanceof Error ? error.message : "Failed to update RSVP",
       },
       {
         status: 500,
       },
-    )
+    );
   }
 }

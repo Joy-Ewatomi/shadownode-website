@@ -16,7 +16,7 @@ export default function Page() {
               Information we process
             </h2>
             <p className="mt-2">
-              ShadowNode Operations Bureau Limited processes account details,
+              SHADOWNODE OPERATIONS BUREAU LIMITED processes account details,
               service-request information, communications, uploaded files,
               payment references, security logs, training records, and
               certificate data needed to provide and protect its services.

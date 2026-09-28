@@ -1,8 +1,11 @@
-import { query, withTransaction } from "@/lib/db"
-import { transitionCaseStatus } from "@/lib/services/case-status-service"
-import { notifySuperAdmins, notifyUser } from "@/lib/services/notification-service"
-import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
-import { moneyToMinorUnits } from "@/lib/payments/flutterwave"
+import { query, withTransaction } from "@/lib/db";
+import { transitionCaseStatus } from "@/lib/services/case-status-service";
+import {
+  notifySuperAdmins,
+  notifyUser,
+} from "@/lib/services/notification-service";
+import { recordRequestAudit } from "@/lib/services/quote-workflow-service";
+import { moneyToMinorUnits } from "@/lib/payments/flutterwave";
 
 export async function recordPaymentFailure(
   paymentId: string,
@@ -14,7 +17,7 @@ export async function recordPaymentFailure(
      WHERE id = $1 AND status <> 'paid'
        AND failure_reason_category IS DISTINCT FROM $2 RETURNING id`,
     [paymentId, category],
-  )
+  );
 
   if (changed.rows[0]) {
     await notifySuperAdmins({
@@ -28,30 +31,30 @@ export async function recordPaymentFailure(
         resource_id: requestId,
         audience: "super_administrator",
       },
-    }).catch(() => undefined)
+    }).catch(() => undefined);
   }
 }
 
 export async function completeVerifiedPayment(input: {
-  paymentId: string
-  provider: "flutterwave"
-  providerTransactionId: string
-  paidAt: string | null
+  paymentId: string;
+  provider: "flutterwave";
+  providerTransactionId: string;
+  paidAt: string | null;
 }) {
   const completed = await withTransaction(async (client) => {
     const locked = await client.query<{
-      id: string
-      request_id: string
-      case_id: string | null
-      training_engagement_id: string | null
-      status: string
-      quote_version_id: string
-      accepted_quote_version_id: string
-      amount: string
-      currency: string
-      quote_price: string
-      quote_currency: string
-      user_id: string
+      id: string;
+      request_id: string;
+      case_id: string | null;
+      training_engagement_id: string | null;
+      status: string;
+      quote_version_id: string;
+      accepted_quote_version_id: string;
+      amount: string;
+      currency: string;
+      quote_price: string;
+      quote_currency: string;
+      user_id: string;
     }>(
       `SELECT p.id, p.request_id, p.case_id, p.training_engagement_id,
               p.status, p.quote_version_id, p.amount, p.currency,
@@ -63,11 +66,11 @@ export async function completeVerifiedPayment(input: {
        WHERE p.id = $1 AND p.provider = $2
        FOR UPDATE OF p, r, q`,
       [input.paymentId, input.provider],
-    )
+    );
 
-    const payment = locked.rows[0]
-    if (!payment) throw new Error("Payment attempt was not found")
-    if (payment.status === "paid") return { ...payment, newlyCompleted: false }
+    const payment = locked.rows[0];
+    if (!payment) throw new Error("Payment attempt was not found");
+    if (payment.status === "paid") return { ...payment, newlyCompleted: false };
 
     if (
       payment.quote_version_id !== payment.accepted_quote_version_id ||
@@ -75,22 +78,22 @@ export async function completeVerifiedPayment(input: {
         moneyToMinorUnits(payment.quote_price, payment.quote_currency) ||
       payment.currency.toUpperCase() !== payment.quote_currency.toUpperCase()
     ) {
-      throw new Error("Payment quote linkage changed during verification")
+      throw new Error("Payment quote linkage changed during verification");
     }
 
     const winner = await client.query<{ id: string }>(
       `SELECT id FROM payments
        WHERE quote_version_id = $1 AND status = 'paid' AND id <> $2 LIMIT 1`,
       [payment.quote_version_id, payment.id],
-    )
+    );
 
     if (winner.rows[0]) {
       await client.query(
         `UPDATE payments SET status = 'cancelled', failure_reason_category = 'superseded'
          WHERE id = $1`,
         [payment.id],
-      )
-      return { ...payment, status: "cancelled", newlyCompleted: false }
+      );
+      return { ...payment, status: "cancelled", newlyCompleted: false };
     }
 
     await client.query(
@@ -98,25 +101,25 @@ export async function completeVerifiedPayment(input: {
          verified_at = NOW(), paid_at = COALESCE($3::timestamptz, NOW()),
          failure_reason_category = NULL WHERE id = $1`,
       [payment.id, input.providerTransactionId, input.paidAt],
-    )
+    );
     await client.query(
       `UPDATE payments SET status = 'cancelled',
          failure_reason_category = COALESCE(failure_reason_category, 'superseded')
        WHERE quote_version_id = $1 AND id <> $2
          AND status IN ('pending', 'failed', 'unpaid', 'awaiting_payment')`,
       [payment.quote_version_id, payment.id],
-    )
+    );
     await client.query(
       `UPDATE quote_versions SET status = 'paid'
        WHERE id = $1 AND status IN ('accepted', 'paid')`,
       [payment.quote_version_id],
-    )
+    );
 
     if (payment.case_id) {
       await client.query(
         `UPDATE cases SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
         [payment.case_id],
-      )
+      );
       await transitionCaseStatus({
         caseId: payment.case_id,
         to: "awaiting_assignment",
@@ -124,21 +127,28 @@ export async function completeVerifiedPayment(input: {
         reason: "Verified online payment confirmed.",
         sourceAction: "online_payment_verified",
         executor: client,
-      })
+      });
       await client.query(
         `UPDATE requests SET status = 'awaiting_assignment', updated_at = NOW() WHERE id = $1`,
         [payment.request_id],
-      )
+      );
     } else if (payment.training_engagement_id) {
       await client.query(
-        `UPDATE training_engagements SET payment_status = 'paid', status = 'active',
-           started_at = COALESCE(started_at, NOW()), updated_at = NOW() WHERE id = $1`,
+        `UPDATE training_engagements SET payment_status = 'paid', status = CASE
+             WHEN preferred_start_date IS NOT NULL AND preferred_start_date > CURRENT_DATE THEN 'scheduled'
+             ELSE 'active'
+           END,
+           started_at = CASE
+             WHEN preferred_start_date IS NULL OR preferred_start_date <= CURRENT_DATE
+               THEN COALESCE(started_at, NOW())
+             ELSE started_at
+           END, updated_at = NOW() WHERE id = $1`,
         [payment.training_engagement_id],
-      )
+      );
       await client.query(
         `UPDATE requests SET status = 'active', updated_at = NOW() WHERE id = $1`,
         [payment.request_id],
-      )
+      );
     }
 
     await recordRequestAudit(
@@ -153,10 +163,10 @@ export async function completeVerifiedPayment(input: {
       },
       client,
       { strict: true },
-    )
+    );
 
-    return { ...payment, status: "paid", newlyCompleted: true }
-  })
+    return { ...payment, status: "paid", newlyCompleted: true };
+  });
 
   if (completed.newlyCompleted) {
     await notifyUser(completed.user_id, {
@@ -170,7 +180,7 @@ export async function completeVerifiedPayment(input: {
         resource_id: completed.request_id,
         target_page: "payment",
       },
-    }).catch(() => undefined)
+    }).catch(() => undefined);
   }
 
   return {
@@ -181,5 +191,5 @@ export async function completeVerifiedPayment(input: {
     case_id: completed.case_id || undefined,
     training_engagement_id: completed.training_engagement_id || undefined,
     status: completed.status,
-  }
+  };
 }

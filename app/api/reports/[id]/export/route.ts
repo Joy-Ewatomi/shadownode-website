@@ -224,8 +224,8 @@ export async function GET(
   <section><h2>Investigation and Case Timeline</h2><table class="register"><thead><tr><th>Date</th><th>Record Type</th><th>Event</th></tr></thead><tbody>${timelineHtml}</tbody></table></section>
   <section><h2>Integrity Manifest</h2><p>This digest covers the report control fields, sections, attached evidence metadata and hashes, referenced entities, and timeline records included at export time.</p><p class="mono"><strong>SHA-256:</strong> ${digest}</p><p><strong>Generated:</strong> ${escapeHtml(generatedAt)}</p></section>
   <div class="notice"><strong>Legal caution:</strong> This document preserves available provenance and integrity metadata but does not by itself establish admissibility. Original evidence, native files, custody records, witness testimony, and jurisdiction-specific procedural requirements remain controlling.</div>
-  <div class="signature"><div class="signature-line"><strong>Joy Ewatomi</strong><br>Authorized Signatory<br>ShadowNode Operations Bureau Limited<br>Date: ____________________</div></div>
-  <div class="footer">ShadowNode Operations Bureau Limited | Controlled report ${escapeHtml(report.id)} | Data digest ${digest}</div>
+  <div class="signature"><div class="signature-line"><strong>Joy Ewatomi</strong><br>Authorized Signatory<br>SHADOWNODE OPERATIONS BUREAU LIMITED<br>Date: ____________________</div></div>
+  <div class="footer">SHADOWNODE OPERATIONS BUREAU LIMITED | Controlled report ${escapeHtml(report.id)} | Data digest ${digest}</div>
 </body></html>`
 
     await auditLog(user.id, "report_exported", request, {

@@ -1,20 +1,18 @@
-"use client"
+"use client";
 
-import { CheckCircle2 } from "lucide-react"
+import { CheckCircle2 } from "lucide-react";
 
-import type {
-  CybersecurityTrainingFormData,
-} from "../../CybersecurityTrainingForm"
+import type { CybersecurityTrainingFormData } from "../../CybersecurityTrainingForm";
 
-import { CYBERSECURITY_SERVICES } from "../constants"
+import { CYBERSECURITY_SERVICES } from "../constants";
 
 type Props = {
-  form: CybersecurityTrainingFormData
-  set: (patch: Partial<CybersecurityTrainingFormData>) => void
-}
+  form: CybersecurityTrainingFormData;
+  set: (patch: Partial<CybersecurityTrainingFormData>) => void;
+};
 
 function isCustom(value: string | null | undefined) {
-  return value?.trim().toLowerCase() === "custom"
+  return value?.trim().toLowerCase() === "custom";
 }
 
 function resolveSingleValue(
@@ -22,10 +20,10 @@ function resolveSingleValue(
   custom?: string | null,
 ) {
   if (isCustom(selected)) {
-    return custom?.trim() || "Custom value not provided"
+    return custom?.trim() || "Custom value not provided";
   }
 
-  return selected?.trim() || "Not selected"
+  return selected?.trim() || "Not selected";
 }
 
 function resolveMultiValue(
@@ -33,87 +31,69 @@ function resolveMultiValue(
   custom?: string | null,
 ) {
   if (!values?.length) {
-    return "Not selected"
+    return "Not selected";
   }
 
   return (
     values
-      .map((item) =>
-        isCustom(item)
-          ? custom?.trim() || null
-          : item?.trim(),
-      )
+      .map((item) => (isCustom(item) ? custom?.trim() || null : item?.trim()))
       .filter(Boolean)
       .join(", ") || "Not selected"
-  )
+  );
 }
 
-function resolveService(
-  form: CybersecurityTrainingFormData,
-) {
-  if (form.service_type === "custom") {
+function resolveService(form: CybersecurityTrainingFormData) {
+  if (form.service_type === "custom_training") {
     return form.custom_description?.trim()
       ? `Custom Cybersecurity Training — ${form.custom_description.trim()}`
-      : "Custom Cybersecurity Training"
+      : "Custom Cybersecurity Training";
   }
 
   return (
-    CYBERSECURITY_SERVICES.find(
-      (service) => service.id === form.service_type,
-    )?.title ||
+    CYBERSECURITY_SERVICES.find((service) => service.id === form.service_type)
+      ?.title ||
     form.service_type?.trim() ||
     "Not selected"
-  )
+  );
 }
 
-export default function ReviewAuthorizationStep({
-  form,
-  set,
-}: Props) {
-  const service = resolveService(form)
+export default function ReviewAuthorizationStep({ form, set }: Props) {
+  const service = resolveService(form);
 
   const audience = resolveSingleValue(
     form.training_audience,
     form.custom_training_audience,
-  )
+  );
 
   const industry =
     form.training_industry === "Other"
       ? form.custom_industry?.trim() || "Other"
-      : resolveSingleValue(
-          form.training_industry,
-          form.custom_industry,
-        )
+      : resolveSingleValue(form.training_industry, form.custom_industry);
 
-  const skillLevel = resolveSingleValue(
-    form.training_skill_level,
-  )
+  const skillLevel = resolveSingleValue(form.training_skill_level);
 
   const objectives = resolveMultiValue(
     form.training_objectives,
     form.custom_training_objective,
-  )
+  );
 
   const topics = resolveMultiValue(
     form.training_topics_selected,
     form.training_custom_topic,
-  )
+  );
 
   const outcomes = resolveMultiValue(
     form.training_expected_outcome,
     form.custom_expected_outcome,
-  )
+  );
 
-  const goal =
-    form.training_goal?.trim() || "Not provided"
+  const goal = form.training_goal?.trim() || "Not provided";
 
-  const format =
-    form.training_format?.trim() || "Not selected"
+  const format = form.training_format?.trim() || "Not selected";
 
-  const materials =
-    form.training_materials?.length
-      ? form.training_materials.join(", ")
-      : "Not selected"
+  const materials = form.training_materials?.length
+    ? form.training_materials.join(", ")
+    : "Not selected";
 
   const duration = isCustom(form.training_duration)
     ? [
@@ -129,9 +109,7 @@ export default function ReviewAuthorizationStep({
           ? `Days: ${form.custom_training_days.join(", ")}`
           : null,
 
-        form.custom_session_time
-          ? `Time: ${form.custom_session_time}`
-          : null,
+        form.custom_session_time ? `Time: ${form.custom_session_time}` : null,
 
         form.custom_training_period
           ? `Period: ${form.custom_training_period}`
@@ -139,18 +117,17 @@ export default function ReviewAuthorizationStep({
       ]
         .filter(Boolean)
         .join(" · ") || "Custom duration not provided"
-    : form.training_duration?.trim() || "Not selected"
+    : form.training_duration?.trim() || "Not selected";
 
   const contact =
     form.communication_email?.trim() ||
     form.communication_whatsapp?.trim() ||
     form.communication_signal?.trim() ||
     form.communication_phone?.trim() ||
-    "No contact provided"
+    "No contact provided";
 
   const additionalRequirements =
-    form.training_additional_requirements?.trim() ||
-    "None provided"
+    form.training_additional_requirements?.trim() || "None provided";
 
   /*
    * IMPORTANT:
@@ -160,7 +137,7 @@ export default function ReviewAuthorizationStep({
    * escaping the summary container.
    */
   const valueClass =
-    "min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-white"
+    "min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-white";
 
   return (
     <div className="space-y-6 min-w-0">
@@ -192,79 +169,56 @@ export default function ReviewAuthorizationStep({
         </div>
 
         <div className="grid min-w-0 gap-5 text-sm">
-
           {/* SERVICE */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Service
-            </p>
+            <p className="text-white/40">Service</p>
 
-            <p className={valueClass}>
-              {service}
-            </p>
+            <p className={valueClass}>{service}</p>
           </div>
 
           {/* ORGANIZATION */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Organization
-            </p>
+            <p className="text-white/40">Organization</p>
 
             <p className={valueClass}>
-              {form.training_organization_name?.trim() ||
-                "Not provided"}
+              {form.training_organization_name?.trim() || "Not provided"}
             </p>
           </div>
 
           {/* PARTICIPANTS */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Expected Learners
-            </p>
+            <p className="text-white/40">Expected Learners</p>
 
             <p className={valueClass}>
-              {form.training_participant_count ||
-                "Not provided"}
+              {form.training_participant_count || "Not provided"}
             </p>
           </div>
 
           {/* SKILL LEVEL */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Skill Level
-            </p>
+            <p className="text-white/40">Skill Level</p>
 
-            <p className="break-words capitalize text-white">
-              {skillLevel}
-            </p>
+            <p className="break-words capitalize text-white">{skillLevel}</p>
           </div>
 
           {/* AUDIENCE */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Training Audience
-            </p>
+            <p className="text-white/40">Training Audience</p>
 
-            <p className={valueClass}>
-              {audience}
-            </p>
+            <p className={valueClass}>{audience}</p>
           </div>
 
           {/* INDUSTRY */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Industry
-            </p>
+            <p className="text-white/40">Industry</p>
 
-            <p className={valueClass}>
-              {industry}
-            </p>
+            <p className={valueClass}>{industry}</p>
           </div>
 
           {/* =================================================
@@ -272,178 +226,125 @@ export default function ReviewAuthorizationStep({
               ================================================= */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Training Goal
-            </p>
+            <p className="text-white/40">Training Goal</p>
 
-            <p className={valueClass}>
-              {goal}
-            </p>
+            <p className={valueClass}>{goal}</p>
           </div>
 
           {/* OBJECTIVES */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Training Objectives
-            </p>
+            <p className="text-white/40">Training Objectives</p>
 
-            <p className={valueClass}>
-              {objectives}
-            </p>
+            <p className={valueClass}>{objectives}</p>
           </div>
 
           {/* TOPICS */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Training Topics
-            </p>
+            <p className="text-white/40">Training Topics</p>
 
-            <p className={valueClass}>
-              {topics}
-            </p>
+            <p className={valueClass}>{topics}</p>
           </div>
 
           {/* FORMAT */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Training Format
-            </p>
+            <p className="text-white/40">Training Format</p>
 
-            <p className={valueClass}>
-              {format}
-            </p>
+            <p className={valueClass}>{format}</p>
           </div>
 
           {/* DURATION */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Training Duration
-            </p>
+            <p className="text-white/40">Training Duration</p>
 
-            <p className={valueClass}>
-              {duration}
-            </p>
+            <p className={valueClass}>{duration}</p>
           </div>
 
           {/* EXPECTED OUTCOME */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Expected Outcome
-            </p>
+            <p className="text-white/40">Expected Outcome</p>
 
-            <p className={valueClass}>
-              {outcomes}
-            </p>
+            <p className={valueClass}>{outcomes}</p>
           </div>
 
           {/* MATERIALS */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Training Materials
-            </p>
+            <p className="text-white/40">Training Materials</p>
 
-            <p className={valueClass}>
-              {materials}
-            </p>
+            <p className={valueClass}>{materials}</p>
           </div>
 
           {/* START DATE */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Preferred Start Date
-            </p>
+            <p className="text-white/40">Preferred Start Date</p>
 
             <p className="break-words text-white">
-              {form.training_preferred_start_date ||
-                "Not provided"}
+              {form.training_preferred_start_date || "Not provided"}
             </p>
           </div>
 
           {/* COMPLETION DATE */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Preferred Completion Date
-            </p>
+            <p className="text-white/40">Preferred Completion Date</p>
 
             <p className="break-words text-white">
-              {form.training_preferred_completion_date ||
-                "Not provided"}
+              {form.training_preferred_completion_date || "Not provided"}
             </p>
           </div>
 
           {/* TIMELINE */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Timeline Flexible
-            </p>
+            <p className="text-white/40">Timeline Flexible</p>
 
             <p className="break-words text-white">
-              {form.training_timeline_flexible
-                ? "Yes"
-                : "No"}
+              {form.training_timeline_flexible ? "Yes" : "No"}
             </p>
           </div>
 
           {/* ADDITIONAL REQUIREMENTS */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Additional Requirements
-            </p>
+            <p className="text-white/40">Additional Requirements</p>
 
-            <p className={valueClass}>
-              {additionalRequirements}
-            </p>
+            <p className={valueClass}>{additionalRequirements}</p>
           </div>
 
           {/* COUNTRY */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Client Country
-            </p>
+            <p className="text-white/40">Client Country</p>
 
             <p className={valueClass}>
               {isCustom(form.client_country)
-                ? form.custom_country?.trim() ||
-                  "Custom country not provided"
-                : form.client_country?.trim() ||
-                  "Not provided"}
+                ? form.custom_country?.trim() || "Custom country not provided"
+                : form.client_country?.trim() || "Not provided"}
             </p>
           </div>
 
           {/* CURRENCY */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Preferred Currency
-            </p>
+            <p className="text-white/40">Preferred Currency</p>
 
             <p className="break-words text-white">
-              {form.preferred_currency?.trim() ||
-                "Not selected"}
+              {form.preferred_currency?.trim() || "Not selected"}
             </p>
           </div>
 
           {/* CONTACT */}
 
           <div className="min-w-0">
-            <p className="text-white/40">
-              Contact
-            </p>
+            <p className="text-white/40">Contact</p>
 
-            <p className={valueClass}>
-              {contact}
-            </p>
+            <p className={valueClass}>{contact}</p>
           </div>
         </div>
       </div>
@@ -470,8 +371,7 @@ export default function ReviewAuthorizationStep({
           checked={form.authorization_confirmed}
           onChange={(e) =>
             set({
-              authorization_confirmed:
-                e.target.checked,
+              authorization_confirmed: e.target.checked,
             })
           }
           className="
@@ -493,11 +393,11 @@ export default function ReviewAuthorizationStep({
             text-white/70
           "
         >
-          I confirm that the information provided is accurate
-          and I authorize ShadowNode Intelligence Bureau to
-          review this cybersecurity training request.
+          I confirm that the information provided is accurate and I authorize
+          ShadowNode Intelligence Bureau to review this cybersecurity training
+          request.
         </span>
       </label>
     </div>
-  )
+  );
 }

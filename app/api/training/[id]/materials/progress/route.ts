@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth";
 
 import {
   ensureAccess,
@@ -11,38 +11,28 @@ import {
   recordMaterialVisited,
   recordVideoProgress,
   recordDocumentProgress,
-} from "@/lib/services/training-operations-service"
+} from "@/lib/services/training-operations-service";
 
 type RouteContext = {
   params: Promise<{
-    id: string
-  }>
+    id: string;
+  }>;
+};
+
+function isSuperAdminRole(role: string | null | undefined): boolean {
+  return role === "super_administrator" || role === "super-administrator";
 }
 
-function isSuperAdminRole(
-  role: string | null | undefined,
-): boolean {
-  return (
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
-}
-
-function isTrainerOrAdminRole(
-  role: string | null | undefined,
-): boolean {
-  return [
-    "investigator",
-    "analyst",
-    "staff",
-    "administrator",
-  ].includes(role || "")
+function isTrainerOrAdminRole(role: string | null | undefined): boolean {
+  return ["investigator", "analyst", "staff", "administrator"].includes(
+    role || "",
+  );
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : String(error || "Unknown error")
+    : String(error || "Unknown error");
 }
 
 /* =======================================================
@@ -50,24 +40,20 @@ function errorMessage(error: unknown): string {
    List material consumption/progress
    ======================================================= */
 
-export async function GET(
-  _request: NextRequest,
-  context: RouteContext,
-) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    const { id: engagementId } = await context.params
+    const { id: engagementId } = await context.params;
 
     if (!engagementId) {
       return NextResponse.json(
         {
-          error:
-            "Training engagement ID is required.",
+          error: "Training engagement ID is required.",
         },
         { status: 400 },
-      )
+      );
     }
 
-    const user = await getCurrentUser()
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -75,7 +61,7 @@ export async function GET(
           error: "Unauthorized",
         },
         { status: 401 },
-      )
+      );
     }
 
     /*
@@ -101,7 +87,7 @@ export async function GET(
         role: user.role,
       },
       false,
-    )
+    );
 
     /*
      * Clients must only receive their own
@@ -111,42 +97,34 @@ export async function GET(
       if (!access.profileId) {
         return NextResponse.json(
           {
-            error:
-              "Client profile could not be determined.",
+            error: "Client profile could not be determined.",
           },
           { status: 403 },
-        )
+        );
       }
 
-      const progress =
-        await listMaterialProgress(
-          engagementId,
-          access.profileId,
-        )
+      const progress = await listMaterialProgress(
+        engagementId,
+        access.profileId,
+      );
 
       return NextResponse.json({
         success: true,
         progress,
-      })
+      });
     }
 
     /*
      * Operational training users can inspect
      * material progress for the engagement.
      */
-    if (
-      isSuperAdminRole(user.role) ||
-      isTrainerOrAdminRole(user.role)
-    ) {
-      const progress =
-        await listMaterialProgress(
-          engagementId,
-        )
+    if (isSuperAdminRole(user.role) || isTrainerOrAdminRole(user.role)) {
+      const progress = await listMaterialProgress(engagementId);
 
       return NextResponse.json({
         success: true,
         progress,
-      })
+      });
     }
 
     return NextResponse.json(
@@ -154,14 +132,11 @@ export async function GET(
         error: "Forbidden",
       },
       { status: 403 },
-    )
+    );
   } catch (error) {
-    console.error(
-      "TRAINING MATERIAL PROGRESS GET ERROR:",
-      error,
-    )
+    console.error("TRAINING MATERIAL PROGRESS GET ERROR:", error);
 
-    const message = errorMessage(error)
+    const message = errorMessage(error);
 
     if (message === "Unauthorized") {
       return NextResponse.json(
@@ -169,42 +144,36 @@ export async function GET(
           error: message,
         },
         { status: 401 },
-      )
+      );
     }
 
     if (
       message === "Forbidden" ||
-      message.includes(
-        "not the approved trainer",
-      )
+      message.includes("not the approved trainer")
     ) {
       return NextResponse.json(
         {
           error: message,
         },
         { status: 403 },
-      )
+      );
     }
 
-    if (
-      message ===
-      "Training engagement not found"
-    ) {
+    if (message === "Training engagement not found") {
       return NextResponse.json(
         {
           error: message,
         },
         { status: 404 },
-      )
+      );
     }
 
     return NextResponse.json(
       {
-        error:
-          "Failed to load material progress.",
+        error: "Failed to load material progress.",
       },
       { status: 500 },
-    )
+    );
   }
 }
 
@@ -213,25 +182,20 @@ export async function GET(
    Record material consumption/progress
    ======================================================= */
 
-export async function POST(
-  request: NextRequest,
-  context: RouteContext,
-) {
+export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    const { id: engagementId } =
-      await context.params
+    const { id: engagementId } = await context.params;
 
     if (!engagementId) {
       return NextResponse.json(
         {
-          error:
-            "Training engagement ID is required.",
+          error: "Training engagement ID is required.",
         },
         { status: 400 },
-      )
+      );
     }
 
-    const user = await getCurrentUser()
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -239,7 +203,7 @@ export async function POST(
           error: "Unauthorized",
         },
         { status: 401 },
-      )
+      );
     }
 
     /*
@@ -252,11 +216,10 @@ export async function POST(
     if (user.role !== "client") {
       return NextResponse.json(
         {
-          error:
-            "Only the client can record material consumption.",
+          error: "Only the client can record material consumption.",
         },
         { status: 403 },
-      )
+      );
     }
 
     const access = await ensureAccess(
@@ -266,72 +229,64 @@ export async function POST(
         role: user.role,
       },
       false,
-    )
+      "write",
+    );
 
     const clientProfileId =
-      access.profileId ||
-      (await getUserProfileId(user.id))
+      access.profileId || (await getUserProfileId(user.id));
 
     if (!clientProfileId) {
       return NextResponse.json(
         {
-          error:
-            "Client profile could not be determined.",
+          error: "Client profile could not be determined.",
         },
         { status: 403 },
-      )
+      );
     }
 
-    let body: Record<string, unknown>
+    let body: Record<string, unknown>;
 
     try {
-      body = await request.json()
+      body = await request.json();
     } catch {
       return NextResponse.json(
         {
-          error:
-            "Request body must contain valid JSON.",
+          error: "Request body must contain valid JSON.",
         },
         { status: 400 },
-      )
+      );
     }
 
     const materialId =
-      typeof body.materialId === "string"
-        ? body.materialId.trim()
-        : ""
+      typeof body.materialId === "string" ? body.materialId.trim() : "";
 
     if (!materialId) {
       return NextResponse.json(
         {
-          error:
-            "materialId is required.",
+          error: "materialId is required.",
         },
         { status: 400 },
-      )
+      );
     }
 
     const action =
-      typeof body.action === "string"
-        ? body.action.trim().toLowerCase()
-        : ""
+      typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
 
     /* ===================================================
        MATERIAL OPENED
        =================================================== */
 
     if (action === "opened") {
-      const progress =
-        await recordMaterialOpened(
-          engagementId,
-          materialId,
-          clientProfileId,
-        )
+      const progress = await recordMaterialOpened(
+        engagementId,
+        materialId,
+        clientProfileId,
+      );
 
       return NextResponse.json({
         success: true,
         progress,
-      })
+      });
     }
 
     /* ===================================================
@@ -339,17 +294,16 @@ export async function POST(
        =================================================== */
 
     if (action === "visited") {
-      const progress =
-        await recordMaterialVisited(
-          engagementId,
-          materialId,
-          clientProfileId,
-        )
+      const progress = await recordMaterialVisited(
+        engagementId,
+        materialId,
+        clientProfileId,
+      );
 
       return NextResponse.json({
         success: true,
         progress,
-      })
+      });
     }
 
     /* ===================================================
@@ -357,11 +311,9 @@ export async function POST(
        =================================================== */
 
     if (action === "video_progress") {
-      const watchedSeconds =
-        Number(body.watchedSeconds)
+      const watchedSeconds = Number(body.watchedSeconds);
 
-      const durationSeconds =
-        Number(body.durationSeconds)
+      const durationSeconds = Number(body.durationSeconds);
 
       if (
         !Number.isFinite(watchedSeconds) ||
@@ -369,24 +321,19 @@ export async function POST(
       ) {
         return NextResponse.json(
           {
-            error:
-              "watchedSeconds and durationSeconds must be valid numbers.",
+            error: "watchedSeconds and durationSeconds must be valid numbers.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      if (
-        watchedSeconds < 0 ||
-        durationSeconds < 0
-      ) {
+      if (watchedSeconds < 0 || durationSeconds < 0) {
         return NextResponse.json(
           {
-            error:
-              "Video progress values cannot be negative.",
+            error: "Video progress values cannot be negative.",
           },
           { status: 400 },
-        )
+        );
       }
 
       if (durationSeconds === 0) {
@@ -396,22 +343,21 @@ export async function POST(
               "durationSeconds must be greater than zero for video tracking.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      const progress =
-        await recordVideoProgress(
-          engagementId,
-          materialId,
-          clientProfileId,
-          watchedSeconds,
-          durationSeconds,
-        )
+      const progress = await recordVideoProgress(
+        engagementId,
+        materialId,
+        clientProfileId,
+        watchedSeconds,
+        durationSeconds,
+      );
 
       return NextResponse.json({
         success: true,
         progress,
-      })
+      });
     }
 
     /* ===================================================
@@ -419,36 +365,26 @@ export async function POST(
        =================================================== */
 
     if (action === "document_progress") {
-      const pagesViewed =
-        Number(body.pagesViewed)
+      const pagesViewed = Number(body.pagesViewed);
 
-      const totalPages =
-        Number(body.totalPages)
+      const totalPages = Number(body.totalPages);
 
-      if (
-        !Number.isFinite(pagesViewed) ||
-        !Number.isFinite(totalPages)
-      ) {
+      if (!Number.isFinite(pagesViewed) || !Number.isFinite(totalPages)) {
         return NextResponse.json(
           {
-            error:
-              "pagesViewed and totalPages must be valid numbers.",
+            error: "pagesViewed and totalPages must be valid numbers.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      if (
-        pagesViewed < 0 ||
-        totalPages < 0
-      ) {
+      if (pagesViewed < 0 || totalPages < 0) {
         return NextResponse.json(
           {
-            error:
-              "Document progress values cannot be negative.",
+            error: "Document progress values cannot be negative.",
           },
           { status: 400 },
-        )
+        );
       }
 
       if (totalPages === 0) {
@@ -458,22 +394,21 @@ export async function POST(
               "totalPages must be greater than zero for document tracking.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      const progress =
-        await recordDocumentProgress(
-          engagementId,
-          materialId,
-          clientProfileId,
-          pagesViewed,
-          totalPages,
-        )
+      const progress = await recordDocumentProgress(
+        engagementId,
+        materialId,
+        clientProfileId,
+        pagesViewed,
+        totalPages,
+      );
 
       return NextResponse.json({
         success: true,
         progress,
-      })
+      });
     }
 
     /* ===================================================
@@ -481,14 +416,14 @@ export async function POST(
        =================================================== */
 
     const updates: {
-      status?: string
-      progress_percentage?: number
-      watched_seconds?: number
-      duration_seconds?: number
-      pages_viewed?: number
-      total_pages?: number
-      completed?: boolean
-    } = {}
+      status?: string;
+      progress_percentage?: number;
+      watched_seconds?: number;
+      duration_seconds?: number;
+      pages_viewed?: number;
+      total_pages?: number;
+      completed?: boolean;
+    } = {};
 
     /* ---------------------------------------------------
        Status
@@ -498,184 +433,131 @@ export async function POST(
       if (typeof body.status !== "string") {
         return NextResponse.json(
           {
-            error:
-              "status must be a string.",
+            error: "status must be a string.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      updates.status = body.status
+      updates.status = body.status;
     }
 
     /* ---------------------------------------------------
        Progress percentage
        --------------------------------------------------- */
 
-    if (
-      body.progress_percentage !==
-      undefined
-    ) {
-      const value = Number(
-        body.progress_percentage,
-      )
+    if (body.progress_percentage !== undefined) {
+      const value = Number(body.progress_percentage);
 
       if (!Number.isFinite(value)) {
         return NextResponse.json(
           {
-            error:
-              "progress_percentage must be a valid number.",
+            error: "progress_percentage must be a valid number.",
           },
           { status: 400 },
-        )
+        );
       }
 
       if (value < 0 || value > 100) {
         return NextResponse.json(
           {
-            error:
-              "progress_percentage must be between 0 and 100.",
+            error: "progress_percentage must be between 0 and 100.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      updates.progress_percentage = value
+      updates.progress_percentage = value;
     }
 
     /* ---------------------------------------------------
        Watched seconds
        --------------------------------------------------- */
 
-    if (
-      body.watched_seconds !==
-      undefined
-    ) {
-      const value = Number(
-        body.watched_seconds,
-      )
+    if (body.watched_seconds !== undefined) {
+      const value = Number(body.watched_seconds);
 
-      if (
-        !Number.isFinite(value) ||
-        value < 0
-      ) {
+      if (!Number.isFinite(value) || value < 0) {
         return NextResponse.json(
           {
-            error:
-              "watched_seconds must be a valid non-negative number.",
+            error: "watched_seconds must be a valid non-negative number.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      updates.watched_seconds = value
+      updates.watched_seconds = value;
     }
 
     /* ---------------------------------------------------
        Duration
        --------------------------------------------------- */
 
-    if (
-      body.duration_seconds !==
-      undefined
-    ) {
-      const value = Number(
-        body.duration_seconds,
-      )
+    if (body.duration_seconds !== undefined) {
+      const value = Number(body.duration_seconds);
 
-      if (
-        !Number.isFinite(value) ||
-        value < 0
-      ) {
+      if (!Number.isFinite(value) || value < 0) {
         return NextResponse.json(
           {
-            error:
-              "duration_seconds must be a valid non-negative number.",
+            error: "duration_seconds must be a valid non-negative number.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      updates.duration_seconds = value
+      updates.duration_seconds = value;
     }
 
     /* ---------------------------------------------------
        Pages viewed
        --------------------------------------------------- */
 
-    if (
-      body.pages_viewed !==
-      undefined
-    ) {
-      const value = Number(
-        body.pages_viewed,
-      )
+    if (body.pages_viewed !== undefined) {
+      const value = Number(body.pages_viewed);
 
-      if (
-        !Number.isFinite(value) ||
-        value < 0
-      ) {
+      if (!Number.isFinite(value) || value < 0) {
         return NextResponse.json(
           {
-            error:
-              "pages_viewed must be a valid non-negative number.",
+            error: "pages_viewed must be a valid non-negative number.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      updates.pages_viewed =
-        Math.floor(value)
+      updates.pages_viewed = Math.floor(value);
     }
 
     /* ---------------------------------------------------
        Total pages
        --------------------------------------------------- */
 
-    if (
-      body.total_pages !==
-      undefined
-    ) {
-      const value = Number(
-        body.total_pages,
-      )
+    if (body.total_pages !== undefined) {
+      const value = Number(body.total_pages);
 
-      if (
-        !Number.isFinite(value) ||
-        value < 0
-      ) {
+      if (!Number.isFinite(value) || value < 0) {
         return NextResponse.json(
           {
-            error:
-              "total_pages must be a valid non-negative number.",
+            error: "total_pages must be a valid non-negative number.",
           },
           { status: 400 },
-        )
+        );
       }
 
-      updates.total_pages =
-        Math.floor(value)
+      updates.total_pages = Math.floor(value);
     }
 
     /* ---------------------------------------------------
        Completed
        --------------------------------------------------- */
 
-    if (
-      body.completed !==
-      undefined
-    ) {
-      if (
-        typeof body.completed !==
-        "boolean"
-      ) {
+    if (body.completed !== undefined) {
+      if (typeof body.completed !== "boolean") {
         return NextResponse.json(
           {
-            error:
-              "completed must be a boolean.",
+            error: "completed must be a boolean.",
           },
           { status: 400 },
-        )
+        );
       }
 
       /*
@@ -688,19 +570,16 @@ export async function POST(
        * Controlled video completion must use
        * `video_progress`.
        */
-      updates.completed = body.completed
+      updates.completed = body.completed;
     }
 
-    if (
-      Object.keys(updates).length === 0
-    ) {
+    if (Object.keys(updates).length === 0) {
       return NextResponse.json(
         {
-          error:
-            "No material progress updates were provided.",
+          error: "No material progress updates were provided.",
         },
         { status: 400 },
-      )
+      );
     }
 
     /*
@@ -723,10 +602,8 @@ export async function POST(
      */
     if (
       updates.completed === true &&
-      (
-        updates.watched_seconds !== undefined ||
-        updates.duration_seconds !== undefined
-      )
+      (updates.watched_seconds !== undefined ||
+        updates.duration_seconds !== undefined)
     ) {
       return NextResponse.json(
         {
@@ -734,28 +611,24 @@ export async function POST(
             "Video completion must be recorded using the video_progress action.",
         },
         { status: 400 },
-      )
+      );
     }
 
-    const progress =
-      await updateMaterialProgress(
-        engagementId,
-        materialId,
-        clientProfileId,
-        updates,
-      )
+    const progress = await updateMaterialProgress(
+      engagementId,
+      materialId,
+      clientProfileId,
+      updates,
+    );
 
     return NextResponse.json({
       success: true,
       progress,
-    })
+    });
   } catch (error) {
-    console.error(
-      "TRAINING MATERIAL PROGRESS POST ERROR:",
-      error,
-    )
+    console.error("TRAINING MATERIAL PROGRESS POST ERROR:", error);
 
-    const message = errorMessage(error)
+    const message = errorMessage(error);
 
     if (message === "Unauthorized") {
       return NextResponse.json(
@@ -763,44 +636,38 @@ export async function POST(
           error: message,
         },
         { status: 401 },
-      )
+      );
     }
 
     if (
       message === "Forbidden" ||
-      message.includes(
-        "not the approved trainer",
-      )
+      message.includes("not the approved trainer")
     ) {
       return NextResponse.json(
         {
           error: message,
         },
         { status: 403 },
-      )
+      );
     }
 
     if (
       message === "Material not found" ||
-      message.includes(
-        "does not belong to this training engagement",
-      )
+      message.includes("does not belong to this training engagement")
     ) {
       return NextResponse.json(
         {
           error: message,
         },
         { status: 404 },
-      )
+      );
     }
 
     return NextResponse.json(
       {
-        error:
-          message ||
-          "Failed to update material progress.",
+        error: message || "Failed to update material progress.",
       },
       { status: 500 },
-    )
+    );
   }
 }

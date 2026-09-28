@@ -7,7 +7,7 @@ export default function ContactPage() {
     <main className="min-h-screen bg-[#050808] px-5 py-14 text-[#e8f2ec] sm:px-8">
       <section className="mx-auto max-w-2xl">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#27d56e]">
-          ShadowNode Operations Bureau Limited
+          SHADOWNODE OPERATIONS BUREAU LIMITED
         </p>
         <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
           Contact and support

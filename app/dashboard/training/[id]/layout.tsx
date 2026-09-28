@@ -1,66 +1,72 @@
-import { redirect, notFound } from "next/navigation"
+import { redirect, notFound } from "next/navigation";
 
-import { getCurrentUser } from "@/lib/auth"
-import { hasPermission } from "@/lib/permission"
-import { query } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth";
+import { hasPermission } from "@/lib/permission";
+import { query } from "@/lib/db";
 
-import TrainingShell from "@/components/training/TrainingShell"
-import { getUserProfileId } from "@/lib/services/training-operations-service"
-import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
+import TrainingShell from "@/components/training/TrainingShell";
+import {
+  ensureAccess,
+  getUserProfileId,
+} from "@/lib/services/training-operations-service";
+import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead";
 
 type TrainingEngagementLayoutProps = {
-  children: React.ReactNode
+  children: React.ReactNode;
   params: Promise<{
-    id: string
-  }>
-}
+    id: string;
+  }>;
+};
 
 type TrainingEngagementRow = {
-  id: string
-  engagement_number: string
-  request_id: string | null
-  client_profile_id: string | null
+  id: string;
+  engagement_number: string;
+  request_id: string | null;
+  client_profile_id: string | null;
 
-  training_organization_name: string | null
-  training_client_type: string | null
-  skill_level: string | null
-  training_goal: string | null
-  training_topics: string | null
+  training_organization_name: string | null;
+  training_client_type: string | null;
+  skill_level: string | null;
+  training_goal: string | null;
+  training_topics: string | null;
 
-  status: string | null
-  payment_status: string | null
-  assigned_trainer: string | null
-  progress: number | null
+  status: string | null;
+  payment_status: string | null;
+  assigned_trainer: string | null;
+  progress: number | null;
 
-  started_at: string | null
-  completed_at: string | null
-  created_at: string | null
-}
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+  preferred_start_date: string | null;
+  preferred_completion_date: string | null;
+  client_locked: boolean;
+};
 
 type RequestRow = {
-  title: string | null
-  service_type: string | null
-}
+  title: string | null;
+  service_type: string | null;
+};
 
 type ClientProfileRow = {
-  id: string
-  user_id: string | null
-}
+  id: string;
+  user_id: string | null;
+};
 
 export default async function TrainingEngagementLayout({
   children,
   params,
 }: TrainingEngagementLayoutProps) {
-  const { id } = await params
+  const { id } = await params;
 
   if (!id?.trim()) {
-    notFound()
+    notFound();
   }
 
-  const user = await getCurrentUser()
+  const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/login")
+    redirect("/login");
   }
 
   /*
@@ -69,9 +75,8 @@ export default async function TrainingEngagementLayout({
    * ============================================================
    */
 
-  const engagementResult =
-    await query<TrainingEngagementRow>(
-      `
+  const engagementResult = await query<TrainingEngagementRow>(
+    `
         SELECT
           id,
           engagement_number,
@@ -91,7 +96,11 @@ export default async function TrainingEngagementLayout({
 
           started_at,
           completed_at,
-          created_at
+          created_at,
+          preferred_start_date,
+          preferred_completion_date,
+          preferred_start_date IS NOT NULL
+            AND preferred_start_date > CURRENT_DATE AS client_locked
 
         FROM training_engagements
 
@@ -99,14 +108,13 @@ export default async function TrainingEngagementLayout({
 
         LIMIT 1
       `,
-      [id],
-    )
+    [id],
+  );
 
-  const engagement =
-    engagementResult.rows[0]
+  const engagement = engagementResult.rows[0];
 
   if (!engagement) {
-    notFound()
+    notFound();
   }
 
   /*
@@ -119,39 +127,31 @@ export default async function TrainingEngagementLayout({
    * Clients may only access their own training engagement.
    */
 
-  const canViewTraining =
-    hasPermission(
-      user,
-      "training:view",
-    )
+  const canViewTraining = hasPermission(user, "training:view");
 
   // Only approved trainers can access training operations for this engagement.
-  let isAssignedTrainer = false
+  let isAssignedTrainer = false;
 
   if (
     user.role === "staff" ||
     user.role === "investigator" ||
     user.role === "analyst"
   ) {
-    const profileId = await getUserProfileId(user.id)
+    const profileId = await getUserProfileId(user.id);
     if (
       profileId &&
       engagement.assigned_trainer === profileId &&
       engagement.status !== "pending_super_admin_approval"
     ) {
-      isAssignedTrainer = true
+      isAssignedTrainer = true;
     }
   }
 
-  let isOwner = false
+  let isOwner = false;
 
-  if (
-    user.role === "client" &&
-    engagement.client_profile_id
-  ) {
-    const profileResult =
-      await query<ClientProfileRow>(
-        `
+  if (user.role === "client" && engagement.client_profile_id) {
+    const profileResult = await query<ClientProfileRow>(
+      `
           SELECT
             id,
             user_id
@@ -162,23 +162,15 @@ export default async function TrainingEngagementLayout({
 
           LIMIT 1
         `,
-        [
-          engagement.client_profile_id,
-        ],
-      )
+      [engagement.client_profile_id],
+    );
 
-    const profile =
-      profileResult.rows[0]
+    const profile = profileResult.rows[0];
 
-    isOwner =
-      profile?.user_id === user.id
+    isOwner = profile?.user_id === user.id;
   }
 
-  if (
-    !canViewTraining &&
-    !isOwner &&
-    !isAssignedTrainer
-  ) {
+  if (!canViewTraining && !isOwner && !isAssignedTrainer) {
     return (
       <div className="min-h-screen bg-[#020806] px-6 py-20 text-white">
         <div className="mx-auto max-w-xl rounded-xl border border-red-500/20 bg-red-500/5 p-8 text-center">
@@ -191,13 +183,34 @@ export default async function TrainingEngagementLayout({
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-white/50">
-            You do not have permission to access
-            this training engagement.
+            You do not have permission to access this training engagement.
           </p>
         </div>
       </div>
-    )
+    );
   }
+
+  if (isOwner && engagement.client_locked) {
+    return (
+      <div className="min-h-screen bg-[#020806] px-6 py-20 text-white">
+        <div className="mx-auto max-w-xl rounded-md border border-amber-400/25 bg-amber-400/5 p-8 text-center">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber-300">
+            Training scheduled
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold">
+            Access opens on {engagement.preferred_start_date}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-white/60">
+            Your payment is recorded. The assigned trainer may prepare the
+            curriculum and sessions before this date, but client training access
+            remains locked until the agreed start date.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const lifecycleAccess = await ensureAccess(id, user, false);
 
   /*
    * ============================================================
@@ -205,14 +218,11 @@ export default async function TrainingEngagementLayout({
    * ============================================================
    */
 
-  let title =
-    engagement.training_goal?.trim() ||
-    "Professional Training"
+  let title = engagement.training_goal?.trim() || "Professional Training";
 
   if (engagement.request_id) {
-    const requestResult =
-      await query<RequestRow>(
-        `
+    const requestResult = await query<RequestRow>(
+      `
           SELECT
             title,
             service_type
@@ -223,15 +233,13 @@ export default async function TrainingEngagementLayout({
 
           LIMIT 1
         `,
-        [engagement.request_id],
-      )
+      [engagement.request_id],
+    );
 
-    const request =
-      requestResult.rows[0]
+    const request = requestResult.rows[0];
 
     if (request?.title?.trim()) {
-      title =
-        request.title.trim()
+      title = request.title.trim();
     }
   }
 
@@ -242,8 +250,9 @@ export default async function TrainingEngagementLayout({
    */
 
   const status =
-    engagement.status?.trim() ||
-    "awaiting_payment"
+    lifecycleAccess.lifecycle === "completed"
+      ? "completed"
+      : engagement.status?.trim() || "awaiting_payment";
 
   /*
    * ============================================================
@@ -255,9 +264,7 @@ export default async function TrainingEngagementLayout({
     <TrainingShell
       user={user}
       engagementId={engagement.id}
-      engagementNumber={
-        engagement.engagement_number
-      }
+      engagementNumber={engagement.engagement_number}
       title={title}
       status={status}
       isAssignedTrainer={isAssignedTrainer}
@@ -268,5 +275,5 @@ export default async function TrainingEngagementLayout({
       />
       {children}
     </TrainingShell>
-  )
+  );
 }

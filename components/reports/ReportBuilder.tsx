@@ -1929,7 +1929,7 @@ if (refreshedResponse.ok) {
       <div className="mt-6 border-t border-white/6 pt-5">
         <div className="flex flex-col gap-2 text-[8px] uppercase tracking-[0.12em] text-white/15 sm:flex-row sm:items-center sm:justify-between">
           <span>
-            ShadowNode Operations Bureau Limited
+            SHADOWNODE OPERATIONS BUREAU LIMITED
           </span>
 
           <span>

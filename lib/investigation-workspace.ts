@@ -1,49 +1,51 @@
-import { NextRequest } from "next/server"
-import { auditLog, getCurrentUser, type AppUser } from "@/lib/auth"
-import { query } from "@/lib/db"
-import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
+import { NextRequest } from "next/server";
+import { auditLog, getCurrentUser, type AppUser } from "@/lib/auth";
+import { query } from "@/lib/db";
+import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events";
 import {
   canCaseFunctionInvestigate,
   canCaseFunctionReview,
   isAdminLikeRole,
   isStaffLikeRole,
   isSuperAdministratorRole,
-} from "@/lib/role-access"
+} from "@/lib/role-access";
 
-export type WorkspaceUser = AppUser
+export type WorkspaceUser = AppUser;
 
 export function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
 export async function resolveCaseId(caseId: string) {
-  if (isUuid(caseId)) return caseId
+  if (isUuid(caseId)) return caseId;
 
   const result = await query<{ id: string }>(
     "SELECT id FROM cases WHERE case_number=$1 OR id::text=$1 LIMIT 1",
     [caseId],
-  )
+  );
 
-  return result.rows[0]?.id ?? null
+  return result.rows[0]?.id ?? null;
 }
 
 export async function profileIdForUser(userId: string) {
   const profile = await query<{ id: string }>(
     "SELECT id FROM user_profiles WHERE user_id=$1 LIMIT 1",
     [userId],
-  ).catch(() => ({ rows: [] }))
+  ).catch(() => ({ rows: [] }));
 
-  return profile.rows[0]?.id ?? null
+  return profile.rows[0]?.id ?? null;
 }
 
 type CaseAssignmentAccess = {
-  assignment_role: string | null
-  status: string | null
-}
+  assignment_role: string | null;
+  status: string | null;
+};
 
 async function activeCaseAssignmentForUser(userId: string, caseId: string) {
-  const profileId = await profileIdForUser(userId)
-  if (!profileId) return null
+  const profileId = await profileIdForUser(userId);
+  if (!profileId) return null;
 
   const access = await query<CaseAssignmentAccess>(
     `
@@ -62,44 +64,139 @@ async function activeCaseAssignmentForUser(userId: string, caseId: string) {
     LIMIT 1
     `,
     [caseId, profileId],
-  )
+  );
 
-  return access.rows[0] ?? null
+  return access.rows[0] ?? null;
 }
 
-export async function canUseInvestigationWorkspace(userId: string, role: string, caseId: string) {
-  return canUseCaseOperationalAccess(userId, role, caseId)
+export async function canUseInvestigationWorkspace(
+  userId: string,
+  role: string,
+  caseId: string,
+) {
+  return canUseCaseOperationalAccess(userId, role, caseId);
 }
 
-export async function canUseCaseOperationalAccess(userId: string, role: string, caseId: string) {
-  if (role === "client") return false
-  if (!isStaffLikeRole(role) && !isAdminLikeRole(role)) return false
+export async function canUseCaseOperationalAccess(
+  userId: string,
+  role: string,
+  caseId: string,
+) {
+  if (role === "client") return false;
+  if (!isStaffLikeRole(role) && !isAdminLikeRole(role)) return false;
 
-  const access = await activeCaseAssignmentForUser(userId, caseId)
+  const access = await activeCaseAssignmentForUser(userId, caseId);
 
-  return canCaseFunctionInvestigate(
-    access?.assignment_role,
-  )
+  return canCaseFunctionInvestigate(access?.assignment_role);
 }
 
-export async function canUseCaseReviewAccess(userId: string, role: string, caseId: string) {
-  if (role === "client") return false
-  if (!isStaffLikeRole(role) && !isAdminLikeRole(role)) return false
+export async function canUseCaseReviewAccess(
+  userId: string,
+  role: string,
+  caseId: string,
+) {
+  if (role === "client") return false;
+  if (!isStaffLikeRole(role) && !isAdminLikeRole(role)) return false;
 
-  const access = await activeCaseAssignmentForUser(userId, caseId)
+  const access = await activeCaseAssignmentForUser(userId, caseId);
 
-  return canCaseFunctionReview(access?.assignment_role)
+  return canCaseFunctionReview(access?.assignment_role);
 }
 
-export async function canUseCaseOversightRead(userId: string, role: string, caseId: string) {
-  void userId
-  void caseId
-  return isSuperAdministratorRole(role)
+export async function canUseCaseOversightRead(
+  userId: string,
+  role: string,
+  caseId: string,
+) {
+  void userId;
+  void caseId;
+  return isSuperAdministratorRole(role);
+}
+
+type CaseLifecycle = {
+  status: string | null;
+  lifecycleEnded: boolean;
+  requestId: string | null;
+};
+
+async function synchronizeCaseLifecycle(
+  caseId: string,
+): Promise<CaseLifecycle> {
+  const result = await query<{
+    status: string | null;
+    lifecycle_ended: boolean;
+    request_id: string | null;
+  }>(
+    `
+      UPDATE cases
+      SET status = CASE
+            WHEN estimated_completion IS NOT NULL
+              AND estimated_completion < CURRENT_DATE
+              AND status NOT IN ('completed', 'closed', 'archived')
+            THEN 'completed'
+            ELSE status
+          END,
+          completed_at = CASE
+            WHEN estimated_completion IS NOT NULL
+              AND estimated_completion < CURRENT_DATE
+            THEN COALESCE(
+              completed_at,
+              estimated_completion::timestamptz + INTERVAL '1 day'
+            )
+            ELSE completed_at
+          END,
+          updated_at = CASE
+            WHEN estimated_completion IS NOT NULL
+              AND estimated_completion < CURRENT_DATE
+              AND status NOT IN ('completed', 'closed', 'archived')
+            THEN NOW()
+            ELSE updated_at
+          END
+      WHERE id = $1
+      RETURNING
+        status,
+        request_id,
+        estimated_completion IS NOT NULL
+          AND estimated_completion < CURRENT_DATE AS lifecycle_ended
+    `,
+    [caseId],
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return { status: null, lifecycleEnded: false, requestId: null };
+  }
+
+  const readOnly =
+    row.lifecycle_ended ||
+    ["completed", "closed", "archived"].includes(row.status || "");
+
+  if (row.lifecycle_ended && row.request_id) {
+    await query(
+      `
+        UPDATE requests
+        SET status = 'completed', updated_at = NOW()
+        WHERE id = $1
+          AND status NOT IN ('completed', 'closed', 'archived')
+      `,
+      [row.request_id],
+    );
+  }
+
+  return {
+    status: row.status,
+    lifecycleEnded: readOnly,
+    requestId: row.request_id,
+  };
+}
+
+function isReadOnlyRequest(request: NextRequest) {
+  return request.method === "GET" || request.method === "HEAD";
 }
 
 type CaseAccessResult =
   | { ok: true; user: WorkspaceUser; caseId: string }
-  | { ok: false; status: number; error: string }
+  | { ok: false; status: number; error: string };
 
 async function requireCaseAccess(
   request: NextRequest,
@@ -107,18 +204,32 @@ async function requireCaseAccess(
   check: (userId: string, role: string, caseId: string) => Promise<boolean>,
   auditAction: string,
 ): Promise<CaseAccessResult> {
-  const user = await getCurrentUser()
-  if (!user) return { ok: false, status: 401, error: "Unauthorized" }
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, status: 401, error: "Unauthorized" };
 
-  const caseId = await resolveCaseId(rawCaseId)
-  if (!caseId) return { ok: false, status: 404, error: "Case not found" }
+  const caseId = await resolveCaseId(rawCaseId);
+  if (!caseId) return { ok: false, status: 404, error: "Case not found" };
 
   if (!(await check(user.id, user.role, caseId))) {
-    await auditLog(user.id, auditAction, request, { case_id: caseId })
-    return { ok: false, status: 403, error: "Forbidden" }
+    await auditLog(user.id, auditAction, request, { case_id: caseId });
+    return { ok: false, status: 403, error: "Forbidden" };
   }
 
-  return { ok: true, user, caseId }
+  const lifecycle = await synchronizeCaseLifecycle(caseId);
+  if (!isReadOnlyRequest(request) && lifecycle.lifecycleEnded) {
+    return {
+      ok: false,
+      status: 409,
+      error: "This case is complete and is now read-only.",
+    };
+  }
+
+  return { ok: true, user, caseId };
+}
+
+export async function ensureCaseWritable(caseId: string) {
+  const lifecycle = await synchronizeCaseLifecycle(caseId);
+  return !lifecycle.lifecycleEnded;
 }
 
 export async function requireCaseOperationalAccess(
@@ -130,7 +241,7 @@ export async function requireCaseOperationalAccess(
     rawCaseId,
     canUseCaseOperationalAccess,
     "case_operational_access_forbidden",
-  )
+  );
 }
 
 export async function requireCaseReviewAccess(
@@ -142,7 +253,7 @@ export async function requireCaseReviewAccess(
     rawCaseId,
     canUseCaseReviewAccess,
     "case_review_access_forbidden",
-  )
+  );
 }
 
 export async function requireCaseOversightRead(
@@ -154,7 +265,7 @@ export async function requireCaseOversightRead(
     rawCaseId,
     canUseCaseOversightRead,
     "case_oversight_read_forbidden",
-  )
+  );
 }
 
 export async function requireCaseReadAccess(
@@ -169,31 +280,37 @@ export async function requireCaseReadAccess(
       (await canUseCaseReviewAccess(userId, role, caseId)) ||
       (await canUseCaseOversightRead(userId, role, caseId)),
     "case_read_access_forbidden",
-  )
+  );
 }
 
-export const requireInvestigationWorkspace = requireCaseOperationalAccess
+export const requireInvestigationWorkspace = requireCaseOperationalAccess;
 
 export function toScore(value: unknown) {
-  if (value === null || value === undefined || value === "") return null
-  const score = Number(value)
-  if (!Number.isFinite(score)) return null
-  return Math.max(0, Math.min(100, Math.round(score)))
+  if (value === null || value === undefined || value === "") return null;
+  const score = Number(value);
+  if (!Number.isFinite(score)) return null;
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 export function optionalText(value: unknown) {
-  if (value === null || value === undefined) return null
-  const text = String(value).trim()
-  return text ? text : null
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text ? text : null;
 }
 
 export function aliasesJson(value: unknown) {
-  if (Array.isArray(value)) return JSON.stringify(value.map((item) => String(item).trim()).filter(Boolean))
+  if (Array.isArray(value))
+    return JSON.stringify(
+      value.map((item) => String(item).trim()).filter(Boolean),
+    );
   if (typeof value === "string") {
-    const aliases = value.split(",").map((item) => item.trim()).filter(Boolean)
-    return JSON.stringify(aliases)
+    const aliases = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return JSON.stringify(aliases);
   }
-  return JSON.stringify([])
+  return JSON.stringify([]);
 }
 
 export async function recordInvestigationTimeline(
@@ -203,7 +320,7 @@ export async function recordInvestigationTimeline(
   title: string,
   content: string,
 ) {
-  const profileId = userId ? await profileIdForUser(userId) : null
+  const profileId = userId ? await profileIdForUser(userId) : null;
 
   const inserted = await query<{ id: string }>(
     `
@@ -212,7 +329,7 @@ export async function recordInvestigationTimeline(
     RETURNING id
     `,
     [caseId, profileId, updateType, title, content],
-  )
+  );
 
   await emitCaseWorkspaceEvent({
     type: "timeline.created",
@@ -220,5 +337,5 @@ export async function recordInvestigationTimeline(
     actor_id: userId,
     record_id: inserted.rows[0]?.id ?? null,
     data: { update_type: updateType, title, content },
-  })
+  });
 }

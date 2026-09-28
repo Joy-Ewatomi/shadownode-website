@@ -1,35 +1,37 @@
-"use client"
+"use client";
 
-import { usePathname, useRouter } from "next/navigation"
-import { useState } from "react"
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
-import type { AppUser } from "@/lib/auth"
-import { ClientNotificationProvider } from "@/components/notifications/ClientNotificationProvider"
+import type { AppUser } from "@/lib/auth";
+import { ClientNotificationProvider } from "@/components/notifications/ClientNotificationProvider";
 
-import Header from "./Header"
-import Sidebar from "./Sidebar"
+import Header from "./Header";
+import Sidebar from "./Sidebar";
 
 export default function DashboardShell({
   children,
   user,
 }: {
-  children: React.ReactNode
-  user: AppUser
+  children: React.ReactNode;
+  user: AppUser;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const pathname = usePathname()
-  const router = useRouter()
+  const pathname = usePathname();
 
   function handleSidebarClose() {
-    setSidebarOpen(false)
+    setSidebarOpen(false);
   }
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   return (
     <ClientNotificationProvider>
       <div className="h-svh overflow-hidden bg-transparent text-white">
         <div className="relative flex h-full overflow-hidden">
-
           <Sidebar
             user={user}
             open={sidebarOpen}
@@ -39,6 +41,7 @@ export default function DashboardShell({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-72">
             <Header
               user={user}
+              sidebarOpen={sidebarOpen}
               onMenuClick={() => setSidebarOpen(true)}
             />
 
@@ -51,5 +54,5 @@ export default function DashboardShell({
         </div>
       </div>
     </ClientNotificationProvider>
-  )
+  );
 }

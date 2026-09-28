@@ -1,55 +1,38 @@
-import { query } from "@/lib/db"
-import { completeTrainingEngagement } from "@/lib/services/training-completion-service"
+import { query } from "@/lib/db";
+import { completeTrainingEngagement } from "@/lib/services/training-completion-service";
 import {
   notifyUser,
   notifyTrainingClient,
-} from "@/lib/services/notification-service"
-import { generateICS } from "@/lib/utils/ics"
-import { sendEmail } from "@/lib/email"
+} from "@/lib/services/notification-service";
+import { generateICS } from "@/lib/utils/ics";
+import { sendEmail } from "@/lib/email";
 import {
   syncTrainingSessionToGoogle,
   cancelTrainingSessionCalendarEvent,
-} from "@/lib/services/calendar-service"
+} from "@/lib/services/calendar-service";
 import {
   isTrainingAssignmentFunction,
   type TrainingAssignmentFunction,
-} from "@/lib/role-access"
+} from "@/lib/role-access";
 
-export {
-  syncTrainingSessionToGoogle,
-  cancelTrainingSessionCalendarEvent,
-}
+export { syncTrainingSessionToGoogle, cancelTrainingSessionCalendarEvent };
 
 type AppUser = {
-  id: string
-  role: string
+  id: string;
+  role: string;
+};
+
+const TRAINER_APPROVAL_APPROVED = "approved";
+
+const TRAINER_APPROVAL_PENDING = "pending_super_admin_approval";
+
+const MATERIAL_PROGRESS_MILESTONES = [1, 25, 50, 75, 100];
+
+function isSuperAdminRole(role: string | null | undefined): boolean {
+  return role === "super_administrator" || role === "super-administrator";
 }
 
-const TRAINER_APPROVAL_APPROVED = "approved"
-
-const TRAINER_APPROVAL_PENDING =
-  "pending_super_admin_approval"
-
-const MATERIAL_PROGRESS_MILESTONES = [
-  1,
-  25,
-  50,
-  75,
-  100,
-]
-
-function isSuperAdminRole(
-  role: string | null | undefined,
-): boolean {
-  return (
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
-}
-
-function isTrainerCapableRole(
-  role: string | null | undefined,
-): boolean {
+function isTrainerCapableRole(role: string | null | undefined): boolean {
   return [
     "investigator",
     "analyst",
@@ -57,44 +40,31 @@ function isTrainerCapableRole(
     "administrator",
     "super_administrator",
     "super-administrator",
-  ].includes(role || "")
+  ].includes(role || "");
 }
 
-function normalizePercentage(
-  value: unknown,
-): number {
-  const numeric = Number(value)
+function normalizePercentage(value: unknown): number {
+  const numeric = Number(value);
 
   if (!Number.isFinite(numeric)) {
-    return 0
+    return 0;
   }
 
-  return Math.min(
-    100,
-    Math.max(
-      0,
-      Math.round(numeric),
-    ),
-  )
+  return Math.min(100, Math.max(0, Math.round(numeric)));
 }
 
-function getProgressMilestone(
-  percentage: number,
-): number {
-  const normalized =
-    normalizePercentage(percentage)
+function getProgressMilestone(percentage: number): number {
+  const normalized = normalizePercentage(percentage);
 
-  let milestone = 0
+  let milestone = 0;
 
-  for (
-    const threshold of MATERIAL_PROGRESS_MILESTONES
-  ) {
+  for (const threshold of MATERIAL_PROGRESS_MILESTONES) {
     if (normalized >= threshold) {
-      milestone = threshold
+      milestone = threshold;
     }
   }
 
-  return milestone
+  return milestone;
 }
 
 function shouldCreateMaterialProgressUpdate(
@@ -103,78 +73,57 @@ function shouldCreateMaterialProgressUpdate(
   nextPercentage: number,
   nextStatus: string,
 ): {
-  shouldCreate: boolean
+  shouldCreate: boolean;
   updateType:
-    | "material_started"
-    | "material_progress_updated"
-    | "material_completed"
+    "material_started" | "material_progress_updated" | "material_completed";
 } {
-  const previous =
-    normalizePercentage(previousPercentage)
+  const previous = normalizePercentage(previousPercentage);
 
-  const next =
-    normalizePercentage(nextPercentage)
+  const next = normalizePercentage(nextPercentage);
 
-  const previousMilestone =
-    getProgressMilestone(previous)
+  const previousMilestone = getProgressMilestone(previous);
 
-  const nextMilestone =
-    getProgressMilestone(next)
+  const nextMilestone = getProgressMilestone(next);
 
-  if (
-    nextStatus === "completed" &&
-    previousStatus !== "completed"
-  ) {
+  if (nextStatus === "completed" && previousStatus !== "completed") {
     return {
       shouldCreate: true,
       updateType: "material_completed",
-    }
+    };
   }
 
-  if (
-    previousStatus === "not_started" &&
-    next > 0
-  ) {
+  if (previousStatus === "not_started" && next > 0) {
     return {
       shouldCreate: true,
       updateType: "material_started",
-    }
+    };
   }
 
-  if (
-    nextMilestone > previousMilestone
-  ) {
+  if (nextMilestone > previousMilestone) {
     return {
       shouldCreate: true,
       updateType: "material_progress_updated",
-    }
+    };
   }
 
   return {
     shouldCreate: false,
     updateType: "material_progress_updated",
-  }
+  };
 }
 
 /* =======================================================
    Trainer State
    ======================================================= */
 
-async function getEngagementTrainerState(
-  engagementId: string,
-) {
-  const engagementResult =
-    await query<{
-      assigned_trainer: string | null
-      trainer_approval_status: string | null
-      trainer_approval_requested_by:
-        | string
-        | null
-      trainer_approval_approved_by:
-        | string
-        | null
-    }>(
-      `
+async function getEngagementTrainerState(engagementId: string) {
+  const engagementResult = await query<{
+    assigned_trainer: string | null;
+    trainer_approval_status: string | null;
+    trainer_approval_requested_by: string | null;
+    trainer_approval_approved_by: string | null;
+  }>(
+    `
         SELECT
           assigned_trainer,
           trainer_approval_status,
@@ -184,29 +133,26 @@ async function getEngagementTrainerState(
         WHERE id = $1
         LIMIT 1
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
   if (!engagementResult.rows[0]) {
-    return null
+    return null;
   }
 
-  const trainersResult =
-    await query<{
-      id: string
-      trainer_profile_id: string
-      assignment_status: string
-      assigned_by: string | null
-      approval_requested_by:
-        | string
-        | null
-      approved_by: string | null
-      approval_reason: string | null
-      assigned_at: string | null
-      approved_at: string | null
-      removed_at: string | null
-    }>(
-      `
+  const trainersResult = await query<{
+    id: string;
+    trainer_profile_id: string;
+    assignment_status: string;
+    assigned_by: string | null;
+    approval_requested_by: string | null;
+    approved_by: string | null;
+    approval_reason: string | null;
+    assigned_at: string | null;
+    approved_at: string | null;
+    removed_at: string | null;
+  }>(
+    `
         SELECT
           id,
           trainer_profile_id,
@@ -223,32 +169,24 @@ async function getEngagementTrainerState(
           AND removed_at IS NULL
         ORDER BY created_at ASC
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
   return {
     ...engagementResult.rows[0],
     trainers: trainersResult.rows,
 
-    approved_trainers:
-      trainersResult.rows.filter(
-        (trainer) =>
-          trainer.assignment_status ===
-          TRAINER_APPROVAL_APPROVED,
-      ),
+    approved_trainers: trainersResult.rows.filter(
+      (trainer) => trainer.assignment_status === TRAINER_APPROVAL_APPROVED,
+    ),
 
-    pending_trainers:
-      trainersResult.rows.filter(
-        (trainer) =>
-          trainer.assignment_status ===
-          TRAINER_APPROVAL_PENDING,
-      ),
-  }
+    pending_trainers: trainersResult.rows.filter(
+      (trainer) => trainer.assignment_status === TRAINER_APPROVAL_PENDING,
+    ),
+  };
 }
 
-export async function listEngagementTrainers(
-  engagementId: string,
-) {
+export async function listEngagementTrainers(engagementId: string) {
   const result = await query(
     `
       SELECT
@@ -291,32 +229,31 @@ export async function listEngagementTrainers(
         tet.created_at ASC
     `,
     [engagementId],
-  )
+  );
 
-  return result.rows
+  return result.rows;
 }
 
 type ApprovedTrainerRow = {
-  id: string
-  training_engagement_id: string
-  trainer_profile_id: string
-  assigned_by: string | null
-  approved_by: string | null
-  approval_reason: string | null
-  assigned_at: Date | string | null
-  approved_at: Date | string | null
-  user_id: string
-  email: string | null
-  role: string
-  trainer_name: string | null
-}
+  id: string;
+  training_engagement_id: string;
+  trainer_profile_id: string;
+  assigned_by: string | null;
+  approved_by: string | null;
+  approval_reason: string | null;
+  assigned_at: Date | string | null;
+  approved_at: Date | string | null;
+  user_id: string;
+  email: string | null;
+  role: string;
+  trainer_name: string | null;
+};
 
 export async function listApprovedTrainers(
   engagementId: string,
 ): Promise<ApprovedTrainerRow[]> {
-  const result =
-    await query<ApprovedTrainerRow>(
-      `
+  const result = await query<ApprovedTrainerRow>(
+    `
         SELECT
           tet.id,
           tet.training_engagement_id,
@@ -351,13 +288,10 @@ export async function listApprovedTrainers(
 
         ORDER BY tet.approved_at ASC
       `,
-      [
-        engagementId,
-        TRAINER_APPROVAL_APPROVED,
-      ],
-    )
+    [engagementId, TRAINER_APPROVAL_APPROVED],
+  );
 
-  return result.rows
+  return result.rows;
 }
 
 /* =======================================================
@@ -368,14 +302,13 @@ async function getUserRoleByProfileId(
   profileId: string | null,
 ): Promise<string | null> {
   if (!profileId) {
-    return null
+    return null;
   }
 
-  const result =
-    await query<{
-      role: string | null
-    }>(
-      `
+  const result = await query<{
+    role: string | null;
+  }>(
+    `
         SELECT au.role
         FROM user_profiles up
 
@@ -385,30 +318,27 @@ async function getUserRoleByProfileId(
         WHERE up.id = $1
         LIMIT 1
       `,
-      [profileId],
-    )
+    [profileId],
+  );
 
-  return result.rows[0]?.role || null
+  return result.rows[0]?.role || null;
 }
 
-async function getUserProfileId(
-  userId: string,
-): Promise<string | null> {
-  const result =
-    await query<{ id: string }>(
-      `
+async function getUserProfileId(userId: string): Promise<string | null> {
+  const result = await query<{ id: string }>(
+    `
         SELECT id
         FROM user_profiles
         WHERE user_id = $1
         LIMIT 1
       `,
-      [userId],
-    )
+    [userId],
+  );
 
-  return result.rows[0]?.id || null
+  return result.rows[0]?.id || null;
 }
 
-export { getUserProfileId }
+export { getUserProfileId };
 
 /* =======================================================
    Trainer Authorization
@@ -417,30 +347,27 @@ export { getUserProfileId }
 export async function isApprovedTrainerForEngagement(
   engagementId: string,
   user: {
-    id: string
-    role: string
+    id: string;
+    role: string;
   } | null,
   profileId?: string | null,
 ): Promise<boolean> {
   if (!user) {
-    return false
+    return false;
   }
 
   if (isSuperAdminRole(user.role)) {
-    return true
+    return true;
   }
 
-  const currentProfileId =
-    profileId ||
-    (await getUserProfileId(user.id))
+  const currentProfileId = profileId || (await getUserProfileId(user.id));
 
   if (!currentProfileId) {
-    return false
+    return false;
   }
 
-  const result =
-    await query<{ id: string }>(
-      `
+  const result = await query<{ id: string }>(
+    `
         SELECT id
         FROM training_engagement_trainers
 
@@ -451,16 +378,10 @@ export async function isApprovedTrainerForEngagement(
 
         LIMIT 1
       `,
-      [
-        engagementId,
-        currentProfileId,
-        TRAINER_APPROVAL_APPROVED,
-      ],
-    )
+    [engagementId, currentProfileId, TRAINER_APPROVAL_APPROVED],
+  );
 
-  return Boolean(
-    result.rows[0],
-  )
+  return Boolean(result.rows[0]);
 }
 
 export async function requireApprovedTrainerForEngagement(
@@ -468,14 +389,11 @@ export async function requireApprovedTrainerForEngagement(
   actorProfileId: string | null,
 ): Promise<void> {
   if (!actorProfileId) {
-    throw new Error(
-      "Trainer profile is required",
-    )
+    throw new Error("Trainer profile is required");
   }
 
-  const result =
-    await query<{ id: string }>(
-      `
+  const result = await query<{ id: string }>(
+    `
         SELECT id
         FROM training_engagement_trainers
 
@@ -486,17 +404,11 @@ export async function requireApprovedTrainerForEngagement(
 
         LIMIT 1
       `,
-      [
-        engagementId,
-        actorProfileId,
-        TRAINER_APPROVAL_APPROVED,
-      ],
-    )
+    [engagementId, actorProfileId, TRAINER_APPROVAL_APPROVED],
+  );
 
   if (!result.rows[0]) {
-    throw new Error(
-      "This user is not an approved trainer for this engagement",
-    )
+    throw new Error("This user is not an approved trainer for this engagement");
   }
 }
 
@@ -506,19 +418,14 @@ export async function requireTrainingOperatorForEngagement(
   actorProfileId: string | null,
 ): Promise<void> {
   if (!actor) {
-    throw new Error(
-      "Unauthorized",
-    )
+    throw new Error("Unauthorized");
   }
 
   if (isSuperAdminRole(actor.role)) {
-    return
+    return;
   }
 
-  await requireApprovedTrainerForEngagement(
-    engagementId,
-    actorProfileId,
-  )
+  await requireApprovedTrainerForEngagement(engagementId, actorProfileId);
 }
 
 async function requireTrainingOperatorByProfile(
@@ -526,30 +433,20 @@ async function requireTrainingOperatorByProfile(
   actorProfileId: string | null,
 ): Promise<void> {
   if (!actorProfileId) {
-    throw new Error(
-      "User profile is required",
-    )
+    throw new Error("User profile is required");
   }
 
-  const role =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const role = await getUserRoleByProfileId(actorProfileId);
 
   if (!role) {
-    throw new Error(
-      "User role could not be determined",
-    )
+    throw new Error("User role could not be determined");
   }
 
   if (isSuperAdminRole(role)) {
-    return
+    return;
   }
 
-  await requireApprovedTrainerForEngagement(
-    engagementId,
-    actorProfileId,
-  )
+  await requireApprovedTrainerForEngagement(engagementId, actorProfileId);
 }
 
 /* =======================================================
@@ -564,26 +461,20 @@ export async function assignTrainer(
   trainingRole: TrainingAssignmentFunction = "trainer",
 ) {
   if (!isTrainingAssignmentFunction(trainingRole)) {
-    throw new Error("Invalid training role")
+    throw new Error("Invalid training role");
   }
 
-  const engagement =
-    await getEngagementTrainerState(
-      engagementId,
-    )
+  const engagement = await getEngagementTrainerState(engagementId);
 
   if (!engagement) {
-    throw new Error(
-      "Training engagement not found",
-    )
+    throw new Error("Training engagement not found");
   }
 
-  const targetResult =
-    await query<{
-      role: string | null
-      status: string | null
-    }>(
-      `
+  const targetResult = await query<{
+    role: string | null;
+    status: string | null;
+  }>(
+    `
         SELECT
           au.role,
           au.status
@@ -596,11 +487,10 @@ export async function assignTrainer(
         WHERE up.id = $1
         LIMIT 1
       `,
-      [trainerProfileId],
-    )
+    [trainerProfileId],
+  );
 
-  const target =
-    targetResult.rows[0]
+  const target = targetResult.rows[0];
 
   if (
     !target ||
@@ -608,26 +498,20 @@ export async function assignTrainer(
     !isTrainerCapableRole(target.role) ||
     target.status !== "active"
   ) {
-    throw new Error(
-      "Target profile is not authorized to act as a trainer",
-    )
+    throw new Error("Target profile is not authorized to act as a trainer");
   }
 
   if (!actorProfileId) {
-    throw new Error(
-      "Actor profile is required",
-    )
+    throw new Error("Actor profile is required");
   }
 
-  const normalizedActorRole =
-    actorRole || "administrator"
+  const normalizedActorRole = actorRole || "administrator";
 
-  const existingAssignment =
-    await query<{
-      id: string
-      assignment_status: string
-    }>(
-      `
+  const existingAssignment = await query<{
+    id: string;
+    assignment_status: string;
+  }>(
+    `
         SELECT
           id,
           assignment_status
@@ -639,17 +523,10 @@ export async function assignTrainer(
 
         LIMIT 1
       `,
-      [
-        engagementId,
-        trainerProfileId,
-      ],
-    )
+    [engagementId, trainerProfileId],
+  );
 
-  if (
-    isSuperAdminRole(
-      normalizedActorRole,
-    )
-  ) {
+  if (isSuperAdminRole(normalizedActorRole)) {
     if (existingAssignment.rows[0]) {
       await query(
         `
@@ -686,7 +563,7 @@ export async function assignTrainer(
           existingAssignment.rows[0].id,
           trainingRole,
         ],
-      )
+      );
     } else {
       await query(
         `
@@ -725,7 +602,7 @@ export async function assignTrainer(
           actorProfileId,
           trainingRole,
         ],
-      )
+      );
     }
 
     await query(
@@ -751,7 +628,7 @@ export async function assignTrainer(
         actorProfileId,
         engagementId,
       ],
-    )
+    );
 
     await createTrainingUpdate(
       engagementId,
@@ -759,39 +636,24 @@ export async function assignTrainer(
       "trainer_assigned",
       "Trainer Assigned",
       `Trainer profile ${trainerProfileId} has been approved and assigned to the engagement.`,
-    )
+    );
 
     return {
       success: true,
-      assignment_status:
-        TRAINER_APPROVAL_APPROVED,
-      trainer_profile_id:
-        trainerProfileId,
-    }
+      assignment_status: TRAINER_APPROVAL_APPROVED,
+      trainer_profile_id: trainerProfileId,
+    };
   }
 
-  if (
-    normalizedActorRole !==
-    "administrator"
-  ) {
-    throw new Error(
-      "Forbidden",
-    )
+  if (normalizedActorRole !== "administrator") {
+    throw new Error("Forbidden");
   }
 
-  if (
-    existingAssignment.rows[0]
-  ) {
-    const existing =
-      existingAssignment.rows[0]
+  if (existingAssignment.rows[0]) {
+    const existing = existingAssignment.rows[0];
 
-    if (
-      existing.assignment_status ===
-      TRAINER_APPROVAL_APPROVED
-    ) {
-      throw new Error(
-        "This trainer is already approved for this engagement",
-      )
+    if (existing.assignment_status === TRAINER_APPROVAL_APPROVED) {
+      throw new Error("This trainer is already approved for this engagement");
     }
 
     await query(
@@ -812,13 +674,8 @@ export async function assignTrainer(
 
         WHERE id = $3
       `,
-      [
-        TRAINER_APPROVAL_PENDING,
-        actorProfileId,
-        existing.id,
-        trainingRole,
-      ],
-    )
+      [TRAINER_APPROVAL_PENDING, actorProfileId, existing.id, trainingRole],
+    );
   } else {
     await query(
       `
@@ -851,7 +708,7 @@ export async function assignTrainer(
         actorProfileId,
         trainingRole,
       ],
-    )
+    );
   }
 
   await query(
@@ -867,13 +724,8 @@ export async function assignTrainer(
 
       WHERE id = $4
     `,
-    [
-      trainerProfileId,
-      TRAINER_APPROVAL_PENDING,
-      actorProfileId,
-      engagementId,
-    ],
-  )
+    [trainerProfileId, TRAINER_APPROVAL_PENDING, actorProfileId, engagementId],
+  );
 
   await createTrainingUpdate(
     engagementId,
@@ -881,15 +733,13 @@ export async function assignTrainer(
     "trainer_assignment_requested",
     "Trainer Assignment Requested",
     `Trainer profile ${trainerProfileId} was proposed and sent to Super Administrator approval.`,
-  )
+  );
 
   return {
     success: true,
-    assignment_status:
-      TRAINER_APPROVAL_PENDING,
-    trainer_profile_id:
-      trainerProfileId,
-  }
+    assignment_status: TRAINER_APPROVAL_PENDING,
+    trainer_profile_id: trainerProfileId,
+  };
 }
 
 /* =======================================================
@@ -921,116 +771,127 @@ async function createTrainingUpdate(
         $5
       )
     `,
-    [
-      trainingEngagementId,
-      updatedBy,
-      updateType,
-      title,
-      content,
-    ],
-  )
+    [trainingEngagementId, updatedBy, updateType, title, content],
+  );
 
-  await notifyTrainingClient(
-    trainingEngagementId,
-    {
-      type:
-        `training_${updateType}`,
+  await notifyTrainingClient(trainingEngagementId, {
+    type: `training_${updateType}`,
 
-      title,
+    title,
 
-      message:
-        content,
+    message: content,
 
-      metadata: {
-        training_engagement_id:
-          trainingEngagementId,
+    metadata: {
+      training_engagement_id: trainingEngagementId,
 
-        training_update_type:
-          updateType,
+      training_update_type: updateType,
 
-        updated_by:
-          updatedBy,
-      },
+      updated_by: updatedBy,
     },
-  )
+  });
 }
 
 /* =======================================================
    Access Control
    ======================================================= */
 
+export type TrainingAccessMode = "read" | "write";
+
 export async function ensureAccess(
   engagementId: string,
   user: AppUser | null,
   allowTrainer = false,
+  mode: TrainingAccessMode = "read",
 ): Promise<{
-  profileId: string | null
-  role: string | null
+  profileId: string | null;
+  role: string | null;
+  lifecycle: "scheduled" | "active" | "completed";
 }> {
-  if (!user) {
-    throw new Error(
-      "Unauthorized",
-    )
-  }
+  if (!user) throw new Error("Unauthorized");
 
-  const res =
-    await query<{
-      client_profile_id:
-        | string
-        | null
-    }>(
+  const res = await query<{
+    client_profile_id: string | null;
+    status: string | null;
+    payment_status: string | null;
+    preferred_start_date: string | null;
+    preferred_completion_date: string | null;
+    client_locked: boolean;
+    lifecycle_ended: boolean;
+  }>(
+    `
+      SELECT client_profile_id, status, payment_status,
+        preferred_start_date, preferred_completion_date,
+        preferred_start_date IS NOT NULL
+          AND preferred_start_date > CURRENT_DATE AS client_locked,
+        preferred_completion_date IS NOT NULL
+          AND preferred_completion_date < CURRENT_DATE AS lifecycle_ended
+      FROM training_engagements
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [engagementId],
+  );
+
+  const engagement = res.rows[0];
+  if (!engagement) throw new Error("Training engagement not found");
+
+  const lifecycle: "scheduled" | "active" | "completed" =
+    engagement.lifecycle_ended ||
+    ["completed", "closed", "archived"].includes(engagement.status || "")
+      ? "completed"
+      : engagement.client_locked
+        ? "scheduled"
+        : "active";
+
+  if (engagement.lifecycle_ended) {
+    await query(
       `
-        SELECT
-          client_profile_id
-
-        FROM training_engagements
-
+        UPDATE training_engagements
+        SET status = 'completed',
+            completed_at = COALESCE(
+              completed_at,
+              preferred_completion_date::timestamptz + INTERVAL '1 day'
+            ),
+            updated_at = NOW()
         WHERE id = $1
-        LIMIT 1
+          AND status NOT IN ('completed', 'closed', 'archived')
       `,
       [engagementId],
-    )
+    );
+  } else if (
+    lifecycle === "active" &&
+    engagement.payment_status === "paid" &&
+    engagement.status === "scheduled"
+  ) {
+    await query(
+      `
+        UPDATE training_engagements
+        SET status = 'active',
+            started_at = COALESCE(started_at, NOW()),
+            updated_at = NOW()
+        WHERE id = $1 AND status = 'scheduled'
+      `,
+      [engagementId],
+    );
+  }
 
-  const engagement =
-    res.rows[0]
-
-  if (!engagement) {
+  if (mode === "write" && lifecycle === "completed") {
     throw new Error(
-      "Training engagement not found",
-    )
+      "This training engagement is complete and is now read-only.",
+    );
   }
 
-  const profileId =
-    await getUserProfileId(
-      user.id,
-    )
+  const profileId = await getUserProfileId(user.id);
 
-  if (
-    isSuperAdminRole(
-      user.role,
-    )
-  ) {
-    return {
-      profileId,
-      role: user.role,
-    }
+  if (isSuperAdminRole(user.role)) {
+    return { profileId, role: user.role, lifecycle };
   }
 
-  if (
-    user.role ===
-    "administrator"
-  ) {
+  if (user.role === "administrator") {
     if (allowTrainer) {
-      await requireApprovedTrainerForEngagement(
-        engagementId,
-        profileId,
-      )
+      await requireApprovedTrainerForEngagement(engagementId, profileId);
     }
-
-    return {
-      profileId,
-      role: user.role,
-    }
+    return { profileId, role: user.role, lifecycle };
   }
 
   if (
@@ -1038,40 +899,26 @@ export async function ensureAccess(
     user.role === "investigator" ||
     user.role === "analyst"
   ) {
-    await requireApprovedTrainerForEngagement(
-      engagementId,
-      profileId,
-    )
-
-    return {
-      profileId,
-      role: user.role,
-    }
+    await requireApprovedTrainerForEngagement(engagementId, profileId);
+    return { profileId, role: user.role, lifecycle };
   }
 
-  if (
-    user.role ===
-    "client"
-  ) {
-    if (
-      profileId &&
-      engagement.client_profile_id ===
-        profileId
-    ) {
-      return {
-        profileId,
-        role: user.role,
-      }
+  if (user.role === "client") {
+    if (!profileId || engagement.client_profile_id !== profileId) {
+      throw new Error("Forbidden");
     }
-
-    throw new Error(
-      "Forbidden",
-    )
+    if (engagement.payment_status !== "paid") {
+      throw new Error("Training access is available after verified payment.");
+    }
+    if (engagement.client_locked) {
+      throw new Error(
+        `Training access opens on ${engagement.preferred_start_date}.`,
+      );
+    }
+    return { profileId, role: user.role, lifecycle };
   }
 
-  throw new Error(
-    "Forbidden",
-  )
+  throw new Error("Forbidden");
 }
 
 /* =======================================================
@@ -1082,9 +929,8 @@ export async function listModules(
   engagementId: string,
   clientProfileId?: string | null,
 ) {
-  const result =
-    await query(
-      `
+  const result = await query(
+    `
         SELECT
           tm.*,
 
@@ -1125,11 +971,7 @@ export async function listModules(
                     AND mp.material_id =
                       mat.id
 
-                    ${
-                      clientProfileId
-                        ? `AND mp.client_profile_id = $2`
-                        : ""
-                    }
+                    ${clientProfileId ? `AND mp.client_profile_id = $2` : ""}
 
                     AND mp.status =
                       'completed'
@@ -1207,78 +1049,58 @@ export async function listModules(
           tm.module_order ASC,
           tm.created_at ASC
       `,
-      clientProfileId
-        ? [
-            engagementId,
-            clientProfileId,
-          ]
-        : [engagementId],
-    )
+    clientProfileId ? [engagementId, clientProfileId] : [engagementId],
+  );
 
   if (!clientProfileId) {
-    return result.rows
+    return result.rows;
   }
 
   return Promise.all(
-    result.rows.map(
-      async (module: any) => {
-        const calculated =
-          await calculateModuleProgress(
-            engagementId,
-            module.id,
-            clientProfileId,
-          )
+    result.rows.map(async (module: any) => {
+      const calculated = await calculateModuleProgress(
+        engagementId,
+        module.id,
+        clientProfileId,
+      );
 
-        return {
-          ...module,
+      return {
+        ...module,
 
-          completion_percentage:
-            calculated.completion_percentage,
+        completion_percentage: calculated.completion_percentage,
 
-          status:
-            calculated.status,
+        status: calculated.status,
 
-          material_count:
-            calculated.material_count,
+        material_count: calculated.material_count,
 
-          completed_material_count:
-            calculated.completed_material_count,
+        completed_material_count: calculated.completed_material_count,
 
-          session_count:
-            calculated.session_count,
+        session_count: calculated.session_count,
 
-          completed_session_count:
-            calculated.completed_session_count,
-        }
-      },
-    ),
-  )
+        completed_session_count: calculated.completed_session_count,
+      };
+    }),
+  );
 }
 
 export async function createModule(
   engagementId: string,
   payload: {
-    title: string
-    description?: string
-    objectives?: string
-    module_order?: number
+    title: string;
+    description?: string;
+    objectives?: string;
+    module_order?: number;
   },
   actorProfileId: string | null,
 ) {
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
   if (!payload.title?.trim()) {
-    throw new Error(
-      "Module title is required",
-    )
+    throw new Error("Module title is required");
   }
 
-  const result =
-    await query(
-      `
+  const result = await query(
+    `
         INSERT INTO training_modules (
           training_engagement_id,
           title,
@@ -1307,18 +1129,15 @@ export async function createModule(
 
         RETURNING *
       `,
-      [
-        engagementId,
-        payload.title.trim(),
-        payload.description ||
-          null,
-        payload.objectives ||
-          null,
-        payload.module_order ||
-          0,
-        actorProfileId,
-      ],
-    )
+    [
+      engagementId,
+      payload.title.trim(),
+      payload.description || null,
+      payload.objectives || null,
+      payload.module_order || 0,
+      actorProfileId,
+    ],
+  );
 
   await createTrainingUpdate(
     engagementId,
@@ -1326,152 +1145,108 @@ export async function createModule(
     "module_created",
     `Module Created: ${payload.title}`,
     `Module '${payload.title}' was created by a trainer or training administrator.`,
-  )
+  );
 
-  return result.rows[0]
+  return result.rows[0];
 }
 
 export async function updateModule(
   moduleId: string,
   updates: {
-    title?: string
-    description?: string | null
-    objectives?: string | null
-    module_order?: number
+    title?: string;
+    description?: string | null;
+    objectives?: string | null;
+    module_order?: number;
   },
   actorProfileId: string | null,
 ) {
-  const moduleRow =
-    await query<{
-      training_engagement_id: string
-    }>(
-      `
+  const moduleRow = await query<{
+    training_engagement_id: string;
+  }>(
+    `
         SELECT
           training_engagement_id
         FROM training_modules
         WHERE id = $1
         LIMIT 1
       `,
-      [moduleId],
-    )
+    [moduleId],
+  );
 
   if (!moduleRow.rows[0]) {
-    throw new Error(
-      "Module not found",
-    )
+    throw new Error("Module not found");
   }
 
-  const engagementId =
-    moduleRow.rows[0]
-      .training_engagement_id
+  const engagementId = moduleRow.rows[0].training_engagement_id;
 
   /*
    * Only an approved training operator for this
    * engagement may update the module.
    */
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
-  const fields: string[] = []
-  const values: unknown[] = []
+  const fields: string[] = [];
+  const values: unknown[] = [];
 
-  let ix = 0
+  let ix = 0;
 
   /*
    * Title
    */
   if (updates.title !== undefined) {
     const title =
-      typeof updates.title === "string"
-        ? updates.title.trim()
-        : updates.title
+      typeof updates.title === "string" ? updates.title.trim() : updates.title;
 
-    if (
-      typeof title === "string" &&
-      title.length === 0
-    ) {
-      throw new Error(
-        "Module title cannot be empty",
-      )
+    if (typeof title === "string" && title.length === 0) {
+      throw new Error("Module title cannot be empty");
     }
 
-    fields.push(
-      `"title" = $${ix + 1}`,
-    )
+    fields.push(`"title" = $${ix + 1}`);
 
-    values.push(title)
+    values.push(title);
 
-    ix++
+    ix++;
   }
 
   /*
    * Description
    */
-  if (
-    updates.description !== undefined
-  ) {
-    fields.push(
-      `"description" = $${ix + 1}`,
-    )
+  if (updates.description !== undefined) {
+    fields.push(`"description" = $${ix + 1}`);
 
-    values.push(
-      updates.description,
-    )
+    values.push(updates.description);
 
-    ix++
+    ix++;
   }
 
   /*
    * Objectives
    */
-  if (
-    updates.objectives !== undefined
-  ) {
-    fields.push(
-      `"objectives" = $${ix + 1}`,
-    )
+  if (updates.objectives !== undefined) {
+    fields.push(`"objectives" = $${ix + 1}`);
 
-    values.push(
-      updates.objectives,
-    )
+    values.push(updates.objectives);
 
-    ix++
+    ix++;
   }
 
   /*
    * Module order
    */
-  if (
-    updates.module_order !== undefined
-  ) {
-    if (
-      !Number.isInteger(
-        updates.module_order,
-      ) ||
-      updates.module_order < 1
-    ) {
-      throw new Error(
-        "module_order must be a positive integer",
-      )
+  if (updates.module_order !== undefined) {
+    if (!Number.isInteger(updates.module_order) || updates.module_order < 1) {
+      throw new Error("module_order must be a positive integer");
     }
 
-    fields.push(
-      `"module_order" = $${ix + 1}`,
-    )
+    fields.push(`"module_order" = $${ix + 1}`);
 
-    values.push(
-      updates.module_order,
-    )
+    values.push(updates.module_order);
 
-    ix++
+    ix++;
   }
 
   if (fields.length === 0) {
-    throw new Error(
-      "No updates provided",
-    )
+    throw new Error("No updates provided");
   }
 
   /*
@@ -1483,10 +1258,9 @@ export async function updateModule(
    *   description   -> $2
    *   moduleId      -> $3
    */
-  values.push(moduleId)
+  values.push(moduleId);
 
-  const moduleIdPlaceholder =
-    `$${ix + 1}`
+  const moduleIdPlaceholder = `$${ix + 1}`;
 
   const sql = `
     UPDATE training_modules
@@ -1498,18 +1272,12 @@ export async function updateModule(
     WHERE id = ${moduleIdPlaceholder}
 
     RETURNING *
-  `
+  `;
 
-  const res =
-    await query<any>(
-      sql,
-      values,
-    )
+  const res = await query<any>(sql, values);
 
   if (!res.rows[0]) {
-    throw new Error(
-      "Module not found",
-    )
+    throw new Error("Module not found");
   }
 
   await createTrainingUpdate(
@@ -1518,22 +1286,20 @@ export async function updateModule(
     "module_updated",
     `Module Updated: ${res.rows[0].title}`,
     `Module '${res.rows[0].title}' was updated.`,
-  )
+  );
 
-  return res.rows[0]
+  return res.rows[0];
 }
 
 export async function deleteModule(
   moduleId: string,
   actorProfileId: string | null,
 ) {
-  const mod =
-    await query<{
-      training_engagement_id:
-        string
-      title: string
-    }>(
-      `
+  const mod = await query<{
+    training_engagement_id: string;
+    title: string;
+  }>(
+    `
         SELECT
           training_engagement_id,
           title
@@ -1543,23 +1309,16 @@ export async function deleteModule(
         WHERE id = $1
         LIMIT 1
       `,
-      [moduleId],
-    )
+    [moduleId],
+  );
 
   if (!mod.rows[0]) {
-    throw new Error(
-      "Module not found",
-    )
+    throw new Error("Module not found");
   }
 
-  const engagementId =
-    mod.rows[0]
-      .training_engagement_id
+  const engagementId = mod.rows[0].training_engagement_id;
 
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
   await query(
     `
@@ -1567,7 +1326,7 @@ export async function deleteModule(
       WHERE id = $1
     `,
     [moduleId],
-  )
+  );
 
   await createTrainingUpdate(
     engagementId,
@@ -1575,24 +1334,17 @@ export async function deleteModule(
     "module_deleted",
     `Module Deleted: ${mod.rows[0].title}`,
     "Module deleted by trainer or training administrator.",
-  )
+  );
 
-  const actorRole =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const actorRole = await getUserRoleByProfileId(actorProfileId);
 
   if (actorRole) {
-    await recomputeEngagementProgress(
-      engagementId,
-      actorProfileId,
-      actorRole,
-    )
+    await recomputeEngagementProgress(engagementId, actorProfileId, actorRole);
   }
 
   return {
     success: true,
-  }
+  };
 }
 
 /* =======================================================
@@ -1603,9 +1355,8 @@ async function getTrainingSessionCalendarSynced(
   sessionId: string,
 ): Promise<boolean> {
   try {
-    const result =
-      await query<{ id: string }>(
-        `
+    const result = await query<{ id: string }>(
+      `
           SELECT id
 
           FROM training_session_calendar_events
@@ -1614,46 +1365,33 @@ async function getTrainingSessionCalendarSynced(
 
           LIMIT 1
         `,
-        [sessionId],
-      )
+      [sessionId],
+    );
 
-    return Boolean(
-      result.rows[0],
-    )
+    return Boolean(result.rows[0]);
   } catch (error) {
-    console.error(
-      "TRAINING SESSION CALENDAR STATE ERROR:",
-      error,
-    )
+    console.error("TRAINING SESSION CALENDAR STATE ERROR:", error);
 
-    return false
+    return false;
   }
 }
 
-async function attachCalendarSyncState<
-  T extends { id: string },
->(session: T) {
+async function attachCalendarSyncState<T extends { id: string }>(session: T) {
   return {
     ...session,
 
-    calendar_synced:
-      await getTrainingSessionCalendarSynced(
-        session.id,
-      ),
-  }
+    calendar_synced: await getTrainingSessionCalendarSynced(session.id),
+  };
 }
 
-export async function listSessions(
-  engagementId: string,
-) {
+export async function listSessions(engagementId: string) {
   type TrainingSessionQueryRow = {
-    id: string
-    [key: string]: unknown
-  }
+    id: string;
+    [key: string]: unknown;
+  };
 
-  const res =
-    await query<TrainingSessionQueryRow>(
-      `
+  const res = await query<TrainingSessionQueryRow>(
+    `
         SELECT
           ts.*,
 
@@ -1693,92 +1431,59 @@ export async function listSessions(
         ORDER BY
           ts.scheduled_at NULLS LAST
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
   return Promise.all(
-    res.rows.map(
-      (session) =>
-        attachCalendarSyncState(
-          session,
-        ),
-    ),
-  )
+    res.rows.map((session) => attachCalendarSyncState(session)),
+  );
 }
 
 export async function createSession(
   engagementId: string,
   payload: any,
-  actorOrProfile:
-    | AppUser
-    | string
-    | null,
+  actorOrProfile: AppUser | string | null,
   actorProfileId?: string | null,
 ) {
-  let actor: AppUser | null =
-    null
+  let actor: AppUser | null = null;
 
-  let profileId:
-    | string
-    | null = null
+  let profileId: string | null = null;
 
-  if (
-    actorOrProfile &&
-    typeof actorOrProfile ===
-      "object"
-  ) {
-    actor = actorOrProfile
+  if (actorOrProfile && typeof actorOrProfile === "object") {
+    actor = actorOrProfile;
 
-    profileId =
-      actorProfileId || null
+    profileId = actorProfileId || null;
   } else {
-    profileId =
-      typeof actorOrProfile ===
-      "string"
-        ? actorOrProfile
-        : null
+    profileId = typeof actorOrProfile === "string" ? actorOrProfile : null;
 
-    const role =
-      await getUserRoleByProfileId(
-        profileId,
-      )
+    const role = await getUserRoleByProfileId(profileId);
 
     if (role) {
       actor = {
         id: "",
         role,
-      }
+      };
     }
   }
 
   if (!actor) {
-    throw new Error(
-      "Unauthorized",
-    )
+    throw new Error("Unauthorized");
   }
 
-  await requireTrainingOperatorForEngagement(
-    engagementId,
-    actor,
-    profileId,
-  )
+  await requireTrainingOperatorForEngagement(engagementId, actor, profileId);
 
   /*
    * Every training session must belong to
    * a training module.
    */
-  const moduleId =
-    payload.module_id
+  const moduleId = payload.module_id;
 
   if (!moduleId) {
-    throw new Error(
-      "A training session must be assigned to a training module",
-    )
+    throw new Error("A training session must be assigned to a training module");
   }
 
-  const moduleCheck =
-    await query<{ id: string }>(
-      `
+  const moduleCheck = await query<{ id: string }>(
+    `
         SELECT id
 
         FROM training_modules
@@ -1789,26 +1494,20 @@ export async function createSession(
 
         LIMIT 1
       `,
-      [
-        moduleId,
-        engagementId,
-      ],
-    )
+    [moduleId, engagementId],
+  );
 
   if (!moduleCheck.rows[0]) {
     throw new Error(
       "Selected module does not belong to this training engagement",
-    )
+    );
   }
 
-  let sessionTrainerId =
-    payload.trainer_id ||
-    null
+  let sessionTrainerId = payload.trainer_id || null;
 
   if (sessionTrainerId) {
-    const trainerCheck =
-      await query<{ id: string }>(
-        `
+    const trainerCheck = await query<{ id: string }>(
+      `
           SELECT id
 
           FROM training_engagement_trainers
@@ -1821,33 +1520,22 @@ export async function createSession(
 
           LIMIT 1
         `,
-        [
-          engagementId,
-          sessionTrainerId,
-          TRAINER_APPROVAL_APPROVED,
-        ],
-      )
+      [engagementId, sessionTrainerId, TRAINER_APPROVAL_APPROVED],
+    );
 
     if (!trainerCheck.rows[0]) {
       throw new Error(
         "Selected session trainer is not an approved trainer for this engagement",
-      )
+      );
     }
   } else {
-    const trainers =
-      await listApprovedTrainers(
-        engagementId,
-      )
+    const trainers = await listApprovedTrainers(engagementId);
 
-    sessionTrainerId =
-      trainers[0]
-        ?.trainer_profile_id ||
-      null
+    sessionTrainerId = trainers[0]?.trainer_profile_id || null;
   }
 
-  const res =
-    await query(
-      `
+  const res = await query(
+    `
         INSERT INTO training_sessions (
           training_engagement_id,
           module_id,
@@ -1882,31 +1570,22 @@ export async function createSession(
 
         RETURNING *
       `,
-      [
-        engagementId,
-        moduleId,
-        sessionTrainerId,
-        payload.scheduled_at ||
-          null,
-        payload.duration_minutes ||
-          null,
-        payload.session_type ||
-          null,
-        payload.meeting_url ||
-          null,
-        payload.location ||
-          null,
-        payload.status ||
-          "scheduled",
-        payload.attendance_status ||
-          "pending",
-        payload.session_notes ||
-          null,
-      ],
-    )
+    [
+      engagementId,
+      moduleId,
+      sessionTrainerId,
+      payload.scheduled_at || null,
+      payload.duration_minutes || null,
+      payload.session_type || null,
+      payload.meeting_url || null,
+      payload.location || null,
+      payload.status || "scheduled",
+      payload.attendance_status || "pending",
+      payload.session_notes || null,
+    ],
+  );
 
-  const session: any =
-    res.rows[0]
+  const session: any = res.rows[0];
 
   await createTrainingUpdate(
     engagementId,
@@ -1914,35 +1593,21 @@ export async function createSession(
     "session_scheduled",
     "Session Scheduled",
     "A training session has been scheduled and connected to a training module.",
-  )
+  );
 
   try {
-    await syncTrainingSessionToGoogle(
-      session.id,
-    )
+    await syncTrainingSessionToGoogle(session.id);
   } catch (calendarError) {
-    console.error(
-      "GOOGLE CALENDAR CREATE SYNC ERROR:",
-      calendarError,
-    )
+    console.error("GOOGLE CALENDAR CREATE SYNC ERROR:", calendarError);
   }
 
-  const role =
-    await getUserRoleByProfileId(
-      profileId,
-    )
+  const role = await getUserRoleByProfileId(profileId);
 
   if (role) {
-    await recomputeEngagementProgress(
-      engagementId,
-      profileId,
-      role,
-    )
+    await recomputeEngagementProgress(engagementId, profileId, role);
   }
 
-  return attachCalendarSyncState(
-    session,
-  )
+  return attachCalendarSyncState(session);
 }
 
 export async function updateSession(
@@ -1950,14 +1615,11 @@ export async function updateSession(
   updates: any,
   actorProfileId: string | null,
 ) {
-  const sessionRow =
-    await query<{
-      training_engagement_id:
-        string
-      module_id:
-        string | null
-    }>(
-      `
+  const sessionRow = await query<{
+    training_engagement_id: string;
+    module_id: string | null;
+  }>(
+    `
         SELECT
           training_engagement_id,
           module_id
@@ -1967,42 +1629,29 @@ export async function updateSession(
         WHERE id = $1
         LIMIT 1
       `,
-      [sessionId],
-    )
+    [sessionId],
+  );
 
   if (!sessionRow.rows[0]) {
-    throw new Error(
-      "Session not found",
-    )
+    throw new Error("Session not found");
   }
 
-  const engagementId =
-    sessionRow.rows[0]
-      .training_engagement_id
+  const engagementId = sessionRow.rows[0].training_engagement_id;
 
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
   /*
    * A session must always belong to a module.
    */
-  if (
-    Object.prototype.hasOwnProperty.call(
-      updates,
-      "module_id",
-    )
-  ) {
+  if (Object.prototype.hasOwnProperty.call(updates, "module_id")) {
     if (!updates.module_id) {
       throw new Error(
         "A training session must be assigned to a training module",
-      )
+      );
     }
 
-    const moduleCheck =
-      await query<{ id: string }>(
-        `
+    const moduleCheck = await query<{ id: string }>(
+      `
           SELECT id
 
           FROM training_modules
@@ -2013,31 +1662,22 @@ export async function updateSession(
 
           LIMIT 1
         `,
-        [
-          updates.module_id,
-          engagementId,
-        ],
-      )
+      [updates.module_id, engagementId],
+    );
 
     if (!moduleCheck.rows[0]) {
       throw new Error(
         "Selected module does not belong to this training engagement",
-      )
+      );
     }
   }
 
-  if (
-    Object.prototype.hasOwnProperty.call(
-      updates,
-      "trainer_id",
-    )
-  ) {
+  if (Object.prototype.hasOwnProperty.call(updates, "trainer_id")) {
     if (updates.trainer_id) {
-      const trainerCheck =
-        await query<{
-          id: string
-        }>(
-          `
+      const trainerCheck = await query<{
+        id: string;
+      }>(
+        `
             SELECT id
 
             FROM training_engagement_trainers
@@ -2050,67 +1690,48 @@ export async function updateSession(
 
             LIMIT 1
           `,
-          [
-            engagementId,
-            updates.trainer_id,
-            TRAINER_APPROVAL_APPROVED,
-          ],
-        )
+        [engagementId, updates.trainer_id, TRAINER_APPROVAL_APPROVED],
+      );
 
-      if (
-        !trainerCheck.rows[0]
-      ) {
+      if (!trainerCheck.rows[0]) {
         throw new Error(
           "Selected session trainer is not an approved trainer for this engagement",
-        )
+        );
       }
     }
   }
 
-  const fields: string[] = []
-  const values: any[] = []
+  const fields: string[] = [];
+  const values: any[] = [];
 
-  let ix = 1
+  let ix = 1;
 
-  for (
-    const key of [
-      "module_id",
-      "trainer_id",
-      "scheduled_at",
-      "duration_minutes",
-      "session_type",
-      "meeting_url",
-      "location",
-      "status",
-      "attendance_status",
-      "session_notes",
-    ]
-  ) {
-    if (
-      Object.prototype.hasOwnProperty.call(
-        updates,
-        key,
-      )
-    ) {
-      fields.push(
-        `${key} = $${ix}`,
-      )
+  for (const key of [
+    "module_id",
+    "trainer_id",
+    "scheduled_at",
+    "duration_minutes",
+    "session_type",
+    "meeting_url",
+    "location",
+    "status",
+    "attendance_status",
+    "session_notes",
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(updates, key)) {
+      fields.push(`${key} = $${ix}`);
 
-      values.push(
-        updates[key],
-      )
+      values.push(updates[key]);
 
-      ix++
+      ix++;
     }
   }
 
   if (fields.length === 0) {
-    throw new Error(
-      "No updates provided",
-    )
+    throw new Error("No updates provided");
   }
 
-  values.push(sessionId)
+  values.push(sessionId);
 
   const sql = `
     UPDATE training_sessions
@@ -2124,22 +1745,15 @@ export async function updateSession(
     WHERE id = $${ix}
 
     RETURNING *
-  `
+  `;
 
-  const res =
-    await query<any>(
-      sql,
-      values,
-    )
+  const res = await query<any>(sql, values);
 
   if (!res.rows[0]) {
-    throw new Error(
-      "Session not found",
-    )
+    throw new Error("Session not found");
   }
 
-  const session =
-    res.rows[0]
+  const session = res.rows[0];
 
   await createTrainingUpdate(
     engagementId,
@@ -2147,75 +1761,52 @@ export async function updateSession(
     "session_updated",
     "Session Updated",
     "Training session updated by trainer or training administrator.",
-  )
+  );
 
   try {
-    await syncTrainingSessionToGoogle(
-      session.id,
-    )
+    await syncTrainingSessionToGoogle(session.id);
   } catch (calendarError) {
-    console.error(
-      "GOOGLE CALENDAR UPDATE SYNC ERROR:",
-      calendarError,
-    )
+    console.error("GOOGLE CALENDAR UPDATE SYNC ERROR:", calendarError);
   }
 
-  const role =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const role = await getUserRoleByProfileId(actorProfileId);
 
   if (role) {
-    await recomputeEngagementProgress(
-      engagementId,
-      actorProfileId,
-      role,
-    )
+    await recomputeEngagementProgress(engagementId, actorProfileId, role);
   }
 
-  return attachCalendarSyncState(
-    session,
-  )
+  return attachCalendarSyncState(session);
 }
 
 export async function deleteSession(
   sessionId: string,
   actorProfileId: string | null,
 ) {
-  const sres =
-    await query(
-      `
+  const sres = await query(
+    `
         SELECT *
         FROM training_sessions
         WHERE id = $1
         LIMIT 1
       `,
-      [sessionId],
-    )
+    [sessionId],
+  );
 
-  const session: any =
-    sres.rows[0]
+  const session: any = sres.rows[0];
 
   if (!session) {
-    throw new Error(
-      "Session not found",
-    )
+    throw new Error("Session not found");
   }
 
   await requireTrainingOperatorByProfile(
     session.training_engagement_id,
     actorProfileId,
-  )
+  );
 
   try {
-    await cancelTrainingSessionCalendarEvent(
-      session.id,
-    )
+    await cancelTrainingSessionCalendarEvent(session.id);
   } catch (calendarError) {
-    console.error(
-      "GOOGLE CALENDAR CANCEL ERROR:",
-      calendarError,
-    )
+    console.error("GOOGLE CALENDAR CANCEL ERROR:", calendarError);
   }
 
   await query(
@@ -2224,7 +1815,7 @@ export async function deleteSession(
       WHERE id = $1
     `,
     [sessionId],
-  )
+  );
 
   await createTrainingUpdate(
     session.training_engagement_id,
@@ -2232,24 +1823,21 @@ export async function deleteSession(
     "session_deleted",
     "Session Cancelled",
     "Session deleted by trainer or training administrator.",
-  )
+  );
 
-  const role =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const role = await getUserRoleByProfileId(actorProfileId);
 
   if (role) {
     await recomputeEngagementProgress(
       session.training_engagement_id,
       actorProfileId,
       role,
-    )
+    );
   }
 
   return {
     success: true,
-  }
+  };
 }
 
 /* =======================================================
@@ -2257,27 +1845,24 @@ export async function deleteSession(
    ======================================================= */
 
 export type TrainingMaterial = {
-  id: string
-  training_engagement_id: string
-  module_id: string | null
-  title: string
-  description: string | null
-  material_type: string | null
-  file_url: string | null
-  external_url: string | null
-  visibility: string | null
-  uploaded_by: string | null
-  created_at: string
-  updated_at: string
-  [key: string]: unknown
-}
+  id: string;
+  training_engagement_id: string;
+  module_id: string | null;
+  title: string;
+  description: string | null;
+  material_type: string | null;
+  file_url: string | null;
+  external_url: string | null;
+  visibility: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+};
 
-export async function listMaterials(
-  engagementId: string,
-) {
-  const res =
-    await query<TrainingMaterial>(
-      `
+export async function listMaterials(engagementId: string) {
+  const res = await query<TrainingMaterial>(
+    `
         SELECT
           tm.*,
           m.title AS module_title,
@@ -2299,40 +1884,34 @@ export async function listMaterials(
 
           tm.created_at ASC
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
-  return res.rows
+  return res.rows;
 }
 
 export async function createMaterial(
   engagementId: string,
   payload: {
-    module_id?: string | null
-    title: string
-    description?: string | null
-    material_type?: string | null
-    file_url?: string | null
-    external_url?: string | null
-    visibility?: string | null
+    module_id?: string | null;
+    title: string;
+    description?: string | null;
+    material_type?: string | null;
+    file_url?: string | null;
+    external_url?: string | null;
+    visibility?: string | null;
   },
   actorProfileId: string | null,
 ) {
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
   if (!payload.title?.trim()) {
-    throw new Error(
-      "Material title is required",
-    )
+    throw new Error("Material title is required");
   }
 
   if (payload.module_id) {
-    const moduleCheck =
-      await query<{ id: string }>(
-        `
+    const moduleCheck = await query<{ id: string }>(
+      `
           SELECT id
 
           FROM training_modules
@@ -2343,28 +1922,22 @@ export async function createMaterial(
 
           LIMIT 1
         `,
-        [
-          payload.module_id,
-          engagementId,
-        ],
-      )
+      [payload.module_id, engagementId],
+    );
 
     if (!moduleCheck.rows[0]) {
       throw new Error(
         "Selected module does not belong to this training engagement",
-      )
+      );
     }
   }
 
   if (!payload.module_id) {
-    throw new Error(
-      "Training materials must be assigned to a training module",
-    )
+    throw new Error("Training materials must be assigned to a training module");
   }
 
-  const res =
-    await query<TrainingMaterial>(
-      `
+  const res = await query<TrainingMaterial>(
+    `
         INSERT INTO training_materials (
           training_engagement_id,
           module_id,
@@ -2395,23 +1968,18 @@ export async function createMaterial(
 
         RETURNING *
       `,
-      [
-        engagementId,
-        payload.module_id,
-        payload.title.trim(),
-        payload.description ||
-          null,
-        payload.material_type ||
-          "other",
-        payload.file_url ||
-          null,
-        payload.external_url ||
-          null,
-        payload.visibility ||
-          "private",
-        actorProfileId,
-      ],
-    )
+    [
+      engagementId,
+      payload.module_id,
+      payload.title.trim(),
+      payload.description || null,
+      payload.material_type || "other",
+      payload.file_url || null,
+      payload.external_url || null,
+      payload.visibility || "private",
+      actorProfileId,
+    ],
+  );
 
   await createTrainingUpdate(
     engagementId,
@@ -2419,22 +1987,15 @@ export async function createMaterial(
     "material_uploaded",
     `Material Uploaded: ${payload.title}`,
     `Material '${payload.title}' was added to a training module.`,
-  )
+  );
 
-  const role =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const role = await getUserRoleByProfileId(actorProfileId);
 
   if (role) {
-    await recomputeEngagementProgress(
-      engagementId,
-      actorProfileId,
-      role,
-    )
+    await recomputeEngagementProgress(engagementId, actorProfileId, role);
   }
 
-  return res.rows[0]
+  return res.rows[0];
 }
 
 export async function updateMaterial(
@@ -2442,12 +2003,10 @@ export async function updateMaterial(
   updates: any,
   actorProfileId: string | null,
 ) {
-  const materialRow =
-    await query<{
-      training_engagement_id:
-        string
-    }>(
-      `
+  const materialRow = await query<{
+    training_engagement_id: string;
+  }>(
+    `
         SELECT
           training_engagement_id
 
@@ -2457,39 +2016,26 @@ export async function updateMaterial(
 
         LIMIT 1
       `,
-      [materialId],
-    )
+    [materialId],
+  );
 
   if (!materialRow.rows[0]) {
-    throw new Error(
-      "Material not found",
-    )
+    throw new Error("Material not found");
   }
 
-  const engagementId =
-    materialRow.rows[0]
-      .training_engagement_id
+  const engagementId = materialRow.rows[0].training_engagement_id;
 
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
-  if (
-    Object.prototype.hasOwnProperty.call(
-      updates,
-      "module_id",
-    )
-  ) {
+  if (Object.prototype.hasOwnProperty.call(updates, "module_id")) {
     if (!updates.module_id) {
       throw new Error(
         "Training materials must be assigned to a training module",
-      )
+      );
     }
 
-    const moduleCheck =
-      await query<{ id: string }>(
-        `
+    const moduleCheck = await query<{ id: string }>(
+      `
           SELECT id
 
           FROM training_modules
@@ -2500,64 +2046,48 @@ export async function updateMaterial(
 
           LIMIT 1
         `,
-        [
-          updates.module_id,
-          engagementId,
-        ],
-      )
+      [updates.module_id, engagementId],
+    );
 
     if (!moduleCheck.rows[0]) {
       throw new Error(
         "Selected module does not belong to this training engagement",
-      )
+      );
     }
   }
 
-  const fields: string[] = []
-  const values: any[] = []
+  const fields: string[] = [];
+  const values: any[] = [];
 
-  let ix = 1
+  let ix = 1;
 
-  for (
-    const key of [
-      "module_id",
-      "title",
-      "description",
-      "material_type",
-      "file_url",
-      "external_url",
-      "visibility",
-    ]
-  ) {
-    if (
-      Object.prototype.hasOwnProperty.call(
-        updates,
-        key,
-      )
-    ) {
-      fields.push(
-        `${key} = $${ix}`,
-      )
+  for (const key of [
+    "module_id",
+    "title",
+    "description",
+    "material_type",
+    "file_url",
+    "external_url",
+    "visibility",
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(updates, key)) {
+      fields.push(`${key} = $${ix}`);
 
       values.push(
-        key === "title" &&
-        typeof updates[key] ===
-          "string"
+        key === "title" && typeof updates[key] === "string"
           ? updates[key].trim()
           : updates[key],
-      )
+      );
 
-      ix++
+      ix++;
     }
   }
 
   if (fields.length === 0) {
-    throw new Error(
-      "No updates provided",
-    )
+    throw new Error("No updates provided");
   }
 
-  values.push(materialId)
+  values.push(materialId);
 
   const sql = `
     UPDATE training_materials
@@ -2569,57 +2099,44 @@ export async function updateMaterial(
     WHERE id = $${ix}
 
     RETURNING *
-  `
+  `;
 
-  const res =
-    await query<TrainingMaterial>(
-      sql,
-      values,
-    )
+  const res = await query<TrainingMaterial>(sql, values);
 
   if (!res.rows[0]) {
-    throw new Error(
-      "Material not found",
-    )
+    throw new Error("Material not found");
   }
 
   await createTrainingUpdate(
-    res.rows[0]
-      .training_engagement_id,
+    res.rows[0].training_engagement_id,
     actorProfileId,
     "material_updated",
     `Material Updated: ${res.rows[0].title}`,
     "Training material updated by trainer or training administrator.",
-  )
+  );
 
-  const role =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const role = await getUserRoleByProfileId(actorProfileId);
 
   if (role) {
     await recomputeEngagementProgress(
-      res.rows[0]
-        .training_engagement_id,
+      res.rows[0].training_engagement_id,
       actorProfileId,
       role,
-    )
+    );
   }
 
-  return res.rows[0]
+  return res.rows[0];
 }
 
 export async function deleteMaterial(
   materialId: string,
   actorProfileId: string | null,
 ) {
-  const m =
-    await query<{
-      training_engagement_id:
-        string
-      title: string
-    }>(
-      `
+  const m = await query<{
+    training_engagement_id: string;
+    title: string;
+  }>(
+    `
         SELECT
           training_engagement_id,
           title
@@ -2630,23 +2147,16 @@ export async function deleteMaterial(
 
         LIMIT 1
       `,
-      [materialId],
-    )
+    [materialId],
+  );
 
   if (!m.rows[0]) {
-    throw new Error(
-      "Material not found",
-    )
+    throw new Error("Material not found");
   }
 
-  const engagementId =
-    m.rows[0]
-      .training_engagement_id
+  const engagementId = m.rows[0].training_engagement_id;
 
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
   await query(
     `
@@ -2654,7 +2164,7 @@ export async function deleteMaterial(
       WHERE id = $1
     `,
     [materialId],
-  )
+  );
 
   await createTrainingUpdate(
     engagementId,
@@ -2662,24 +2172,17 @@ export async function deleteMaterial(
     "material_deleted",
     `Material Deleted: ${m.rows[0].title}`,
     "Training material deleted by trainer or training administrator.",
-  )
+  );
 
-  const role =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const role = await getUserRoleByProfileId(actorProfileId);
 
   if (role) {
-    await recomputeEngagementProgress(
-      engagementId,
-      actorProfileId,
-      role,
-    )
+    await recomputeEngagementProgress(engagementId, actorProfileId, role);
   }
 
   return {
     success: true,
-  }
+  };
 }
 
 /* =======================================================
@@ -2687,37 +2190,31 @@ export async function deleteMaterial(
    ======================================================= */
 
 export type TrainingMaterialProgress = {
-  id: string
-  training_engagement_id: string
-  material_id: string
-  client_profile_id: string
-  status: string
-  progress_percentage: number
-  watched_seconds: number | null
-  duration_seconds: number | null
-  pages_viewed: number | null
-  total_pages: number | null
-  started_at: string | null
-  completed_at: string | null
-  last_accessed_at: string | null
-  created_at: string
-  updated_at: string
-  [key: string]: unknown
-}
+  id: string;
+  training_engagement_id: string;
+  material_id: string;
+  client_profile_id: string;
+  status: string;
+  progress_percentage: number;
+  watched_seconds: number | null;
+  duration_seconds: number | null;
+  pages_viewed: number | null;
+  total_pages: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  last_accessed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+};
 
-function normalizeMaterialStatus(
-  value: unknown,
-): string {
-  const status =
-    String(value || "")
-      .trim()
-      .toLowerCase()
+function normalizeMaterialStatus(value: unknown): string {
+  const status = String(value || "")
+    .trim()
+    .toLowerCase();
 
-  if (
-    status === "completed" ||
-    status === "complete"
-  ) {
-    return "completed"
+  if (status === "completed" || status === "complete") {
+    return "completed";
   }
 
   if (
@@ -2725,10 +2222,10 @@ function normalizeMaterialStatus(
     status === "in-progress" ||
     status === "started"
   ) {
-    return "in_progress"
+    return "in_progress";
   }
 
-  return "not_started"
+  return "not_started";
 }
 
 export async function listMaterialProgress(
@@ -2736,9 +2233,8 @@ export async function listMaterialProgress(
   clientProfileId?: string | null,
 ) {
   if (clientProfileId) {
-    const result =
-      await query<TrainingMaterialProgress>(
-        `
+    const result = await query<TrainingMaterialProgress>(
+      `
           SELECT
             tmp.*,
 
@@ -2772,18 +2268,14 @@ export async function listMaterialProgress(
 
             tm.created_at ASC
         `,
-        [
-          engagementId,
-          clientProfileId,
-        ],
-      )
+      [engagementId, clientProfileId],
+    );
 
-    return result.rows
+    return result.rows;
   }
 
-  const result =
-    await query<TrainingMaterialProgress>(
-      `
+  const result = await query<TrainingMaterialProgress>(
+    `
         SELECT
           tmp.*,
 
@@ -2816,10 +2308,10 @@ export async function listMaterialProgress(
 
           tm.created_at ASC
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
-  return result.rows
+  return result.rows;
 }
 
 export async function getMaterialProgress(
@@ -2827,17 +2319,14 @@ export async function getMaterialProgress(
   materialId: string,
   clientProfileId: string,
 ) {
-  const material =
-    await query<{
-      id: string
-      training_engagement_id:
-        string
-      module_id: string | null
-      title: string
-      material_type:
-        string | null
-    }>(
-      `
+  const material = await query<{
+    id: string;
+    training_engagement_id: string;
+    module_id: string | null;
+    title: string;
+    material_type: string | null;
+  }>(
+    `
         SELECT
           id,
           training_engagement_id,
@@ -2853,21 +2342,15 @@ export async function getMaterialProgress(
 
         LIMIT 1
       `,
-      [
-        materialId,
-        engagementId,
-      ],
-    )
+    [materialId, engagementId],
+  );
 
   if (!material.rows[0]) {
-    throw new Error(
-      "Material not found",
-    )
+    throw new Error("Material not found");
   }
 
-  const result =
-    await query<TrainingMaterialProgress>(
-      `
+  const result = await query<TrainingMaterialProgress>(
+    `
         SELECT *
 
         FROM training_material_progress
@@ -2879,17 +2362,10 @@ export async function getMaterialProgress(
 
         LIMIT 1
       `,
-      [
-        engagementId,
-        materialId,
-        clientProfileId,
-      ],
-    )
+    [engagementId, materialId, clientProfileId],
+  );
 
-  return (
-    result.rows[0] ||
-    null
-  )
+  return result.rows[0] || null;
 }
 
 export async function updateMaterialProgress(
@@ -2897,24 +2373,22 @@ export async function updateMaterialProgress(
   materialId: string,
   clientProfileId: string,
   updates: {
-    status?: string
-    progress_percentage?: number
-    watched_seconds?: number
-    duration_seconds?: number
-    pages_viewed?: number
-    total_pages?: number
-    completed?: boolean
+    status?: string;
+    progress_percentage?: number;
+    watched_seconds?: number;
+    duration_seconds?: number;
+    pages_viewed?: number;
+    total_pages?: number;
+    completed?: boolean;
   },
 ) {
-  const materialResult =
-    await query<{
-      id: string
-      title: string
-      material_type:
-        string | null
-      module_id: string | null
-    }>(
-      `
+  const materialResult = await query<{
+    id: string;
+    title: string;
+    material_type: string | null;
+    module_id: string | null;
+  }>(
+    `
         SELECT
           id,
           title,
@@ -2929,35 +2403,27 @@ export async function updateMaterialProgress(
 
         LIMIT 1
       `,
-      [
-        materialId,
-        engagementId,
-      ],
-    )
+    [materialId, engagementId],
+  );
 
-  const material =
-    materialResult.rows[0]
+  const material = materialResult.rows[0];
 
   if (!material) {
-    throw new Error(
-      "Material does not belong to this training engagement",
-    )
+    throw new Error("Material does not belong to this training engagement");
   }
 
   if (!material.module_id) {
     throw new Error(
       "Training material must belong to a module before progress can be calculated",
-    )
+    );
   }
 
-  const existing =
-    await query<{
-      id: string
-      status: string
-      progress_percentage:
-        number
-    }>(
-      `
+  const existing = await query<{
+    id: string;
+    status: string;
+    progress_percentage: number;
+  }>(
+    `
         SELECT
           id,
           status,
@@ -2972,217 +2438,111 @@ export async function updateMaterialProgress(
 
         LIMIT 1
       `,
-      [
-        engagementId,
-        materialId,
-        clientProfileId,
-      ],
-    )
+    [engagementId, materialId, clientProfileId],
+  );
 
-  const previousPercentage =
-    existing.rows[0]
-      ?.progress_percentage ||
-    0
+  const previousPercentage = existing.rows[0]?.progress_percentage || 0;
 
-  const previousStatus =
-    existing.rows[0]
-      ?.status ||
-    "not_started"
+  const previousStatus = existing.rows[0]?.status || "not_started";
 
-  let progress =
-    normalizePercentage(
-      updates.progress_percentage,
-    )
+  let progress = normalizePercentage(updates.progress_percentage);
 
-  let status =
-    normalizeMaterialStatus(
-      updates.status,
-    )
+  let status = normalizeMaterialStatus(updates.status);
 
-  if (
-    updates.completed === true
-  ) {
-    progress = 100
-    status = "completed"
+  if (updates.completed === true) {
+    progress = 100;
+    status = "completed";
   }
 
-  if (
-    progress >= 100
-  ) {
-    status = "completed"
-  } else if (
-    progress > 0 &&
-    status === "not_started"
-  ) {
-    status = "in_progress"
+  if (progress >= 100) {
+    status = "completed";
+  } else if (progress > 0 && status === "not_started") {
+    status = "in_progress";
   }
 
-  const completedAt =
-    status === "completed"
-      ? "NOW()"
-      : null
+  const completedAt = status === "completed" ? "NOW()" : null;
 
-  const activityDecision =
-    shouldCreateMaterialProgressUpdate(
-      Number(
-        previousPercentage,
-      ),
-      previousStatus,
-      progress,
-      status,
-    )
+  const activityDecision = shouldCreateMaterialProgressUpdate(
+    Number(previousPercentage),
+    previousStatus,
+    progress,
+    status,
+  );
 
-  let resultRow:
-    | TrainingMaterialProgress
-    | null = null
+  let resultRow: TrainingMaterialProgress | null = null;
 
   if (existing.rows[0]) {
-    const fields: string[] = []
-    const values: any[] = []
+    const fields: string[] = [];
+    const values: any[] = [];
 
-    let ix = 1
+    let ix = 1;
 
     if (
-      updates.status !==
-        undefined ||
-      updates.completed !==
-        undefined ||
-      updates.progress_percentage !==
-        undefined
+      updates.status !== undefined ||
+      updates.completed !== undefined ||
+      updates.progress_percentage !== undefined
     ) {
-      fields.push(
-        `status = $${ix}`,
-      )
+      fields.push(`status = $${ix}`);
 
-      values.push(status)
+      values.push(status);
 
-      ix++
+      ix++;
     }
 
     if (
-      updates.progress_percentage !==
-        undefined ||
+      updates.progress_percentage !== undefined ||
       updates.completed === true
     ) {
-      fields.push(
-        `progress_percentage = $${ix}`,
-      )
+      fields.push(`progress_percentage = $${ix}`);
 
-      values.push(progress)
+      values.push(progress);
 
-      ix++
+      ix++;
     }
 
-    if (
-      updates.watched_seconds !==
-        undefined
-    ) {
-      fields.push(
-        `watched_seconds = $${ix}`,
-      )
+    if (updates.watched_seconds !== undefined) {
+      fields.push(`watched_seconds = $${ix}`);
 
-      values.push(
-        Math.max(
-          0,
-          Number(
-            updates.watched_seconds,
-          ) || 0,
-        ),
-      )
+      values.push(Math.max(0, Number(updates.watched_seconds) || 0));
 
-      ix++
+      ix++;
     }
 
-    if (
-      updates.duration_seconds !==
-        undefined
-    ) {
-      fields.push(
-        `duration_seconds = $${ix}`,
-      )
+    if (updates.duration_seconds !== undefined) {
+      fields.push(`duration_seconds = $${ix}`);
 
-      values.push(
-        Math.max(
-          0,
-          Number(
-            updates.duration_seconds,
-          ) || 0,
-        ),
-      )
+      values.push(Math.max(0, Number(updates.duration_seconds) || 0));
 
-      ix++
+      ix++;
     }
 
-    if (
-      updates.pages_viewed !==
-        undefined
-    ) {
-      fields.push(
-        `pages_viewed = $${ix}`,
-      )
+    if (updates.pages_viewed !== undefined) {
+      fields.push(`pages_viewed = $${ix}`);
 
-      values.push(
-        Math.max(
-          0,
-          Math.floor(
-            Number(
-              updates.pages_viewed,
-            ) || 0,
-          ),
-        ),
-      )
+      values.push(Math.max(0, Math.floor(Number(updates.pages_viewed) || 0)));
 
-      ix++
+      ix++;
     }
 
-    if (
-      updates.total_pages !==
-        undefined
-    ) {
-      fields.push(
-        `total_pages = $${ix}`,
-      )
+    if (updates.total_pages !== undefined) {
+      fields.push(`total_pages = $${ix}`);
 
-      values.push(
-        Math.max(
-          0,
-          Math.floor(
-            Number(
-              updates.total_pages,
-            ) || 0,
-          ),
-        ),
-      )
+      values.push(Math.max(0, Math.floor(Number(updates.total_pages) || 0)));
 
-      ix++
+      ix++;
     }
 
-    fields.push(
-      `started_at = COALESCE(started_at, NOW())`,
-    )
+    fields.push(`started_at = COALESCE(started_at, NOW())`);
 
-    fields.push(
-      `completed_at = ${
-        completedAt
-          ? "NOW()"
-          : "completed_at"
-      }`,
-    )
+    fields.push(`completed_at = ${completedAt ? "NOW()" : "completed_at"}`);
 
-    fields.push(
-      `last_accessed_at = NOW()`,
-    )
+    fields.push(`last_accessed_at = NOW()`);
 
-    fields.push(
-      `updated_at = NOW()`,
-    )
+    fields.push(`updated_at = NOW()`);
 
-    values.push(
-      existing.rows[0].id,
-    )
+    values.push(existing.rows[0].id);
 
-    const idIndex =
-      values.length
+    const idIndex = values.length;
 
     const sql = `
       UPDATE training_material_progress
@@ -3193,20 +2553,14 @@ export async function updateMaterialProgress(
       WHERE id = $${idIndex}
 
       RETURNING *
-    `
+    `;
 
-    const result =
-      await query<TrainingMaterialProgress>(
-        sql,
-        values,
-      )
+    const result = await query<TrainingMaterialProgress>(sql, values);
 
-    resultRow =
-      result.rows[0]
+    resultRow = result.rows[0];
   } else {
-    const result =
-      await query<TrainingMaterialProgress>(
-        `
+    const result = await query<TrainingMaterialProgress>(
+      `
           INSERT INTO training_material_progress (
             training_engagement_id,
             material_id,
@@ -3243,103 +2597,59 @@ export async function updateMaterialProgress(
 
           RETURNING *
         `,
-        [
-          engagementId,
-          materialId,
-          clientProfileId,
-          status,
-          progress,
+      [
+        engagementId,
+        materialId,
+        clientProfileId,
+        status,
+        progress,
 
-          updates.watched_seconds !==
-          undefined
-            ? Math.max(
-                0,
-                Number(
-                  updates.watched_seconds,
-                ) || 0,
-              )
-            : null,
+        updates.watched_seconds !== undefined
+          ? Math.max(0, Number(updates.watched_seconds) || 0)
+          : null,
 
-          updates.duration_seconds !==
-          undefined
-            ? Math.max(
-                0,
-                Number(
-                  updates.duration_seconds,
-                ) || 0,
-              )
-            : null,
+        updates.duration_seconds !== undefined
+          ? Math.max(0, Number(updates.duration_seconds) || 0)
+          : null,
 
-          updates.pages_viewed !==
-          undefined
-            ? Math.max(
-                0,
-                Math.floor(
-                  Number(
-                    updates.pages_viewed,
-                  ) || 0,
-                ),
-              )
-            : null,
+        updates.pages_viewed !== undefined
+          ? Math.max(0, Math.floor(Number(updates.pages_viewed) || 0))
+          : null,
 
-          updates.total_pages !==
-          undefined
-            ? Math.max(
-                0,
-                Math.floor(
-                  Number(
-                    updates.total_pages,
-                  ) || 0,
-                ),
-              )
-            : null,
+        updates.total_pages !== undefined
+          ? Math.max(0, Math.floor(Number(updates.total_pages) || 0))
+          : null,
 
-          completedAt
-            ? new Date()
-            : null,
-        ],
-      )
+        completedAt ? new Date() : null,
+      ],
+    );
 
-    resultRow =
-      result.rows[0]
+    resultRow = result.rows[0];
   }
 
   if (!resultRow) {
-    throw new Error(
-      "Unable to save material progress",
-    )
+    throw new Error("Unable to save material progress");
   }
 
-  if (
-    activityDecision.shouldCreate
-  ) {
-    if (
-      activityDecision.updateType ===
-      "material_completed"
-    ) {
+  if (activityDecision.shouldCreate) {
+    if (activityDecision.updateType === "material_completed") {
       await createTrainingUpdate(
         engagementId,
         clientProfileId,
         "material_completed",
         `Material Completed: ${material.title}`,
         `Client completed the training material '${material.title}'.`,
-      )
-    } else if (
-      activityDecision.updateType ===
-      "material_started"
-    ) {
+      );
+    } else if (activityDecision.updateType === "material_started") {
       await createTrainingUpdate(
         engagementId,
         clientProfileId,
         "material_started",
         `Material Started: ${material.title}`,
         `Client started accessing the training material '${material.title}'.`,
-      )
+      );
     } else {
-      const milestone =
-        getProgressMilestone(
-          progress,
-        )
+      const milestone = getProgressMilestone(progress);
 
       await createTrainingUpdate(
         engagementId,
@@ -3347,7 +2657,7 @@ export async function updateMaterialProgress(
         "material_progress_updated",
         `Material Progress: ${material.title}`,
         `Client reached ${milestone}% progress on training material '${material.title}'.`,
-      )
+      );
     }
   }
 
@@ -3355,20 +2665,17 @@ export async function updateMaterialProgress(
    * Material progress is an input to the
    * module progress engine.
    */
-  const clientRole =
-    await getUserRoleByProfileId(
-      clientProfileId,
-    )
+  const clientRole = await getUserRoleByProfileId(clientProfileId);
 
   if (clientRole) {
     await recomputeEngagementProgress(
       engagementId,
       clientProfileId,
       clientRole,
-    )
+    );
   }
 
-  return resultRow
+  return resultRow;
 }
 
 /* =======================================================
@@ -3380,15 +2687,10 @@ export async function recordMaterialOpened(
   materialId: string,
   clientProfileId: string,
 ) {
-  return updateMaterialProgress(
-    engagementId,
-    materialId,
-    clientProfileId,
-    {
-      status: "in_progress",
-      progress_percentage: 1,
-    },
-  )
+  return updateMaterialProgress(engagementId, materialId, clientProfileId, {
+    status: "in_progress",
+    progress_percentage: 1,
+  });
 }
 
 export async function recordMaterialVisited(
@@ -3396,16 +2698,11 @@ export async function recordMaterialVisited(
   materialId: string,
   clientProfileId: string,
 ) {
-  return updateMaterialProgress(
-    engagementId,
-    materialId,
-    clientProfileId,
-    {
-      status: "completed",
-      progress_percentage: 100,
-      completed: true,
-    },
-  )
+  return updateMaterialProgress(engagementId, materialId, clientProfileId, {
+    status: "completed",
+    progress_percentage: 100,
+    completed: true,
+  });
 }
 
 export async function recordVideoProgress(
@@ -3415,60 +2712,34 @@ export async function recordVideoProgress(
   watchedSeconds: number,
   durationSeconds: number,
 ) {
-  const safeDuration =
-    Math.max(
-      0,
-      Number(durationSeconds) || 0,
-    )
+  const safeDuration = Math.max(0, Number(durationSeconds) || 0);
 
-  const safeWatched =
-    Math.max(
-      0,
-      Math.min(
-        safeDuration ||
-          Number.MAX_SAFE_INTEGER,
-        Number(watchedSeconds) || 0,
-      ),
-    )
+  const safeWatched = Math.max(
+    0,
+    Math.min(
+      safeDuration || Number.MAX_SAFE_INTEGER,
+      Number(watchedSeconds) || 0,
+    ),
+  );
 
   const percentage =
     safeDuration > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (safeWatched /
-              safeDuration) *
-              100,
-          ),
-        )
-      : 0
+      ? Math.min(100, Math.round((safeWatched / safeDuration) * 100))
+      : 0;
 
-  const completed =
-    percentage >= 95
+  const completed = percentage >= 95;
 
-  return updateMaterialProgress(
-    engagementId,
-    materialId,
-    clientProfileId,
-    {
-      status: completed
-        ? "completed"
-        : "in_progress",
+  return updateMaterialProgress(engagementId, materialId, clientProfileId, {
+    status: completed ? "completed" : "in_progress",
 
-      progress_percentage:
-        completed
-          ? 100
-          : percentage,
+    progress_percentage: completed ? 100 : percentage,
 
-      watched_seconds:
-        safeWatched,
+    watched_seconds: safeWatched,
 
-      duration_seconds:
-        safeDuration,
+    duration_seconds: safeDuration,
 
-      completed,
-    },
-  )
+    completed,
+  });
 }
 
 export async function recordDocumentProgress(
@@ -3478,65 +2749,34 @@ export async function recordDocumentProgress(
   pagesViewed: number,
   totalPages: number,
 ) {
-  const safeTotal =
-    Math.max(
-      0,
-      Math.floor(
-        Number(totalPages) || 0,
-      ),
-    )
+  const safeTotal = Math.max(0, Math.floor(Number(totalPages) || 0));
 
-  const safeViewed =
-    Math.max(
-      0,
-      Math.min(
-        safeTotal ||
-          Number.MAX_SAFE_INTEGER,
-        Math.floor(
-          Number(pagesViewed) || 0,
-        ),
-      ),
-    )
+  const safeViewed = Math.max(
+    0,
+    Math.min(
+      safeTotal || Number.MAX_SAFE_INTEGER,
+      Math.floor(Number(pagesViewed) || 0),
+    ),
+  );
 
   const percentage =
     safeTotal > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (safeViewed /
-              safeTotal) *
-              100,
-          ),
-        )
-      : 0
+      ? Math.min(100, Math.round((safeViewed / safeTotal) * 100))
+      : 0;
 
-  const completed =
-    safeTotal > 0 &&
-    safeViewed >= safeTotal
+  const completed = safeTotal > 0 && safeViewed >= safeTotal;
 
-  return updateMaterialProgress(
-    engagementId,
-    materialId,
-    clientProfileId,
-    {
-      status: completed
-        ? "completed"
-        : "in_progress",
+  return updateMaterialProgress(engagementId, materialId, clientProfileId, {
+    status: completed ? "completed" : "in_progress",
 
-      progress_percentage:
-        completed
-          ? 100
-          : percentage,
+    progress_percentage: completed ? 100 : percentage,
 
-      pages_viewed:
-        safeViewed,
+    pages_viewed: safeViewed,
 
-      total_pages:
-        safeTotal,
+    total_pages: safeTotal,
 
-      completed,
-    },
-  )
+    completed,
+  });
 }
 
 /* =======================================================
@@ -3544,42 +2784,37 @@ export async function recordDocumentProgress(
    ======================================================= */
 
 export type TrainingModuleMaterialReadiness = {
-  module_id: string
-  module_title: string
-  material_count: number
-  completed_material_count: number
-  readiness_percentage: number
-  all_materials_completed: boolean
-}
+  module_id: string;
+  module_title: string;
+  material_count: number;
+  completed_material_count: number;
+  readiness_percentage: number;
+  all_materials_completed: boolean;
+};
 
 export async function getModuleMaterialReadiness(
   engagementId: string,
   moduleId?: string,
   clientProfileId?: string | null,
 ) {
-  const values: any[] = [
-    engagementId,
-  ]
+  const values: any[] = [engagementId];
 
-  let moduleFilter = ""
+  let moduleFilter = "";
 
   if (moduleId) {
-    values.push(moduleId)
+    values.push(moduleId);
 
     moduleFilter = `
       AND m.id = $${values.length}
-    `
+    `;
   }
 
   if (clientProfileId) {
-    values.push(
-      clientProfileId,
-    )
+    values.push(clientProfileId);
   }
 
-  const clientProgressJoin =
-    clientProfileId
-      ? `
+  const clientProgressJoin = clientProfileId
+    ? `
           LEFT JOIN training_material_progress mp
             ON mp.training_engagement_id =
               tm.training_engagement_id
@@ -3590,24 +2825,22 @@ export async function getModuleMaterialReadiness(
             AND mp.client_profile_id =
               $${values.length}
         `
-      : `
+    : `
           LEFT JOIN training_material_progress mp
             ON mp.training_engagement_id =
               tm.training_engagement_id
 
             AND mp.material_id =
               tm.id
-        `
+        `;
 
-  const result =
-    await query<{
-      module_id: string
-      module_title: string
-      material_count: number
-      completed_material_count:
-        number
-    }>(
-      `
+  const result = await query<{
+    module_id: string;
+    module_title: string;
+    material_count: number;
+    completed_material_count: number;
+  }>(
+    `
         SELECT
           m.id AS module_id,
           m.title AS module_title,
@@ -3644,53 +2877,34 @@ export async function getModuleMaterialReadiness(
           MIN(m.module_order) ASC,
           MIN(m.created_at) ASC
       `,
-      values,
-    )
+    values,
+  );
 
-  return result.rows.map(
-    (row) => {
-      const materialCount =
-        Number(
-          row.material_count,
-        ) || 0
+  return result.rows.map((row) => {
+    const materialCount = Number(row.material_count) || 0;
 
-      const completedCount =
-        Number(
-          row.completed_material_count,
-        ) || 0
+    const completedCount = Number(row.completed_material_count) || 0;
 
-      const readiness =
-        materialCount === 0
-          ? 100
-          : Math.round(
-              (completedCount /
-                materialCount) *
-                100,
-            )
+    const readiness =
+      materialCount === 0
+        ? 100
+        : Math.round((completedCount / materialCount) * 100);
 
-      return {
-        module_id:
-          row.module_id,
+    return {
+      module_id: row.module_id,
 
-        module_title:
-          row.module_title,
+      module_title: row.module_title,
 
-        material_count:
-          materialCount,
+      material_count: materialCount,
 
-        completed_material_count:
-          completedCount,
+      completed_material_count: completedCount,
 
-        readiness_percentage:
-          readiness,
+      readiness_percentage: readiness,
 
-        all_materials_completed:
-          materialCount === 0 ||
-          completedCount >=
-            materialCount,
-      }
-    },
-  )
+      all_materials_completed:
+        materialCount === 0 || completedCount >= materialCount,
+    };
+  });
 }
 
 /* =======================================================
@@ -3698,34 +2912,30 @@ export async function getModuleMaterialReadiness(
    ======================================================= */
 
 export type CalculatedModuleProgress = {
-  module_id: string
-  module_title: string
-  module_order: number
-  material_count: number
-  completed_material_count: number
-  session_count: number
-  completed_session_count: number
-  material_progress: number
-  session_progress: number
-  completion_percentage: number
-  status:
-    | "not_started"
-    | "in_progress"
-    | "completed"
-}
+  module_id: string;
+  module_title: string;
+  module_order: number;
+  material_count: number;
+  completed_material_count: number;
+  session_count: number;
+  completed_session_count: number;
+  material_progress: number;
+  session_progress: number;
+  completion_percentage: number;
+  status: "not_started" | "in_progress" | "completed";
+};
 
 export async function calculateModuleProgress(
   engagementId: string,
   moduleId: string,
   clientProfileId: string,
 ): Promise<CalculatedModuleProgress> {
-  const moduleResult =
-    await query<{
-      id: string
-      title: string
-      module_order: number
-    }>(
-      `
+  const moduleResult = await query<{
+    id: string;
+    title: string;
+    module_order: number;
+  }>(
+    `
         SELECT
           id,
           title,
@@ -3739,28 +2949,20 @@ export async function calculateModuleProgress(
 
         LIMIT 1
       `,
-      [
-        moduleId,
-        engagementId,
-      ],
-    )
+    [moduleId, engagementId],
+  );
 
-  const module =
-    moduleResult.rows[0]
+  const module = moduleResult.rows[0];
 
   if (!module) {
-    throw new Error(
-      "Module not found",
-    )
+    throw new Error("Module not found");
   }
 
-  const materialResult =
-    await query<{
-      material_count: number
-      completed_material_count:
-        number
-    }>(
-      `
+  const materialResult = await query<{
+    material_count: number;
+    completed_material_count: number;
+  }>(
+    `
         SELECT
           COUNT(*) AS material_count,
 
@@ -3788,20 +2990,14 @@ export async function calculateModuleProgress(
           mat.training_engagement_id = $1
           AND mat.module_id = $2
       `,
-      [
-        engagementId,
-        moduleId,
-        clientProfileId,
-      ],
-    )
+    [engagementId, moduleId, clientProfileId],
+  );
 
-  const sessionResult =
-    await query<{
-      session_count: number
-      completed_session_count:
-        number
-    }>(
-      `
+  const sessionResult = await query<{
+    session_count: number;
+    completed_session_count: number;
+  }>(
+    `
         SELECT
           COUNT(*) AS session_count,
 
@@ -3820,67 +3016,39 @@ export async function calculateModuleProgress(
           AND module_id = $2
           AND status != 'cancelled'
       `,
-      [
-        engagementId,
-        moduleId,
-      ],
-    )
+    [engagementId, moduleId],
+  );
 
-  const materialCount =
-    Number(
-      materialResult.rows[0]
-        ?.material_count || 0,
-    )
+  const materialCount = Number(materialResult.rows[0]?.material_count || 0);
 
-  const completedMaterialCount =
-    Number(
-      materialResult.rows[0]
-        ?.completed_material_count || 0,
-    )
+  const completedMaterialCount = Number(
+    materialResult.rows[0]?.completed_material_count || 0,
+  );
 
-  const sessionCount =
-    Number(
-      sessionResult.rows[0]
-        ?.session_count || 0,
-    )
+  const sessionCount = Number(sessionResult.rows[0]?.session_count || 0);
 
-  const completedSessionCount =
-    Number(
-      sessionResult.rows[0]
-        ?.completed_session_count ||
-        0,
-    )
+  const completedSessionCount = Number(
+    sessionResult.rows[0]?.completed_session_count || 0,
+  );
 
   const materialProgress =
     materialCount > 0
-      ? Math.round(
-          (completedMaterialCount /
-            materialCount) *
-            100,
-        )
-      : 0
+      ? Math.round((completedMaterialCount / materialCount) * 100)
+      : 0;
 
   const sessionProgress =
     sessionCount > 0
-      ? Math.round(
-          (completedSessionCount /
-            sessionCount) *
-            100,
-        )
-      : 0
+      ? Math.round((completedSessionCount / sessionCount) * 100)
+      : 0;
 
-  const components: number[] = []
+  const components: number[] = [];
 
   if (materialCount > 0) {
-    components.push(
-      materialProgress,
-    )
+    components.push(materialProgress);
   }
 
   if (sessionCount > 0) {
-    components.push(
-      sessionProgress,
-    )
+    components.push(sessionProgress);
   }
 
   /*
@@ -3891,56 +3059,39 @@ export async function calculateModuleProgress(
     components.length === 0
       ? 0
       : Math.round(
-          components.reduce(
-            (sum, value) =>
-              sum + value,
-            0,
-          ) /
-            components.length,
-        )
+          components.reduce((sum, value) => sum + value, 0) / components.length,
+        );
 
   const status =
     completionPercentage >= 100
       ? "completed"
       : completionPercentage > 0
         ? "in_progress"
-        : "not_started"
+        : "not_started";
 
   return {
-    module_id:
-      module.id,
+    module_id: module.id,
 
-    module_title:
-      module.title,
+    module_title: module.title,
 
-    module_order:
-      Number(
-        module.module_order || 0,
-      ),
+    module_order: Number(module.module_order || 0),
 
-    material_count:
-      materialCount,
+    material_count: materialCount,
 
-    completed_material_count:
-      completedMaterialCount,
+    completed_material_count: completedMaterialCount,
 
-    session_count:
-      sessionCount,
+    session_count: sessionCount,
 
-    completed_session_count:
-      completedSessionCount,
+    completed_session_count: completedSessionCount,
 
-    material_progress:
-      materialProgress,
+    material_progress: materialProgress,
 
-    session_progress:
-      sessionProgress,
+    session_progress: sessionProgress,
 
-    completion_percentage:
-      completionPercentage,
+    completion_percentage: completionPercentage,
 
     status,
-  }
+  };
 }
 
 async function persistCalculatedModuleProgress(
@@ -3948,19 +3099,17 @@ async function persistCalculatedModuleProgress(
   moduleId: string,
   clientProfileId: string,
 ) {
-  const calculated =
-    await calculateModuleProgress(
-      engagementId,
-      moduleId,
-      clientProfileId,
-    )
+  const calculated = await calculateModuleProgress(
+    engagementId,
+    moduleId,
+    clientProfileId,
+  );
 
-  const existing =
-    await query<{
-      id: string
-      trainer_notes: string | null
-    }>(
-      `
+  const existing = await query<{
+    id: string;
+    trainer_notes: string | null;
+  }>(
+    `
         SELECT
           id,
           trainer_notes
@@ -3974,17 +3123,12 @@ async function persistCalculatedModuleProgress(
 
         LIMIT 1
       `,
-      [
-        engagementId,
-        moduleId,
-        clientProfileId,
-      ],
-    )
+    [engagementId, moduleId, clientProfileId],
+  );
 
   if (existing.rows[0]) {
-    const result =
-      await query(
-        `
+    const result = await query(
+      `
           UPDATE training_module_progress
 
           SET
@@ -3996,23 +3140,21 @@ async function persistCalculatedModuleProgress(
 
           RETURNING *
         `,
-        [
-          calculated.status,
-          calculated.completion_percentage,
-          existing.rows[0].id,
-        ],
-      )
+      [
+        calculated.status,
+        calculated.completion_percentage,
+        existing.rows[0].id,
+      ],
+    );
 
     return {
       ...calculated,
-      progress_row:
-        result.rows[0],
-    }
+      progress_row: result.rows[0],
+    };
   }
 
-  const result =
-    await query(
-      `
+  const result = await query(
+    `
         INSERT INTO training_module_progress (
           training_engagement_id,
           module_id,
@@ -4039,20 +3181,19 @@ async function persistCalculatedModuleProgress(
 
         RETURNING *
       `,
-      [
-        engagementId,
-        moduleId,
-        clientProfileId,
-        calculated.status,
-        calculated.completion_percentage,
-      ],
-    )
+    [
+      engagementId,
+      moduleId,
+      clientProfileId,
+      calculated.status,
+      calculated.completion_percentage,
+    ],
+  );
 
   return {
     ...calculated,
-    progress_row:
-      result.rows[0],
-  }
+    progress_row: result.rows[0],
+  };
 }
 
 /* =======================================================
@@ -4063,16 +3204,13 @@ export async function listModuleProgress(
   engagementId: string,
   clientProfileId?: string,
 ) {
-  let resolvedClientProfileId =
-    clientProfileId || null
+  let resolvedClientProfileId = clientProfileId || null;
 
   if (!resolvedClientProfileId) {
-    const engagement =
-      await query<{
-        client_profile_id:
-          string | null
-      }>(
-        `
+    const engagement = await query<{
+      client_profile_id: string | null;
+    }>(
+      `
           SELECT
             client_profile_id
 
@@ -4082,26 +3220,22 @@ export async function listModuleProgress(
 
           LIMIT 1
         `,
-        [engagementId],
-      )
+      [engagementId],
+    );
 
-    resolvedClientProfileId =
-      engagement.rows[0]
-        ?.client_profile_id ||
-      null
+    resolvedClientProfileId = engagement.rows[0]?.client_profile_id || null;
   }
 
   if (!resolvedClientProfileId) {
-    return []
+    return [];
   }
 
-  const modules =
-    await query<{
-      id: string
-      title: string
-      module_order: number
-    }>(
-      `
+  const modules = await query<{
+    id: string;
+    title: string;
+    module_order: number;
+  }>(
+    `
         SELECT
           id,
           title,
@@ -4117,75 +3251,57 @@ export async function listModuleProgress(
           module_order ASC,
           created_at ASC
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
-  const calculated =
-    await Promise.all(
-      modules.rows.map(
-        async (module) => {
-          const progress =
-            await calculateModuleProgress(
-              engagementId,
-              module.id,
-              resolvedClientProfileId!,
-            )
+  const calculated = await Promise.all(
+    modules.rows.map(async (module) => {
+      const progress = await calculateModuleProgress(
+        engagementId,
+        module.id,
+        resolvedClientProfileId!,
+      );
 
-          const persisted =
-            await persistCalculatedModuleProgress(
-              engagementId,
-              module.id,
-              resolvedClientProfileId!,
-            )
+      const persisted = await persistCalculatedModuleProgress(
+        engagementId,
+        module.id,
+        resolvedClientProfileId!,
+      );
 
-          return {
-            ...persisted.progress_row,
+      return {
+        ...persisted.progress_row,
 
-            module_title:
-              progress.module_title,
+        module_title: progress.module_title,
 
-            module_order:
-              progress.module_order,
+        module_order: progress.module_order,
 
-            material_count:
-              progress.material_count,
+        material_count: progress.material_count,
 
-            completed_material_count:
-              progress.completed_material_count,
+        completed_material_count: progress.completed_material_count,
 
-            session_count:
-              progress.session_count,
+        session_count: progress.session_count,
 
-            completed_session_count:
-              progress.completed_session_count,
+        completed_session_count: progress.completed_session_count,
 
-            material_progress:
-              progress.material_progress,
+        material_progress: progress.material_progress,
 
-            session_progress:
-              progress.session_progress,
+        session_progress: progress.session_progress,
 
-            material_readiness_percentage:
-              progress.material_count === 0
-                ? 100
-                : progress.material_progress,
+        material_readiness_percentage:
+          progress.material_count === 0 ? 100 : progress.material_progress,
 
-            all_materials_completed:
-              progress.material_count === 0 ||
-              progress.completed_material_count >=
-                progress.material_count,
+        all_materials_completed:
+          progress.material_count === 0 ||
+          progress.completed_material_count >= progress.material_count,
 
-            completion_percentage:
-              progress.completion_percentage,
+        completion_percentage: progress.completion_percentage,
 
-            status:
-              progress.status,
-          }
-        },
-      ),
-    )
+        status: progress.status,
+      };
+    }),
+  );
 
-  return calculated
+  return calculated;
 }
 
 /*
@@ -4203,35 +3319,29 @@ export async function upsertModuleProgress(
   moduleId: string,
   clientProfileId: string,
   updates: {
-    status?: string
-    completion_percentage?: number
-    trainer_notes?: string
+    status?: string;
+    completion_percentage?: number;
+    trainer_notes?: string;
   },
   actorProfileId: string | null,
 ) {
-  await requireTrainingOperatorByProfile(
-    engagementId,
-    actorProfileId,
-  )
+  await requireTrainingOperatorByProfile(engagementId, actorProfileId);
 
   /*
    * Manual percentage/status changes are no longer
    * allowed. Progress is calculated by the system.
    */
   if (
-    updates.completion_percentage !==
-      undefined ||
-    updates.status !==
-      undefined
+    updates.completion_percentage !== undefined ||
+    updates.status !== undefined
   ) {
     throw new Error(
       "Module progress and status are system-calculated and cannot be manually changed",
-    )
+    );
   }
 
-  const moduleCheck =
-    await query<{ id: string }>(
-      `
+  const moduleCheck = await query<{ id: string }>(
+    `
         SELECT id
 
         FROM training_modules
@@ -4242,25 +3352,16 @@ export async function upsertModuleProgress(
 
         LIMIT 1
       `,
-      [
-        moduleId,
-        engagementId,
-      ],
-    )
+    [moduleId, engagementId],
+  );
 
   if (!moduleCheck.rows[0]) {
-    throw new Error(
-      "Module does not belong to this training engagement",
-    )
+    throw new Error("Module does not belong to this training engagement");
   }
 
-  if (
-    updates.trainer_notes !==
-    undefined
-  ) {
-    const existing =
-      await query<{ id: string }>(
-        `
+  if (updates.trainer_notes !== undefined) {
+    const existing = await query<{ id: string }>(
+      `
           SELECT id
 
           FROM training_module_progress
@@ -4272,12 +3373,8 @@ export async function upsertModuleProgress(
 
           LIMIT 1
         `,
-        [
-          engagementId,
-          moduleId,
-          clientProfileId,
-        ],
-      )
+      [engagementId, moduleId, clientProfileId],
+    );
 
     if (existing.rows[0]) {
       await query(
@@ -4291,19 +3388,14 @@ export async function upsertModuleProgress(
 
           WHERE id = $3
         `,
-        [
-          updates.trainer_notes,
-          actorProfileId,
-          existing.rows[0].id,
-        ],
-      )
+        [updates.trainer_notes, actorProfileId, existing.rows[0].id],
+      );
     } else {
-      const calculated =
-        await calculateModuleProgress(
-          engagementId,
-          moduleId,
-          clientProfileId,
-        )
+      const calculated = await calculateModuleProgress(
+        engagementId,
+        moduleId,
+        clientProfileId,
+      );
 
       await query(
         `
@@ -4340,28 +3432,20 @@ export async function upsertModuleProgress(
           updates.trainer_notes,
           actorProfileId,
         ],
-      )
+      );
     }
   }
 
-  const calculated =
-    await persistCalculatedModuleProgress(
-      engagementId,
-      moduleId,
-      clientProfileId,
-    )
+  const calculated = await persistCalculatedModuleProgress(
+    engagementId,
+    moduleId,
+    clientProfileId,
+  );
 
-  const actorRole =
-    await getUserRoleByProfileId(
-      actorProfileId,
-    )
+  const actorRole = await getUserRoleByProfileId(actorProfileId);
 
   if (actorRole) {
-    await recomputeEngagementProgress(
-      engagementId,
-      actorProfileId,
-      actorRole,
-    )
+    await recomputeEngagementProgress(engagementId, actorProfileId, actorRole);
   }
 
   await createTrainingUpdate(
@@ -4370,9 +3454,9 @@ export async function upsertModuleProgress(
     "progress_updated",
     "Module Progress Recalculated",
     `Module progress was recalculated automatically from its training sessions and materials.`,
-  )
+  );
 
-  return calculated.progress_row
+  return calculated.progress_row;
 }
 
 /* =======================================================
@@ -4384,14 +3468,11 @@ async function recomputeEngagementProgress(
   actorProfileId: string | null,
   actorRole: string,
 ) {
-  const engagement =
-    await query<{
-      client_profile_id:
-        string | null
-      progress:
-        number | null
-    }>(
-      `
+  const engagement = await query<{
+    client_profile_id: string | null;
+    progress: number | null;
+  }>(
+    `
         SELECT
           client_profile_id,
           progress
@@ -4402,23 +3483,19 @@ async function recomputeEngagementProgress(
 
         LIMIT 1
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
-  const clientProfileId =
-    engagement.rows[0]
-      ?.client_profile_id ||
-    null
+  const clientProfileId = engagement.rows[0]?.client_profile_id || null;
 
   if (!clientProfileId) {
-    return
+    return;
   }
 
-  const modules =
-    await query<{
-      id: string
-    }>(
-      `
+  const modules = await query<{
+    id: string;
+  }>(
+    `
         SELECT id
 
         FROM training_modules
@@ -4430,42 +3507,27 @@ async function recomputeEngagementProgress(
           module_order ASC,
           created_at ASC
       `,
-      [engagementId],
-    )
+    [engagementId],
+  );
 
-  const calculatedModules =
-    await Promise.all(
-      modules.rows.map(
-        async (module) =>
-          persistCalculatedModuleProgress(
-            engagementId,
-            module.id,
-            clientProfileId,
-          ),
-      ),
-    )
+  const calculatedModules = await Promise.all(
+    modules.rows.map(async (module) =>
+      persistCalculatedModuleProgress(engagementId, module.id, clientProfileId),
+    ),
+  );
 
-  const moduleCount =
-    calculatedModules.length
+  const moduleCount = calculatedModules.length;
 
   const overallProgress =
     moduleCount === 0
       ? 0
       : Math.round(
           calculatedModules.reduce(
-            (
-              total,
-              module,
-            ) =>
-              total +
-              Number(
-                module.completion_percentage ||
-                  0,
-              ),
+            (total, module) =>
+              total + Number(module.completion_percentage || 0),
             0,
-          ) /
-            moduleCount,
-        )
+          ) / moduleCount,
+        );
 
   await query(
     `
@@ -4477,74 +3539,50 @@ async function recomputeEngagementProgress(
 
       WHERE id = $2
     `,
-    [
-      overallProgress,
-      engagementId,
-    ],
-  )
+    [overallProgress, engagementId],
+  );
 
   /*
    * 100% requires an actual curriculum.
    */
-  if (
-    moduleCount === 0 ||
-    overallProgress < 100
-  ) {
-    return
+  if (moduleCount === 0 || overallProgress < 100) {
+    return;
   }
 
-  const approvedTrainers =
-    await listApprovedTrainers(
-      engagementId,
-    )
+  const approvedTrainers = await listApprovedTrainers(engagementId);
 
-  if (
-    approvedTrainers.length === 0
-  ) {
+  if (approvedTrainers.length === 0) {
     await createTrainingUpdate(
       engagementId,
       actorProfileId,
       "progress_complete",
       "Progress Reached 100%",
       "Overall calculated training progress reached 100%, but no approved trainer is assigned. At least one approved trainer must confirm completion.",
-    )
+    );
 
-    return
+    return;
   }
 
-  const actorIsApprovedTrainer =
-    Boolean(
-      actorProfileId &&
-        approvedTrainers.some(
-          (trainer) =>
-            trainer.trainer_profile_id ===
-            actorProfileId,
-        ),
-    )
+  const actorIsApprovedTrainer = Boolean(
+    actorProfileId &&
+    approvedTrainers.some(
+      (trainer) => trainer.trainer_profile_id === actorProfileId,
+    ),
+  );
 
-  const actorIsSuperAdmin =
-    isSuperAdminRole(
-      actorRole,
-    )
+  const actorIsSuperAdmin = isSuperAdminRole(actorRole);
 
   /*
    * Existing completion service remains
    * authoritative.
    */
-  if (
-    actorIsApprovedTrainer ||
-    actorIsSuperAdmin
-  ) {
+  if (actorIsApprovedTrainer || actorIsSuperAdmin) {
     if (!actorProfileId) {
-      return
+      return;
     }
 
     try {
-      await completeTrainingEngagement(
-        engagementId,
-        actorProfileId,
-        actorRole,
-      )
+      await completeTrainingEngagement(engagementId, actorProfileId, actorRole);
 
       await createTrainingUpdate(
         engagementId,
@@ -4554,66 +3592,49 @@ async function recomputeEngagementProgress(
         actorIsSuperAdmin
           ? "Training was marked completed by the Super Administrator after calculated module progress reached 100%."
           : "Training was marked completed after calculated module progress reached 100% and an approved trainer confirmed completion.",
-      )
+      );
     } catch (err: any) {
-      console.error(
-        "TRAINING COMPLETION ERROR:",
-        err,
-      )
+      console.error("TRAINING COMPLETION ERROR:", err);
 
       await createTrainingUpdate(
         engagementId,
         actorProfileId,
         "completion_error",
         "Completion Error",
-        `Automatic completion failed: ${String(
-          err?.message || err,
-        )}`,
-      )
+        `Automatic completion failed: ${String(err?.message || err)}`,
+      );
     }
 
-    return
+    return;
   }
 
-  for (
-    const trainer of approvedTrainers
-  ) {
+  for (const trainer of approvedTrainers) {
     try {
       if (!trainer.user_id) {
-        continue
+        continue;
       }
 
-      await notifyUser(
-        trainer.user_id,
-        {
-          type:
-            "training_progress_complete",
+      await notifyUser(trainer.user_id, {
+        type: "training_progress_complete",
 
-          title:
-            "Training progress reached 100%",
+        title: "Training progress reached 100%",
 
-          message:
-            "Calculated training progress has reached 100%. Please confirm completion of the training engagement.",
+        message:
+          "Calculated training progress has reached 100%. Please confirm completion of the training engagement.",
 
-          metadata: {
-            training_engagement_id:
-              engagementId,
+        metadata: {
+          training_engagement_id: engagementId,
 
-            action:
-              "confirm_completion",
+          action: "confirm_completion",
 
-            trainer_profile_id:
-              trainer.trainer_profile_id,
-          },
+          trainer_profile_id: trainer.trainer_profile_id,
         },
-      )
-    } catch (
-      notificationError
-    ) {
+      });
+    } catch (notificationError) {
       console.error(
         "TRAINER COMPLETION NOTIFICATION ERROR:",
         notificationError,
-      )
+      );
     }
   }
 
@@ -4623,5 +3644,5 @@ async function recomputeEngagementProgress(
     "progress_complete_pending",
     "Progress Reached 100%",
     "Calculated training progress reached 100%. Awaiting confirmation from an approved trainer to complete the training engagement.",
-  )
+  );
 }

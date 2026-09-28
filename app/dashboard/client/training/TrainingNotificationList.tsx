@@ -1,86 +1,82 @@
-"use client"
+"use client";
 
-import Link from "next/link"
+import Link from "next/link";
 
 import {
   type ClientNotification,
   useClientNotifications,
-} from "@/components/notifications/ClientNotificationProvider"
+} from "@/components/notifications/ClientNotificationProvider";
 
 function asString(value: unknown) {
-  return typeof value === "string" ? value.trim() : ""
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function trainingIdForNotification(
-  notification: ClientNotification,
-) {
-  const metadata = notification.metadata || {}
+function trainingIdForNotification(notification: ClientNotification) {
+  const metadata = notification.metadata || {};
   const resourceType =
-    asString(metadata.resource_type) ||
-    asString(metadata.resourceType)
+    asString(metadata.resource_type) || asString(metadata.resourceType);
   const resourceId =
-    asString(metadata.resource_id) ||
-    asString(metadata.resourceId)
+    asString(metadata.resource_id) || asString(metadata.resourceId);
 
   return (
     asString(metadata.training_engagement_id) ||
     asString(metadata.training_id) ||
     asString(metadata.trainingId) ||
     (resourceType === "training" ? resourceId : "")
-  )
+  );
 }
 
-function trainingNotificationLabel(
-  notification: ClientNotification,
-) {
-  const metadata = notification.metadata || {}
-  const type = notification.type.toLowerCase()
+function trainingNotificationLabel(notification: ClientNotification) {
+  const metadata = notification.metadata || {};
+  const type = notification.type.toLowerCase();
   const targetPage =
-    asString(metadata.target_page) ||
-    asString(metadata.targetPage)
-  const title = notification.title.toLowerCase()
-  const source = `${type} ${targetPage} ${title}`
+    asString(metadata.target_page) || asString(metadata.targetPage);
+  const title = notification.title.toLowerCase();
+  const source = `${type} ${targetPage} ${title}`;
 
   if (source.includes("schedule") || source.includes("session")) {
-    return "Schedule"
+    return "Schedule";
   }
 
   if (source.includes("material")) {
-    return "Materials"
+    return "Materials";
   }
 
   if (source.includes("assessment")) {
-    return "Assessment"
+    return "Assessment";
   }
 
   if (source.includes("certificate")) {
-    return "Certificate"
+    return "Certificate";
   }
 
   if (source.includes("plan")) {
-    return "Plan"
+    return "Plan";
   }
 
   if (source.includes("progress") || source.includes("completion")) {
-    return "Progress"
+    return "Progress";
   }
 
-  return "Training"
+  return "Training";
 }
 
 export default function TrainingNotificationList({
   rows,
 }: {
   rows: Array<{
-    id: string
-    engagement_number?: string | null
-    training_organization_name?: string | null
-    status?: string | null
-    progress?: number | string | null
-  }>
+    id: string;
+    engagement_number?: string | null;
+    training_organization_name?: string | null;
+    status?: string | null;
+    progress?: number | string | null;
+    preferred_start_date?: string | null;
+    preferred_completion_date?: string | null;
+    client_locked?: boolean;
+    lifecycle_completed?: boolean;
+  }>;
 }) {
-  const { getUnreadForResource, notifications } =
-    useClientNotifications()
+  const { getUnreadForResource, notifications } = useClientNotifications();
 
   return (
     <div className="space-y-3">
@@ -91,9 +87,9 @@ export default function TrainingNotificationList({
       )}
 
       {rows.map((r) => {
-        const trainingUnread = getUnreadForResource("training", r.id)
-        const certificateUnread = getUnreadForResource("certificate", r.id)
-        const unread = trainingUnread + certificateUnread
+        const trainingUnread = getUnreadForResource("training", r.id);
+        const certificateUnread = getUnreadForResource("certificate", r.id);
+        const unread = trainingUnread + certificateUnread;
         const unreadLabels = Array.from(
           new Set(
             notifications
@@ -104,13 +100,11 @@ export default function TrainingNotificationList({
               )
               .map(trainingNotificationLabel),
           ),
-        )
+        );
 
-        return (
-          <Link
-            key={r.id}
-            href={`/dashboard/training/${r.id}`}
-            className={`block rounded-md border bg-[#020806]/150 p-4 hover:border-[#20dc73]/30 ${
+        const cardContent = (
+          <div
+            className={`block rounded-md border bg-[#020806]/150 p-4 ${
               unread > 0
                 ? "border-[#20dc73]/40 bg-[#20dc73]/5"
                 : "border-white/10"
@@ -124,14 +118,24 @@ export default function TrainingNotificationList({
                       r.training_organization_name ||
                       r.id}
                   </p>
-                  {unread > 0 && (
+                  {r.client_locked ? (
+                    <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-200">
+                      Opens {r.preferred_start_date}
+                    </span>
+                  ) : null}
+                  {r.lifecycle_completed ? (
+                    <span className="rounded border border-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-white/60">
+                      Completed
+                    </span>
+                  ) : null}
+                  {unread > 0 && !r.client_locked && (
                     <span className="inline-flex items-center gap-1 rounded border border-[#20dc73]/40 bg-[#20dc73]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#20dc73]">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#20dc73]" />
                       NEW{unread > 1 ? ` ${unread}` : ""}
                     </span>
                   )}
                 </div>
-                {unreadLabels.length > 0 ? (
+                {unreadLabels.length > 0 && !r.client_locked ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {unreadLabels.map((label) => (
                       <span
@@ -147,15 +151,30 @@ export default function TrainingNotificationList({
                   {r.training_organization_name || ""}
                 </p>
               </div>
-
               <div className="shrink-0 text-sm text-white/60">
                 <div>Progress: {r.progress ?? 0}%</div>
-                <div className="mt-1">{r.status || "unknown"}</div>
+                <div className="mt-1">
+                  {r.lifecycle_completed ? "completed" : r.status || "unknown"}
+                </div>
               </div>
             </div>
+          </div>
+        );
+
+        return r.client_locked ? (
+          <div key={r.id} aria-disabled="true">
+            {cardContent}
+          </div>
+        ) : (
+          <Link
+            key={r.id}
+            href={`/dashboard/training/${r.id}`}
+            className="block hover:[&>div]:border-[#20dc73]/30"
+          >
+            {cardContent}
           </Link>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

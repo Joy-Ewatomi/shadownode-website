@@ -8,25 +8,28 @@ const applicationOrigin = getTrustedApplicationOrigin();
 export const metadata: Metadata = {
   metadataBase: applicationOrigin ? new URL(applicationOrigin) : undefined,
   title: {
-    default: "ShadowNode Operations Bureau Limited",
-    template: "%s | ShadowNode Operations Bureau",
+    default: "SHADOWNODE OPERATIONS BUREAU LIMITED",
+    template: "%s | SHADOWNODE OPERATIONS BUREAU LIMITED",
   },
   description:
     "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
   alternates: applicationOrigin ? { canonical: "/" } : undefined,
   icons: { icon: "/real1shadownodelogo.png" },
   openGraph: {
-    title: "ShadowNode Operations Bureau Limited",
+    title: "SHADOWNODE OPERATIONS BUREAU LIMITED",
     description:
       "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
     type: "website",
     images: [
-      { url: "/real1shadownodelogo.png", alt: "ShadowNode Operations Bureau" },
+      {
+        url: "/real1shadownodelogo.png",
+        alt: "SHADOWNODE OPERATIONS BUREAU LIMITED",
+      },
     ],
   },
   twitter: {
     card: "summary",
-    title: "ShadowNode Operations Bureau Limited",
+    title: "SHADOWNODE OPERATIONS BUREAU LIMITED",
     description:
       "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
     images: ["/real1shadownodelogo.png"],

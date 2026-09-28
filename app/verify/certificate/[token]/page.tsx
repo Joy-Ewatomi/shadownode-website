@@ -1,76 +1,64 @@
-import Link from "next/link"
-import { notFound } from "next/navigation"
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
-import { query } from "@/lib/db"
+import { query } from "@/lib/db";
 
 type CertificateRow = {
-  id: string
-  certificate_number: string | null
-  recipient_name: string | null
-  organization_name: string | null
-  training_title: string | null
-  training_type: string | null
-  trainer_name: string | null
-  completion_date: string | null
-  issued_at: string | null
-  status: string | null
-}
+  id: string;
+  certificate_number: string | null;
+  recipient_name: string | null;
+  organization_name: string | null;
+  training_title: string | null;
+  training_type: string | null;
+  trainer_name: string | null;
+  completion_date: string | null;
+  issued_at: string | null;
+  status: string | null;
+};
 
 type CertificateVerificationPageProps = {
   params: Promise<{
-    token: string
-  }>
-}
+    token: string;
+  }>;
+};
 
-function toNullableString(
-  value: unknown,
-): string | null {
-  if (
-    value === null ||
-    value === undefined
-  ) {
-    return null
+function toNullableString(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
   }
 
-  const stringValue =
-    String(value).trim()
+  const stringValue = String(value).trim();
 
-  return stringValue || null
+  return stringValue || null;
 }
 
-function formatDate(
-  value: string | null,
-) {
+function formatDate(value: string | null) {
   if (!value) {
-    return "—"
+    return "—";
   }
 
-  const date = new Date(value)
+  const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return value
+    return value;
   }
 
-  return date.toLocaleDateString(
-    "en-US",
-    {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    },
-  )
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 export default async function CertificateVerificationPage({
   params,
 }: CertificateVerificationPageProps) {
-  const { token } = await params
+  const { token } = await params;
 
-  const cleanToken =
-    String(token || "").trim()
+  const cleanToken = String(token || "").trim();
 
   if (!cleanToken) {
-    notFound()
+    notFound();
   }
 
   const result = await query(
@@ -91,12 +79,9 @@ export default async function CertificateVerificationPage({
       LIMIT 1
     `,
     [cleanToken],
-  )
+  );
 
-  const rawCertificate =
-    result.rows[0] as
-      | Record<string, unknown>
-      | undefined
+  const rawCertificate = result.rows[0] as Record<string, unknown> | undefined;
 
   if (!rawCertificate) {
     return (
@@ -123,10 +108,9 @@ export default async function CertificateVerificationPage({
 
             <div className="px-6 py-8 sm:px-10">
               <p className="text-sm leading-7 text-white/55">
-                The certificate verification token
-                provided is invalid or the certificate
-                is no longer available in the ShadowNode
-                certificate registry.
+                The certificate verification token provided is invalid or the
+                certificate is no longer available in the ShadowNode certificate
+                registry.
               </p>
 
               <div className="mt-6 rounded-xl border border-white/5 bg-black/20 p-4">
@@ -149,7 +133,7 @@ export default async function CertificateVerificationPage({
           </section>
         </div>
       </main>
-    )
+    );
   }
 
   /*
@@ -158,93 +142,44 @@ export default async function CertificateVerificationPage({
    * JSX and child components.
    */
   const certificate: CertificateRow = {
-    id:
-      toNullableString(
-        rawCertificate.id,
-      ) || "",
+    id: toNullableString(rawCertificate.id) || "",
 
-    certificate_number:
-      toNullableString(
-        rawCertificate.certificate_number,
-      ),
+    certificate_number: toNullableString(rawCertificate.certificate_number),
 
-    recipient_name:
-      toNullableString(
-        rawCertificate.recipient_name,
-      ),
+    recipient_name: toNullableString(rawCertificate.recipient_name),
 
-    organization_name:
-      toNullableString(
-        rawCertificate.organization_name,
-      ),
+    organization_name: toNullableString(rawCertificate.organization_name),
 
-    training_title:
-      toNullableString(
-        rawCertificate.training_title,
-      ),
+    training_title: toNullableString(rawCertificate.training_title),
 
-    training_type:
-      toNullableString(
-        rawCertificate.training_type,
-      ),
+    training_type: toNullableString(rawCertificate.training_type),
 
-    trainer_name:
-      toNullableString(
-        rawCertificate.trainer_name,
-      ),
+    trainer_name: toNullableString(rawCertificate.trainer_name),
 
-    completion_date:
-      toNullableString(
-        rawCertificate.completion_date,
-      ),
+    completion_date: toNullableString(rawCertificate.completion_date),
 
-    issued_at:
-      toNullableString(
-        rawCertificate.issued_at,
-      ),
+    issued_at: toNullableString(rawCertificate.issued_at),
 
-    status:
-      toNullableString(
-        rawCertificate.status,
-      ),
-  }
+    status: toNullableString(rawCertificate.status),
+  };
 
-  const certificateStatus =
-    String(
-      certificate.status || "",
-    ).toLowerCase()
+  const certificateStatus = String(certificate.status || "").toLowerCase();
 
-  const verified =
-    certificateStatus === "issued"
+  const verified = certificateStatus === "issued";
 
-  const completionDate =
-    formatDate(
-      certificate.completion_date,
-    )
+  const completionDate = formatDate(certificate.completion_date);
 
-  const issuedDate =
-    formatDate(
-      certificate.issued_at,
-    )
+  const issuedDate = formatDate(certificate.issued_at);
 
-  const certificateNumber =
-    certificate.certificate_number ||
-    "—"
+  const certificateNumber = certificate.certificate_number || "—";
 
-  const recipientName =
-    certificate.recipient_name ||
-    "Certificate Recipient"
+  const recipientName = certificate.recipient_name || "Certificate Recipient";
 
-  const organizationName =
-    certificate.organization_name
+  const organizationName = certificate.organization_name;
 
-  const trainingTitle =
-    certificate.training_title ||
-    "Cybersecurity Training"
+  const trainingTitle = certificate.training_title || "Cybersecurity Training";
 
-  const trainerName =
-    certificate.trainer_name ||
-    "ShadowNode Training Team"
+  const trainerName = certificate.trainer_name || "ShadowNode Training Team";
 
   return (
     <main className="min-h-screen bg-[#020806] text-white">
@@ -264,10 +199,7 @@ export default async function CertificateVerificationPage({
 
       <header className="relative border-b border-[#143b28] bg-[#020806]/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
-          <Link
-            href="/"
-            className="flex items-center gap-3"
-          >
+          <Link href="/" className="flex items-center gap-3">
             <ShieldLogo />
 
             <div>
@@ -325,11 +257,7 @@ export default async function CertificateVerificationPage({
                       : "flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
                   }
                 >
-                  {verified ? (
-                    <CheckIcon />
-                  ) : (
-                    <WarningIcon />
-                  )}
+                  {verified ? <CheckIcon /> : <WarningIcon />}
                 </div>
 
                 <div>
@@ -358,9 +286,7 @@ export default async function CertificateVerificationPage({
                     : "inline-flex self-start rounded-full border border-yellow-400/20 bg-yellow-400/10 px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-yellow-300 sm:self-auto"
                 }
               >
-                {verified
-                  ? "VERIFIED"
-                  : "NOT VERIFIED"}
+                {verified ? "VERIFIED" : "NOT VERIFIED"}
               </div>
             </div>
           </div>
@@ -405,9 +331,9 @@ export default async function CertificateVerificationPage({
               )}
 
               <p className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-white/45">
-                The ShadowNode Operations Bureau confirms
-                that the above participant successfully
-                completed the recorded training engagement.
+                The SHADOWNODE OPERATIONS BUREAU LIMITED confirms that the above
+                participant successfully completed the recorded training
+                engagement.
               </p>
             </div>
 
@@ -446,15 +372,9 @@ export default async function CertificateVerificationPage({
                 value={completionDate}
               />
 
-              <VerificationDetail
-                label="Trainer"
-                value={trainerName}
-              />
+              <VerificationDetail label="Trainer" value={trainerName} />
 
-              <VerificationDetail
-                label="Issued On"
-                value={issuedDate}
-              />
+              <VerificationDetail label="Issued On" value={issuedDate} />
             </div>
 
             {/* ==================================================
@@ -498,9 +418,8 @@ export default async function CertificateVerificationPage({
                     </p>
 
                     <p className="mt-2 text-xs leading-6 text-white/40">
-                      Verification was performed against
-                      the ShadowNode certificate registry
-                      using the certificate's unique
+                      Verification was performed against the ShadowNode
+                      certificate registry using the certificate's unique
                       verification token.
                     </p>
                   </div>
@@ -520,12 +439,10 @@ export default async function CertificateVerificationPage({
               <div className="flex flex-col gap-4 text-xs text-white/25 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-mono text-[9px] uppercase tracking-[0.18em]">
-                    ShadowNode Operations Bureau
+                    SHADOWNODE OPERATIONS BUREAU LIMITED
                   </p>
 
-                  <p className="mt-1">
-                    Trusted. Secure. Unseen.
-                  </p>
+                  <p className="mt-1">Trusted. Secure. Unseen.</p>
                 </div>
 
                 <div className="sm:text-right">
@@ -548,13 +465,13 @@ export default async function CertificateVerificationPage({
 
         <div className="mt-6 text-center">
           <p className="text-[10px] leading-5 text-white/20">
-            This page is publicly accessible for certificate
-            verification. No account is required.
+            This page is publicly accessible for certificate verification. No
+            account is required.
           </p>
         </div>
       </div>
     </main>
-  )
+  );
 }
 
 /*
@@ -567,8 +484,8 @@ function VerificationDetail({
   label,
   value,
 }: {
-  label: string
-  value: string
+  label: string;
+  value: string;
 }) {
   return (
     <div className="bg-[#031009] p-5">
@@ -580,7 +497,7 @@ function VerificationDetail({
         {value}
       </p>
     </div>
-  )
+  );
 }
 
 /*
@@ -624,7 +541,7 @@ function ShieldLogo() {
         SN
       </text>
     </svg>
-  )
+  );
 }
 
 /*
@@ -633,11 +550,7 @@ function ShieldLogo() {
  * ============================================================
  */
 
-function CheckIcon({
-  size = 28,
-}: {
-  size?: number
-}) {
+function CheckIcon({ size = 28 }: { size?: number }) {
   return (
     <svg
       width={size}
@@ -655,7 +568,7 @@ function CheckIcon({
         strokeLinejoin="round"
       />
     </svg>
-  )
+  );
 }
 
 /*
@@ -664,11 +577,7 @@ function CheckIcon({
  * ============================================================
  */
 
-function WarningIcon({
-  size = 28,
-}: {
-  size?: number
-}) {
+function WarningIcon({ size = 28 }: { size?: number }) {
   return (
     <svg
       width={size}
@@ -698,7 +607,7 @@ function WarningIcon({
         strokeLinecap="round"
       />
     </svg>
-  )
+  );
 }
 
 /*
@@ -727,77 +636,23 @@ function RegistryMark() {
         strokeWidth="2"
       />
 
-      <rect
-        x="8"
-        y="8"
-        width="12"
-        height="12"
-        fill="#101B32"
-      />
+      <rect x="8" y="8" width="12" height="12" fill="#101B32" />
 
-      <rect
-        x="48"
-        y="8"
-        width="12"
-        height="12"
-        fill="#101B32"
-      />
+      <rect x="48" y="8" width="12" height="12" fill="#101B32" />
 
-      <rect
-        x="8"
-        y="48"
-        width="12"
-        height="12"
-        fill="#101B32"
-      />
+      <rect x="8" y="48" width="12" height="12" fill="#101B32" />
 
-      <rect
-        x="29"
-        y="10"
-        width="6"
-        height="6"
-        fill="#C9A227"
-      />
+      <rect x="29" y="10" width="6" height="6" fill="#C9A227" />
 
-      <rect
-        x="28"
-        y="26"
-        width="12"
-        height="6"
-        fill="#101B32"
-      />
+      <rect x="28" y="26" width="12" height="6" fill="#101B32" />
 
-      <rect
-        x="42"
-        y="29"
-        width="6"
-        height="12"
-        fill="#101B32"
-      />
+      <rect x="42" y="29" width="6" height="12" fill="#101B32" />
 
-      <rect
-        x="25"
-        y="40"
-        width="7"
-        height="7"
-        fill="#C9A227"
-      />
+      <rect x="25" y="40" width="7" height="7" fill="#C9A227" />
 
-      <rect
-        x="35"
-        y="50"
-        width="6"
-        height="8"
-        fill="#101B32"
-      />
+      <rect x="35" y="50" width="6" height="8" fill="#101B32" />
 
-      <rect
-        x="47"
-        y="47"
-        width="13"
-        height="6"
-        fill="#101B32"
-      />
+      <rect x="47" y="47" width="13" height="6" fill="#101B32" />
     </svg>
-  )
+  );
 }

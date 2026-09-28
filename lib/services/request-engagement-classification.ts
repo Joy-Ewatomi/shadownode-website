@@ -1,21 +1,27 @@
 const TRAINING_SERVICE_TYPES = new Set([
-  "custom_training",
+  "professional_training",
   "cybersecurity_training",
+  "cybersecurity-training",
+  "security_awareness",
   "digital_safety",
-])
+  "security_assessment",
+  "custom_training",
+]);
 
-export type RequestEngagementType = "investigation" | "training"
+export type RequestEngagementType = "investigation" | "training";
 
 function normalize(value: string | null | undefined) {
-  return String(value ?? "").trim().toLowerCase()
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 export function classifyRequestEngagement(input: {
-  service_type?: string | null
-  training_details?: unknown
-  training_goal?: string | null
-  training_topics?: string | null
-  training_participant_count?: number | string | null
+  service_type?: string | null;
+  training_details?: unknown;
+  training_goal?: string | null;
+  training_topics?: string | null;
+  training_participant_count?: number | string | null;
 }): RequestEngagementType {
   if (
     input.training_details ||
@@ -23,21 +29,21 @@ export function classifyRequestEngagement(input: {
     input.training_topics ||
     input.training_participant_count
   ) {
-    return "training"
+    return "training";
   }
 
   // Legacy fallback until request category/type is normalized in the schema.
   return TRAINING_SERVICE_TYPES.has(normalize(input.service_type))
     ? "training"
-    : "investigation"
+    : "investigation";
 }
 
 export function isTrainingRequest(input: {
-  service_type?: string | null
-  training_details?: unknown
-  training_goal?: string | null
-  training_topics?: string | null
-  training_participant_count?: number | string | null
+  service_type?: string | null;
+  training_details?: unknown;
+  training_goal?: string | null;
+  training_topics?: string | null;
+  training_participant_count?: number | string | null;
 }) {
-  return classifyRequestEngagement(input) === "training"
+  return classifyRequestEngagement(input) === "training";
 }

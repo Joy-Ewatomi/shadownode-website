@@ -1,38 +1,30 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth";
 import {
   ensureAccess,
   requireTrainingOperatorForEngagement,
-} from "@/lib/services/training-operations-service"
-import { query } from "@/lib/db"
+} from "@/lib/services/training-operations-service";
+import { query } from "@/lib/db";
 
-function isSuperAdminRole(
-  role: string | null | undefined,
-) {
-  return (
-    role === "super_administrator" ||
-    role === "super-administrator"
-  )
+function isSuperAdminRole(role: string | null | undefined) {
+  return role === "super_administrator" || role === "super-administrator";
 }
 
 export async function GET(
   req: NextRequest,
   context: {
-    params: Promise<{ id: string }>
+    params: Promise<{ id: string }>;
   },
 ) {
-  const user = await getCurrentUser()
+  const user = await getCurrentUser();
 
   if (!user) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 },
-    )
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { id } = await context.params
+    const { id } = await context.params;
 
     /*
      * Reading updates only requires access to the
@@ -42,11 +34,7 @@ export async function GET(
      * Approved trainers can see updates.
      * Super Administrators can see all updates.
      */
-    await ensureAccess(
-      id,
-      user,
-      false,
-    )
+    await ensureAccess(id, user, false);
 
     const res = await query(
       `
@@ -62,17 +50,14 @@ export async function GET(
         ORDER BY created_at DESC
       `,
       [id],
-    )
+    );
 
     return NextResponse.json({
       success: true,
       updates: res.rows,
-    })
+    });
   } catch (err: unknown) {
-    console.error(
-      "TRAINING UPDATES GET ERROR:",
-      err,
-    )
+    console.error("TRAINING UPDATES GET ERROR:", err);
 
     return NextResponse.json(
       {
@@ -82,36 +67,29 @@ export async function GET(
             : "Failed to load training updates",
       },
       { status: 403 },
-    )
+    );
   }
 }
 
 export async function POST(
   req: NextRequest,
   context: {
-    params: Promise<{ id: string }>
+    params: Promise<{ id: string }>;
   },
 ) {
-  const user = await getCurrentUser()
+  const user = await getCurrentUser();
 
   if (!user) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 },
-    )
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { id } = await context.params
+    const { id } = await context.params;
 
     /*
      * First establish normal engagement access.
      */
-    const access = await ensureAccess(
-      id,
-      user,
-      false,
-    )
+    const access = await ensureAccess(id, user, false, "write");
 
     /*
      * Posting a training update is an operational
@@ -124,61 +102,48 @@ export async function POST(
      *   Must be the approved trainer assigned to
      *   THIS engagement.
      */
-    await requireTrainingOperatorForEngagement(
-      id,
-      user,
-      access.profileId,
-    )
+    await requireTrainingOperatorForEngagement(id, user, access.profileId);
 
     let body: {
-      title?: string
-      content?: string
-      update_type?: string
-    }
+      title?: string;
+      content?: string;
+      update_type?: string;
+    };
 
     try {
-      body = await req.json()
+      body = await req.json();
     } catch {
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 },
-      )
+      );
     }
 
-    const title =
-      typeof body.title === "string"
-        ? body.title.trim()
-        : ""
+    const title = typeof body.title === "string" ? body.title.trim() : "";
 
-    const content =
-      typeof body.content === "string"
-        ? body.content.trim()
-        : ""
+    const content = typeof body.content === "string" ? body.content.trim() : "";
 
     const updateType =
-      typeof body.update_type === "string" &&
-      body.update_type.trim()
+      typeof body.update_type === "string" && body.update_type.trim()
         ? body.update_type.trim()
-        : "note"
+        : "note";
 
     if (!title || !content) {
       return NextResponse.json(
         {
-          error:
-            "title and content are required",
+          error: "title and content are required",
         },
         { status: 400 },
-      )
+      );
     }
 
     if (title.length > 255) {
       return NextResponse.json(
         {
-          error:
-            "Title must be 255 characters or less",
+          error: "Title must be 255 characters or less",
         },
         { status: 400 },
-      )
+      );
     }
 
     const res = await query(
@@ -203,24 +168,15 @@ export async function POST(
         )
         RETURNING *
       `,
-      [
-        id,
-        access.profileId,
-        updateType,
-        title,
-        content,
-      ],
-    )
+      [id, access.profileId, updateType, title, content],
+    );
 
     return NextResponse.json({
       success: true,
       update: res.rows[0],
-    })
+    });
   } catch (err: unknown) {
-    console.error(
-      "TRAINING UPDATE POST ERROR:",
-      err,
-    )
+    console.error("TRAINING UPDATE POST ERROR:", err);
 
     return NextResponse.json(
       {
@@ -230,6 +186,6 @@ export async function POST(
             : "Failed to create training update",
       },
       { status: 400 },
-    )
+    );
   }
 }

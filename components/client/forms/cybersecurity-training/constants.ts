@@ -1,34 +1,9 @@
-import {
-  CybersecurityService,
-  CybersecurityTrainingFormData,
-} from "./types"
+import { CybersecurityTrainingFormData } from "./types";
+import { CYBERSECURITY_TRAINING_SERVICES } from "@/lib/cybersecurity-training-catalog";
 
-export const CYBERSECURITY_SERVICES: CybersecurityService[] = [
-  {
-    id: "professional_training",
-    title: "Professional Cybersecurity Training",
-    description:
-      "Hands-on technical cybersecurity training for IT professionals, SOC analysts, DFIR teams, OSINT analysts, penetration testers and security engineers.",
-  },
-  {
-    id: "security_awareness",
-    title: "Security Awareness Training",
-    description:
-      "Security awareness programmes designed for employees to recognize phishing, malware, password attacks, insider threats and social engineering.",
-  },
-  {
-    id: "digital_safety",
-    title: "Digital Safety Education",
-    description:
-      "Digital safety education for individuals, students and families covering privacy, safe internet usage, identity protection and online scams.",
-  },
-  {
-    id: "security_assessment",
-    title: "Security Assessment & Advisory",
-    description:
-      "Assessment of an organization's security maturity with recommendations, improvement roadmaps and cybersecurity guidance.",
-  },
-]
+export const CYBERSECURITY_SERVICES = CYBERSECURITY_TRAINING_SERVICES.filter(
+  (service) => service.id !== "custom_training",
+);
 
 export const COUNTRY_CURRENCY_MAP: Record<string, string> = {
   Nigeria: "NGN",
@@ -45,21 +20,13 @@ export const COUNTRY_CURRENCY_MAP: Record<string, string> = {
   Japan: "JPY",
   China: "CNY",
   Singapore: "SGD",
-}
+};
 
-export const COUNTRY_OPTIONS = Object.keys(
-  COUNTRY_CURRENCY_MAP
-).sort()
+export const COUNTRY_OPTIONS = Object.keys(COUNTRY_CURRENCY_MAP).sort();
 
-export const TRAINING_FORMATS = [
-  "Live Online",
-  "Self-Paced",
-  "Hybrid",
-]
+export const TRAINING_FORMATS = ["Live Online", "Self-Paced", "Hybrid"];
 
-export const TRAINING_DURATION_OPTIONS = [
-  "custom",
-]
+export const TRAINING_DURATION_OPTIONS = ["custom"];
 
 export const TRAINING_AUDIENCE_OPTIONS = [
   "individual",
@@ -72,7 +39,7 @@ export const TRAINING_AUDIENCE_OPTIONS = [
   "General Public",
   "Mixed Audience",
   "Custom",
-]
+];
 
 export const INDUSTRIES = [
   "Education",
@@ -86,7 +53,7 @@ export const INDUSTRIES = [
   "Legal",
   "NGO",
   "Other",
-]
+];
 
 export const TRAINING_OBJECTIVES = [
   "Improve Security Awareness",
@@ -100,7 +67,7 @@ export const TRAINING_OBJECTIVES = [
   "Cloud Security",
   "Network Security",
   "custom",
-]
+];
 
 export const TRAINING_TOPICS = [
   "Passwords",
@@ -116,13 +83,9 @@ export const TRAINING_TOPICS = [
   "AI Security",
   "Dark Web",
   "Custom",
-]
+];
 
-export const TRAINING_MATERIALS = [
-  "Slides",
-  "Videos",
-  "pdfs"
-]
+export const TRAINING_MATERIALS = ["Slides", "Videos", "pdfs"];
 
 export const COMPLIANCE_STANDARDS = [
   "No Specific Requirement",
@@ -133,13 +96,13 @@ export const COMPLIANCE_STANDARDS = [
   "NDPR",
   "HIPAA",
   "CIS Controls",
-]
+];
 
 export const TRAINING_CERTIFICATE_OPTIONS = [
   "Completion Certificate",
   "Assessment Certificate",
   "No Certificate",
-]
+];
 
 export const TRAINING_OUTCOME_OPTIONS = [
   "Improve Security Awareness",
@@ -149,7 +112,7 @@ export const TRAINING_OUTCOME_OPTIONS = [
   "Prepare for Certification",
   "Improve Incident Readiness",
   "Custom",
-]
+];
 
 export const TRAINING_BUDGET_OPTIONS = [
   "Under ₦500,000",
@@ -157,7 +120,7 @@ export const TRAINING_BUDGET_OPTIONS = [
   "₦2,000,000 - ₦5,000,000",
   "Above ₦5,000,000",
   "Custom",
-]
+];
 
 export const STEPS = [
   {
@@ -176,7 +139,7 @@ export const STEPS = [
     id: 4,
     label: "Review & Authorization",
   },
-]
+];
 
 export const EMPTY_FORM: CybersecurityTrainingFormData = {
   category: "cybersecurity",
@@ -231,4 +194,4 @@ export const EMPTY_FORM: CybersecurityTrainingFormData = {
   communication_signal: "",
 
   authorization_confirmed: false,
-}
+};

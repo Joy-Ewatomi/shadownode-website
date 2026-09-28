@@ -1,114 +1,106 @@
-import { nanoid } from "nanoid"
-import { NextRequest, NextResponse } from "next/server"
+import { nanoid } from "nanoid";
+import { NextRequest, NextResponse } from "next/server";
 
-import { auditLog, getCurrentUser } from "@/lib/auth"
-import { query, withTransaction } from "@/lib/db"
-import { CommunicationPreferenceError, validateCommunicationSelection } from "@/lib/communication-channels"
-import { createQuoteVersion } from "@/lib/services/quote-version-service"
-import { analyzeCybersecurityTrainingRequest } from "@/lib/services/cybersecurity-training-analysis-service"
-import { notifyRequestReviewers, notifyUser } from "@/lib/services/notification-service"
-import { recordRequestAudit } from "@/lib/services/quote-workflow-service"
-import { isSameOriginMutation } from "@/lib/security-center"
+import { auditLog, getCurrentUser } from "@/lib/auth";
+import { query, withTransaction } from "@/lib/db";
+import {
+  CommunicationPreferenceError,
+  validateCommunicationSelection,
+} from "@/lib/communication-channels";
+import { createQuoteVersion } from "@/lib/services/quote-version-service";
+import { analyzeCybersecurityTrainingRequest } from "@/lib/services/cybersecurity-training-analysis-service";
+import {
+  notifyRequestReviewers,
+  notifyUser,
+} from "@/lib/services/notification-service";
+import { recordRequestAudit } from "@/lib/services/quote-workflow-service";
+import { isSameOriginMutation } from "@/lib/security-center";
+import {
+  isCybersecurityTrainingServiceId,
+  normalizeCybersecurityTrainingServiceType,
+} from "@/lib/cybersecurity-training-catalog";
 
 // ============================================================
 // HELPERS
 // ============================================================
 
 function clean(value: unknown): string {
-  return typeof value === "string" ? value.trim() : ""
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function nullableString(value: unknown): string | null {
-  const result = clean(value)
-  return result || null
+  const result = clean(value);
+  return result || null;
 }
 
 function normalizeCommunicationMethod(value: unknown) {
   const method = clean(value)
     .toLowerCase()
-    .replace(/[\s-]+/g, "_")
+    .replace(/[\s-]+/g, "_");
 
-  if (method === "email") return "email"
+  if (method === "email") return "email";
   if (method === "whatsapp" || method === "whats_app") {
-    return "whatsapp"
+    return "whatsapp";
   }
 
-  return "portal"
+  return "portal";
 }
 
 function nullableDate(value: unknown): string | null {
-  const result = clean(value)
+  const result = clean(value);
 
   if (!result) {
-    return null
+    return null;
   }
 
-  const normalized = result.slice(0, 10)
+  const normalized = result.slice(0, 10);
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    return null
+    return null;
   }
 
-  return normalized
+  return normalized;
 }
 
 function nullableInteger(value: unknown): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null
+  if (value === null || value === undefined || value === "") {
+    return null;
   }
 
-  const parsed = Number.parseInt(
-    String(value),
-    10,
-  )
+  const parsed = Number.parseInt(String(value), 10);
 
-  return Number.isFinite(parsed)
-    ? parsed
-    : null
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function arrayToText(value: unknown): string {
   if (!Array.isArray(value)) {
-    return clean(value)
+    return clean(value);
   }
 
   return value
-    .filter(
-      (item) =>
-        typeof item === "string" &&
-        item.trim().length > 0,
-    )
+    .filter((item) => typeof item === "string" && item.trim().length > 0)
     .map((item) => item.trim())
-    .join(", ")
+    .join(", ");
 }
 
-function combineText(
-  ...values: Array<unknown>
-): string {
+function combineText(...values: Array<unknown>): string {
   return values
     .map((value) => clean(value))
     .filter(Boolean)
-    .join("\n")
+    .join("\n");
 }
 
-function arrayOrEmpty(
-  value: unknown,
-): string[] {
+function arrayOrEmpty(value: unknown): string[] {
   if (!Array.isArray(value)) {
-    return []
+    return [];
   }
 
   return value
     .filter(
       (item): item is string =>
-        typeof item === "string" &&
-        item.trim().length > 0,
+        typeof item === "string" && item.trim().length > 0,
     )
-    .map((item) => item.trim())
+    .map((item) => item.trim());
 }
 
 // ============================================================
@@ -131,31 +123,16 @@ function arrayOrEmpty(
  * Therefore we normalize professional_training at the
  * persistence boundary.
  */
-function normalizeStoredServiceType(
-  value: string,
-): string {
-  const normalized =
-    value.trim().toLowerCase()
-
-  if (
-    normalized ===
-    "professional_training"
-  ) {
-    return "cybersecurity_training"
-  }
-
-  return value.trim()
-}
-
 // ============================================================
 // POST CLIENT CYBERSECURITY TRAINING REQUEST
 // ============================================================
 
-export async function POST(
-  request: NextRequest,
-) {
+export async function POST(request: NextRequest) {
   if (!isSameOriginMutation(request)) {
-    return NextResponse.json({ error: "Request could not be verified." }, { status: 403 })
+    return NextResponse.json(
+      { error: "Request could not be verified." },
+      { status: 403 },
+    );
   }
 
   try {
@@ -163,7 +140,7 @@ export async function POST(
     // AUTHENTICATION
     // ========================================================
 
-    const user = await getCurrentUser()
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json(
@@ -173,7 +150,7 @@ export async function POST(
         {
           status: 401,
         },
-      )
+      );
     }
 
     if (user.role !== "client") {
@@ -184,274 +161,184 @@ export async function POST(
         {
           status: 403,
         },
-      )
+      );
     }
 
     // ========================================================
     // BODY
     // ========================================================
 
-    const body =
-      await request.json()
-    const submissionKey = clean(body.submission_key)
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(submissionKey)) {
-      return NextResponse.json({ error: "Invalid submission key." }, { status: 400 })
+    const body = await request.json();
+    const submissionKey = clean(body.submission_key);
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        submissionKey,
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Invalid submission key." },
+        { status: 400 },
+      );
     }
 
     // ========================================================
     // BASIC SERVICE INFORMATION
     // ========================================================
 
-    const category =
-      clean(
-        body.category ||
-          "cybersecurity",
-      )
+    // This dedicated endpoint can create only cybersecurity training.
+    // The browser cannot reclassify it as OSINT or another workflow.
+    const category = "cybersecurity";
 
-    const submittedServiceType =
-      clean(
-        body.service_type,
-      )
+    const submittedServiceType = clean(body.service_type).toLowerCase();
 
-    if (!submittedServiceType) {
+    if (!isCybersecurityTrainingServiceId(submittedServiceType)) {
       return NextResponse.json(
-        {
-          error:
-            "Training service type is required",
-        },
-        {
-          status: 400,
-        },
-      )
+        { error: "Select a valid cybersecurity training service." },
+        { status: 400 },
+      );
     }
 
-    /*
-     * Normalize professional_training to the canonical
-     * cybersecurity training workflow service type.
-     */
     const service_type =
-      normalizeStoredServiceType(
-        submittedServiceType,
-      )
+      normalizeCybersecurityTrainingServiceType(submittedServiceType);
 
-    const custom_description =
-      clean(
-        body.custom_description,
-      )
+    const custom_description = clean(body.custom_description);
+
+    if (submittedServiceType === "custom_training" && !custom_description) {
+      return NextResponse.json(
+        { error: "Describe the custom cybersecurity training required." },
+        { status: 400 },
+      );
+    }
 
     // ========================================================
     // TRAINING ORGANIZATION
     // ========================================================
 
-    const training_organization_name =
-      clean(
-        body.training_organization_name,
-      )
+    const training_organization_name = clean(body.training_organization_name);
 
-    const training_client_type =
-      clean(
-        body.training_client_type ||
-          "organization",
-      )
+    const training_client_type = clean(
+      body.training_client_type || "organization",
+    );
 
-    const training_participant_count =
-      nullableInteger(
-        body.training_participant_count,
-      )
+    const training_participant_count = nullableInteger(
+      body.training_participant_count,
+    );
 
-    const training_skill_level =
-      clean(
-        body.training_skill_level ||
-          "beginner",
-      )
+    const training_skill_level = clean(body.training_skill_level || "beginner");
 
     // ========================================================
     // TRAINING AUDIENCE
     // ========================================================
 
-    const training_audience =
-      clean(
-        body.training_audience,
-      )
+    const training_audience = clean(body.training_audience);
 
-    const custom_training_audience =
-      clean(
-        body.custom_training_audience,
-      )
+    const custom_training_audience = clean(body.custom_training_audience);
 
     const finalTrainingAudience =
       training_audience === "custom"
         ? custom_training_audience
-        : training_audience
+        : training_audience;
 
     // ========================================================
     // TRAINING INDUSTRY
     // ========================================================
 
-    const training_industry =
-      clean(
-        body.training_industry,
-      )
+    const training_industry = clean(body.training_industry);
 
-    const custom_industry =
-      clean(
-        body.custom_industry,
-      )
+    const custom_industry = clean(body.custom_industry);
 
     const finalTrainingIndustry =
-      training_industry === "custom"
-        ? custom_industry
-        : training_industry
+      training_industry === "custom" ? custom_industry : training_industry;
 
     // ========================================================
     // TRAINING GOAL / OBJECTIVES
     // ========================================================
 
-    const training_goal =
-      clean(
-        body.training_goal,
-      )
+    const training_goal = clean(body.training_goal);
 
-    const training_objective =
-      clean(
-        body.training_objective,
-      )
+    const training_objective = clean(body.training_objective);
 
-    const custom_training_objective =
-      clean(
-        body.custom_training_objective,
-      )
+    const custom_training_objective = clean(body.custom_training_objective);
 
     const finalTrainingObjective =
       training_objective === "custom"
         ? custom_training_objective
-        : training_objective
+        : training_objective;
 
-    const training_objectives =
-      arrayOrEmpty(
-        body.training_objectives,
-      )
+    const training_objectives = arrayOrEmpty(body.training_objectives);
 
     // ========================================================
     // TRAINING TOPICS
     // ========================================================
 
-    const training_topics_selected =
-      arrayOrEmpty(
-        body.training_topics_selected,
-      )
+    const training_topics_selected = arrayOrEmpty(
+      body.training_topics_selected,
+    );
 
-    const training_custom_topic =
-      clean(
-        body.training_custom_topic,
-      )
+    const training_custom_topic = clean(body.training_custom_topic);
 
-    const training_topics =
-      combineText(
-        training_topics_selected.join(", "),
+    const training_topics = combineText(
+      training_topics_selected.join(", "),
 
-        training_custom_topic
-          ? `Custom topic: ${training_custom_topic}`
-          : "",
+      training_custom_topic ? `Custom topic: ${training_custom_topic}` : "",
 
-        training_objectives.length > 0
-          ? `Learning objectives: ${training_objectives.join(", ")}`
-          : "",
-      )
+      training_objectives.length > 0
+        ? `Learning objectives: ${training_objectives.join(", ")}`
+        : "",
+    );
 
     // ========================================================
     // TRAINING FORMAT / DURATION
     // ========================================================
 
-    const training_format =
-      clean(
-        body.training_format,
-      )
+    const training_format = clean(body.training_format);
 
-    const training_duration =
-      clean(
-        body.training_duration,
-      )
+    const training_duration = clean(body.training_duration);
 
-    const custom_sessions_per_week =
-      clean(
-        body.custom_sessions_per_week,
-      )
+    const custom_sessions_per_week = clean(body.custom_sessions_per_week);
 
-    const custom_hours_per_session =
-      clean(
-        body.custom_hours_per_session,
-      )
+    const custom_hours_per_session = clean(body.custom_hours_per_session);
 
-    const custom_training_days =
-      arrayOrEmpty(
-        body.custom_training_days,
-      )
+    const custom_training_days = arrayOrEmpty(body.custom_training_days);
 
-    const custom_session_time =
-      clean(
-        body.custom_session_time,
-      )
+    const custom_session_time = clean(body.custom_session_time);
 
-    const custom_training_period =
-      clean(
-        body.custom_training_period,
-      )
+    const custom_training_period = clean(body.custom_training_period);
 
     // ========================================================
     // MATERIALS / COMPLIANCE
     // ========================================================
 
-    const training_materials =
-      arrayOrEmpty(
-        body.training_materials,
-      )
+    const training_materials = arrayOrEmpty(body.training_materials);
 
-    const training_compliance =
-      arrayOrEmpty(
-        body.training_compliance,
-      )
+    const training_compliance = arrayOrEmpty(body.training_compliance);
 
-    const training_certificate =
-      clean(
-        body.training_certificate,
-      )
+    const training_certificate = clean(body.training_certificate);
 
-    const training_expected_outcome =
-      arrayOrEmpty(
-        body.training_expected_outcome,
-      )
+    const training_expected_outcome = arrayOrEmpty(
+      body.training_expected_outcome,
+    );
 
-    const custom_expected_outcome =
-      clean(
-        body.custom_expected_outcome,
-      )
+    const custom_expected_outcome = clean(body.custom_expected_outcome);
 
     const training_assessment_required =
-      body.training_assessment_required ===
-      true
+      body.training_assessment_required === true;
 
-    const training_labs_required =
-      body.training_labs_required ===
-      true
+    const training_labs_required = body.training_labs_required === true;
 
     // ========================================================
     // TRAINING DATES
     // ========================================================
 
-    const training_preferred_start_date =
-      nullableDate(
-        body.training_preferred_start_date,
-      )
+    const training_preferred_start_date = nullableDate(
+      body.training_preferred_start_date,
+    );
 
-    const training_preferred_completion_date =
-      nullableDate(
-        body.training_preferred_completion_date,
-      )
+    const training_preferred_completion_date = nullableDate(
+      body.training_preferred_completion_date,
+    );
 
-    const training_timeline_flexible =
-      body.training_timeline_flexible ===
-      true
+    const training_timeline_flexible = body.training_timeline_flexible === true;
 
     /*
      * IMPORTANT:
@@ -462,497 +349,357 @@ export async function POST(
      * They are NOT only stored inside training_preferred_dates.
      */
 
-    const training_preferred_dates =
-      combineText(
-        training_preferred_start_date
-          ? `Start date: ${training_preferred_start_date}`
-          : "",
+    const training_preferred_dates = combineText(
+      training_preferred_start_date
+        ? `Start date: ${training_preferred_start_date}`
+        : "",
 
-        training_preferred_completion_date
-          ? `Completion date: ${training_preferred_completion_date}`
-          : "",
+      training_preferred_completion_date
+        ? `Completion date: ${training_preferred_completion_date}`
+        : "",
 
-        `Timeline flexible: ${
-          training_timeline_flexible
-            ? "Yes"
-            : "No"
-        }`,
-      )
+      `Timeline flexible: ${training_timeline_flexible ? "Yes" : "No"}`,
+    );
 
     // ========================================================
     // ADDITIONAL REQUIREMENTS
     // ========================================================
 
-    const frontendAdditionalRequirements =
-      clean(
-        body.training_additional_requirements,
-      )
+    const frontendAdditionalRequirements = clean(
+      body.training_additional_requirements,
+    );
 
-    const trainingAdditionalRequirements =
-      combineText(
-        frontendAdditionalRequirements
-          ? `Additional requirements:\n${frontendAdditionalRequirements}`
-          : "",
+    const trainingAdditionalRequirements = combineText(
+      frontendAdditionalRequirements
+        ? `Additional requirements:\n${frontendAdditionalRequirements}`
+        : "",
 
-        finalTrainingAudience
-          ? `Training audience: ${finalTrainingAudience}`
-          : "",
+      finalTrainingAudience
+        ? `Training audience: ${finalTrainingAudience}`
+        : "",
 
-        finalTrainingIndustry
-          ? `Industry: ${finalTrainingIndustry}`
-          : "",
+      finalTrainingIndustry ? `Industry: ${finalTrainingIndustry}` : "",
 
-        finalTrainingObjective
-          ? `Training objective: ${finalTrainingObjective}`
-          : "",
+      finalTrainingObjective
+        ? `Training objective: ${finalTrainingObjective}`
+        : "",
 
-        training_format
-          ? `Training format: ${training_format}`
-          : "",
+      training_format ? `Training format: ${training_format}` : "",
 
-        training_duration
-          ? `Training duration: ${training_duration}`
-          : "",
+      training_duration ? `Training duration: ${training_duration}` : "",
 
-        custom_sessions_per_week
-          ? `Sessions per week: ${custom_sessions_per_week}`
-          : "",
+      custom_sessions_per_week
+        ? `Sessions per week: ${custom_sessions_per_week}`
+        : "",
 
-        custom_hours_per_session
-          ? `Hours per session: ${custom_hours_per_session}`
-          : "",
+      custom_hours_per_session
+        ? `Hours per session: ${custom_hours_per_session}`
+        : "",
 
-        custom_training_days.length > 0
-          ? `Training days: ${custom_training_days.join(", ")}`
-          : "",
+      custom_training_days.length > 0
+        ? `Training days: ${custom_training_days.join(", ")}`
+        : "",
 
-        custom_session_time
-          ? `Session time: ${custom_session_time}`
-          : "",
+      custom_session_time ? `Session time: ${custom_session_time}` : "",
 
-        custom_training_period
-          ? `Training period: ${custom_training_period}`
-          : "",
+      custom_training_period
+        ? `Training period: ${custom_training_period}`
+        : "",
 
-        training_materials.length > 0
-          ? `Materials: ${training_materials.join(", ")}`
-          : "",
+      training_materials.length > 0
+        ? `Materials: ${training_materials.join(", ")}`
+        : "",
 
-        training_compliance.length > 0
-          ? `Compliance requirements: ${training_compliance.join(", ")}`
-          : "",
+      training_compliance.length > 0
+        ? `Compliance requirements: ${training_compliance.join(", ")}`
+        : "",
 
-        training_certificate
-          ? `Certificate: ${training_certificate}`
-          : "",
+      training_certificate ? `Certificate: ${training_certificate}` : "",
 
-        training_expected_outcome.length > 0
-          ? `Expected outcomes: ${training_expected_outcome.join(", ")}`
-          : "",
+      training_expected_outcome.length > 0
+        ? `Expected outcomes: ${training_expected_outcome.join(", ")}`
+        : "",
 
-        custom_expected_outcome
-          ? `Custom expected outcome: ${custom_expected_outcome}`
-          : "",
+      custom_expected_outcome
+        ? `Custom expected outcome: ${custom_expected_outcome}`
+        : "",
 
-        `Assessment required: ${
-          training_assessment_required
-            ? "Yes"
-            : "No"
-        }`,
+      `Assessment required: ${training_assessment_required ? "Yes" : "No"}`,
 
-        `Labs required: ${
-          training_labs_required
-            ? "Yes"
-            : "No"
-        }`,
-      )
+      `Labs required: ${training_labs_required ? "Yes" : "No"}`,
+    );
 
     // ========================================================
     // DESCRIPTION
     // ========================================================
 
-    const description =
-      combineText(
-        training_goal
-          ? `Training goal: ${training_goal}`
-          : "",
+    const description = combineText(
+      training_goal ? `Training goal: ${training_goal}` : "",
 
-        finalTrainingObjective
-          ? `Training objective: ${finalTrainingObjective}`
-          : "",
+      finalTrainingObjective
+        ? `Training objective: ${finalTrainingObjective}`
+        : "",
 
-        training_topics
-          ? `Training topics:\n${training_topics}`
-          : "",
+      training_topics ? `Training topics:\n${training_topics}` : "",
 
-        trainingAdditionalRequirements,
+      trainingAdditionalRequirements,
 
-        custom_description
-          ? `Client description:\n${custom_description}`
-          : "",
-      )
+      custom_description ? `Client description:\n${custom_description}` : "",
+    );
 
-    const title =
-      clean(
-        body.title ||
-          custom_description ||
-          training_goal ||
-          "Cybersecurity Training Request",
-      )
+    const title = clean(
+      body.title ||
+        custom_description ||
+        training_goal ||
+        "Cybersecurity Training Request",
+    );
 
     // ========================================================
     // GENERAL REQUEST INFORMATION
     // ========================================================
 
-    const urgency =
-      clean(
-        body.urgency ||
-          "normal",
-      )
+    const urgency = clean(body.urgency || "normal");
 
-    const existing_information =
-      clean(
-        body.existing_information,
-      )
+    const existing_information = clean(body.existing_information);
 
-    const investigation_depth =
-      clean(
-        body.investigation_depth ||
-          "standard",
-      )
+    const investigation_depth = clean(body.investigation_depth || "standard");
 
-    const confidentiality_level =
-      clean(
-        body.confidentiality_level ||
-          "standard",
-      )
+    const confidentiality_level = clean(
+      body.confidentiality_level || "standard",
+    );
 
-    const authorization_confirmed =
-      body.authorization_confirmed ===
-      true
+    const authorization_confirmed = body.authorization_confirmed === true;
 
     // ========================================================
     // COMMUNICATION
     // ========================================================
 
-    const contact_method =
-      normalizeCommunicationMethod(
-        body.contact_method ||
-          body.communication_method ||
-          body.communication_channel ||
-          "portal",
-      )
+    const contact_method = normalizeCommunicationMethod(
+      body.contact_method ||
+        body.communication_method ||
+        body.communication_channel ||
+        "portal",
+    );
 
     const communication = validateCommunicationSelection({
-      preference: body.communication_method || body.communication_channel || contact_method,
+      preference:
+        body.communication_method ||
+        body.communication_channel ||
+        contact_method,
       whatsappNumber: body.communication_whatsapp,
       whatsappConsent: body.whatsapp_consent,
-    })
-    const communication_method = communication.preference
+    });
+    const communication_method = communication.preference;
 
-    const communication_email =
-      clean(
-        body.communication_email,
-      )
+    const communication_email = clean(body.communication_email);
 
-    const communication_country_code =
-      clean(
-        body.communication_country_code,
-      )
+    const communication_country_code = clean(body.communication_country_code);
 
-    const communication_phone =
-      clean(
-        body.communication_phone,
-      )
+    const communication_phone = clean(body.communication_phone);
 
-    const communication_whatsapp = communication.whatsappNumber || ""
+    const communication_whatsapp = communication.whatsappNumber || "";
 
-    const communication_signal =
-      clean(
-        body.communication_signal,
-      )
+    const communication_signal = clean(body.communication_signal);
 
     // ========================================================
     // COUNTRY / CURRENCY
     // ========================================================
 
-    let client_country =
-      clean(
-        body.client_country,
-      )
+    let client_country = clean(body.client_country);
 
-    const custom_country =
-      clean(
-        body.custom_country,
-      )
+    const custom_country = clean(body.custom_country);
 
-    if (
-      client_country === "custom" &&
-      custom_country
-    ) {
-      client_country =
-        custom_country
+    if (client_country === "custom" && custom_country) {
+      client_country = custom_country;
     }
 
-    const preferred_currency =
-      clean(
-        body.preferred_currency ||
-          body.currency ||
-          "USD",
-      )
+    const preferred_currency = clean(
+      body.preferred_currency || body.currency || "USD",
+    );
 
     // ========================================================
     // VALIDATION
     // ========================================================
 
-    if (
-      description.trim().length <
-      20
-    ) {
+    if (description.trim().length < 20) {
       return NextResponse.json(
         {
-          error:
-            "Please provide enough training details",
+          error: "Please provide enough training details",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
-    if (
-      !training_goal &&
-      !finalTrainingObjective
-    ) {
+    if (!training_goal && !finalTrainingObjective) {
       return NextResponse.json(
         {
-          error:
-            "Training goal or objective is required",
+          error: "Training goal or objective is required",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
-    if (
-      !training_preferred_start_date
-    ) {
+    if (!training_preferred_start_date) {
       return NextResponse.json(
         {
-          error:
-            "Preferred training start date is required",
+          error: "Preferred training start date is required",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
     if (!client_country) {
       return NextResponse.json(
         {
-          error:
-            "Country is required",
+          error: "Country is required",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
     if (!communication_method) {
       return NextResponse.json(
         {
-          error:
-            "Communication method is required",
+          error: "Communication method is required",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
-    if (
-      communication_method ===
-        "email" &&
-      !communication_email
-    ) {
+    if (communication_method === "email" && !communication_email) {
       return NextResponse.json(
         {
-          error:
-            "Communication email is required",
+          error: "Communication email is required",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
-    if (
-      communication_method ===
-        "whatsapp" &&
-      !communication_whatsapp
-    ) {
+    if (communication_method === "whatsapp" && !communication_whatsapp) {
       return NextResponse.json(
         {
-          error:
-            "WhatsApp number is required",
+          error: "WhatsApp number is required",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
     if (!authorization_confirmed) {
       return NextResponse.json(
         {
-          error:
-            "You must confirm lawful authorization for this request",
+          error: "You must confirm lawful authorization for this request",
         },
         {
           status: 400,
         },
-      )
+      );
     }
 
     // ========================================================
     // TRACKING NUMBER
     // ========================================================
 
-    const year =
-      new Date().getFullYear()
+    const year = new Date().getFullYear();
 
-    const existing =
-      await query<{
-        total: string | number
-      }>(
-        `
+    const existing = await query<{
+      total: string | number;
+    }>(
+      `
         SELECT COUNT(*) AS total
         FROM requests
         WHERE created_at >= $1
           AND created_at < $2
         `,
-        [
-          `${year}-01-01`,
-          `${year + 1}-01-01`,
-        ],
-      )
+      [`${year}-01-01`, `${year + 1}-01-01`],
+    );
 
-    const nextNumber =
-      Number(
-        existing.rows[0]?.total ||
-          0,
-      ) + 1
+    const nextNumber = Number(existing.rows[0]?.total || 0) + 1;
 
-    const trackingNumber =
-      `SOB-${year}-${String(
-        nextNumber,
-      ).padStart(6, "0")}`
+    const trackingNumber = `SOB-${year}-${String(nextNumber).padStart(6, "0")}`;
 
     // ========================================================
     // CYBERSECURITY TRAINING ANALYSIS
     // ========================================================
 
-    const analysis =
-      analyzeCybersecurityTrainingRequest(
-        {
-          serviceType:
-            service_type,
+    const analysis = analyzeCybersecurityTrainingRequest({
+      serviceType: service_type,
 
-          description,
+      description,
 
-          organizationName:
-            training_organization_name,
+      organizationName: training_organization_name,
 
-          clientType:
-            training_client_type,
+      clientType: training_client_type,
 
-          participantCount:
-            training_participant_count,
+      participantCount: training_participant_count,
 
-          skillLevel:
-            training_skill_level,
+      skillLevel: training_skill_level,
 
-          audience:
-            finalTrainingAudience,
+      audience: finalTrainingAudience,
 
-          industry:
-            finalTrainingIndustry,
+      industry: finalTrainingIndustry,
 
-          goal:
-            training_goal,
+      goal: training_goal,
 
-          objective:
-            finalTrainingObjective,
+      objective: finalTrainingObjective,
 
-          topics:
-            training_topics_selected,
+      topics: training_topics_selected,
 
-          objectives:
-            training_objectives,
+      objectives: training_objectives,
 
-          customTopic:
-            training_custom_topic,
+      customTopic: training_custom_topic,
 
-          format:
-            training_format,
+      format: training_format,
 
-          duration:
-            training_duration,
+      duration: training_duration,
 
-          sessionsPerWeek:
-            custom_sessions_per_week,
+      sessionsPerWeek: custom_sessions_per_week,
 
-          hoursPerSession:
-            custom_hours_per_session,
+      hoursPerSession: custom_hours_per_session,
 
-          trainingDays:
-            custom_training_days,
+      trainingDays: custom_training_days,
 
-          sessionTime:
-            custom_session_time,
+      sessionTime: custom_session_time,
 
-          trainingPeriod:
-            custom_training_period,
+      trainingPeriod: custom_training_period,
 
-          materials:
-            training_materials,
+      materials: training_materials,
 
-          compliance:
-            training_compliance,
+      compliance: training_compliance,
 
-          certificate:
-            training_certificate,
+      certificate: training_certificate,
 
-          expectedOutcomes:
-            training_expected_outcome,
+      expectedOutcomes: training_expected_outcome,
 
-          customExpectedOutcome:
-            custom_expected_outcome,
+      customExpectedOutcome: custom_expected_outcome,
 
-          assessmentRequired:
-            training_assessment_required,
+      assessmentRequired: training_assessment_required,
 
-          labsRequired:
-            training_labs_required,
+      labsRequired: training_labs_required,
 
-          startDate:
-            training_preferred_start_date,
+      startDate: training_preferred_start_date,
 
-          completionDate:
-            training_preferred_completion_date,
+      completionDate: training_preferred_completion_date,
 
-          timelineFlexible:
-            training_timeline_flexible,
+      timelineFlexible: training_timeline_flexible,
 
-          urgency,
+      urgency,
 
-          confidentialityLevel:
-            confidentiality_level,
-        },
-      )
+      confidentialityLevel: confidentiality_level,
+    });
 
     /*
      * The AI assessment is generated once at request
@@ -960,176 +707,113 @@ export async function POST(
      * review page later does not re-run this analysis.
      */
 
-    const aiAnalysis =
-      JSON.stringify(
-        analysis,
-      )
+    const aiAnalysis = JSON.stringify(analysis);
 
-    const aiStatus =
-      "analyzed"
+    const aiStatus = "analyzed";
 
     // ========================================================
     // REQUEST TIMELINE
     // ========================================================
 
-    const timeline =
-      training_timeline_flexible
-        ? "flexible"
-        : training_preferred_completion_date
-          ? "deadline"
-          : urgency
+    const timeline = training_timeline_flexible
+      ? "flexible"
+      : training_preferred_completion_date
+        ? "deadline"
+        : urgency;
 
     // ========================================================
     // FULL TRAINING DETAILS
     // ========================================================
 
     const trainingDetails = {
-      audience:
-        training_audience || null,
+      audience: training_audience || null,
 
-      custom_audience:
-        custom_training_audience ||
-        null,
+      custom_audience: custom_training_audience || null,
 
-      final_audience:
-        finalTrainingAudience ||
-        null,
+      final_audience: finalTrainingAudience || null,
 
-      industry:
-        training_industry || null,
+      industry: training_industry || null,
 
-      custom_industry:
-        custom_industry || null,
+      custom_industry: custom_industry || null,
 
-      final_industry:
-        finalTrainingIndustry ||
-        null,
+      final_industry: finalTrainingIndustry || null,
 
-      objective:
-        training_objective || null,
+      objective: training_objective || null,
 
-      objectives:
-        training_objectives,
+      objectives: training_objectives,
 
-      final_objective:
-        finalTrainingObjective ||
-        null,
+      final_objective: finalTrainingObjective || null,
 
-      custom_objective:
-        custom_training_objective ||
-        null,
+      custom_objective: custom_training_objective || null,
 
-      topics:
-        training_topics_selected,
+      topics: training_topics_selected,
 
-      custom_topic:
-        training_custom_topic ||
-        null,
+      custom_topic: training_custom_topic || null,
 
-      format:
-        training_format || null,
+      format: training_format || null,
 
-      duration:
-        training_duration || null,
+      duration: training_duration || null,
 
       custom_schedule: {
-        sessions_per_week:
-          custom_sessions_per_week ||
-          null,
+        sessions_per_week: custom_sessions_per_week || null,
 
-        hours_per_session:
-          custom_hours_per_session ||
-          null,
+        hours_per_session: custom_hours_per_session || null,
 
-        training_days:
-          custom_training_days,
+        training_days: custom_training_days,
 
-        session_time:
-          custom_session_time ||
-          null,
+        session_time: custom_session_time || null,
 
-        training_period:
-          custom_training_period ||
-          null,
+        training_period: custom_training_period || null,
       },
 
-      materials:
-        training_materials,
+      materials: training_materials,
 
-      compliance:
-        training_compliance,
+      compliance: training_compliance,
 
-      certificate:
-        training_certificate ||
-        null,
+      certificate: training_certificate || null,
 
-      expected_outcomes:
-        training_expected_outcome,
+      expected_outcomes: training_expected_outcome,
 
-      custom_expected_outcome:
-        custom_expected_outcome ||
-        null,
+      custom_expected_outcome: custom_expected_outcome || null,
 
-      assessment_required:
-        training_assessment_required,
+      assessment_required: training_assessment_required,
 
-      labs_required:
-        training_labs_required,
+      labs_required: training_labs_required,
 
       /*
        * Keep the dates inside the JSON details as well.
        * They are ALSO persisted in dedicated columns.
        */
 
-      start_date:
-        training_preferred_start_date,
+      start_date: training_preferred_start_date,
 
-      completion_date:
-        training_preferred_completion_date,
+      completion_date: training_preferred_completion_date,
 
-      timeline_flexible:
-        training_timeline_flexible,
-    }
+      timeline_flexible: training_timeline_flexible,
+    };
 
-    const trainingDetailsJson =
-      JSON.stringify(
-        trainingDetails,
-      )
+    const trainingDetailsJson = JSON.stringify(trainingDetails);
 
     // ========================================================
     // JSONB
     // ========================================================
 
-    const supportingLinks =
-      JSON.stringify(
-        body.supporting_links ??
-          [],
-      )
+    const supportingLinks = JSON.stringify(body.supporting_links ?? []);
 
-    const evidenceUploads =
-      JSON.stringify(
-        body.evidence_files ??
-          [],
-      )
+    const evidenceUploads = JSON.stringify(body.evidence_files ?? []);
 
     // ========================================================
     // OPTIONAL FINANCIAL
     // ========================================================
 
     const finalPrice =
-      body.final_price !==
-        undefined &&
+      body.final_price !== undefined &&
       body.final_price !== null &&
       body.final_price !== ""
-        ? Number(
-            body.final_price,
-          )
-        : null
+        ? Number(body.final_price)
+        : null;
 
-    const priceNotes =
-      nullableString(
-        body.price_notes,
-      )
+    const priceNotes = nullableString(body.price_notes);
 
     // ========================================================
     // INSERT REQUEST
@@ -1137,9 +821,9 @@ export async function POST(
 
     const inserted = await withTransaction(async (client) => {
       const result = await client.query<{
-        id: string
-        case_number: string
-        created: boolean
+        id: string;
+        case_number: string;
+        created: boolean;
       }>(
         `
         INSERT INTO requests (
@@ -1319,9 +1003,7 @@ export async function POST(
 
           title,
           description,
-          nullableString(
-            custom_description,
-          ),
+          nullableString(custom_description),
           service_type,
 
           // ==================================================
@@ -1337,25 +1019,19 @@ export async function POST(
 
           aiAnalysis,
 
-          Number(
-            analysis.suggestedPrice,
-          ),
+          Number(analysis.suggestedPrice),
 
           aiStatus,
 
           analysis.complexity,
 
-          Number(
-            analysis.estimatedHours,
-          ),
+          Number(analysis.estimatedHours),
 
           analysis.suggestedService,
 
           analysis.suggestedPriority,
 
-          Number(
-            analysis.confidence,
-          ),
+          Number(analysis.confidence),
 
           analysis.reasoning,
 
@@ -1371,17 +1047,13 @@ export async function POST(
           // 23 DEADLINE
           // ==================================================
 
-          training_preferred_completion_date ||
-            training_preferred_start_date,
+          training_preferred_completion_date || training_preferred_start_date,
 
           // ==================================================
           // 24-25 INVESTIGATION
           // ==================================================
 
-          nullableString(
-            training_goal ||
-              finalTrainingObjective,
-          ),
+          nullableString(training_goal || finalTrainingObjective),
 
           "organization",
 
@@ -1389,23 +1061,17 @@ export async function POST(
           // 26-28 ORGANIZATION
           // ==================================================
 
-          nullableString(
-            training_organization_name,
-          ),
+          nullableString(training_organization_name),
 
           client_country,
 
-          nullableString(
-            finalTrainingIndustry,
-          ),
+          nullableString(finalTrainingIndustry),
 
           // ==================================================
           // 29-30 EXISTING INFORMATION
           // ==================================================
 
-          nullableString(
-            existing_information,
-          ),
+          nullableString(existing_information),
 
           investigation_depth,
 
@@ -1423,25 +1089,15 @@ export async function POST(
 
           communication_method,
 
-          nullableString(
-            communication_email,
-          ),
+          nullableString(communication_email),
 
-          nullableString(
-            communication_country_code,
-          ),
+          nullableString(communication_country_code),
 
-          nullableString(
-            communication_phone,
-          ),
+          nullableString(communication_phone),
 
-          nullableString(
-            communication_whatsapp,
-          ),
+          nullableString(communication_whatsapp),
 
-          nullableString(
-            communication_signal,
-          ),
+          nullableString(communication_signal),
 
           // ==================================================
           // 39-40 COUNTRY / CURRENCY
@@ -1459,43 +1115,27 @@ export async function POST(
 
           evidenceUploads,
 
-          nullableString(
-            trainingAdditionalRequirements,
-          ),
+          nullableString(trainingAdditionalRequirements),
 
           // ==================================================
           // 44-52 TRAINING
           // ==================================================
 
-          nullableString(
-            training_organization_name,
-          ),
+          nullableString(training_organization_name),
 
-          nullableString(
-            training_client_type,
-          ),
+          nullableString(training_client_type),
 
           training_participant_count,
 
-          nullableString(
-            training_skill_level,
-          ),
+          nullableString(training_skill_level),
 
-          nullableString(
-            training_goal,
-          ),
+          nullableString(training_goal),
 
-          nullableString(
-            training_topics,
-          ),
+          nullableString(training_topics),
 
-          nullableString(
-            training_preferred_dates,
-          ),
+          nullableString(training_preferred_dates),
 
-          nullableString(
-            trainingAdditionalRequirements,
-          ),
+          nullableString(trainingAdditionalRequirements),
 
           trainingDetailsJson,
 
@@ -1516,7 +1156,7 @@ export async function POST(
           submissionKey,
           timeline,
         ],
-      )
+      );
       await client.query(
         `UPDATE user_profiles SET communication_preference = $2,
          whatsapp_number_e164 = CASE WHEN $2 = 'whatsapp' THEN $3 ELSE whatsapp_number_e164 END,
@@ -1524,22 +1164,25 @@ export async function POST(
          whatsapp_consent_withdrawn_at = CASE WHEN $2 = 'whatsapp' THEN NULL ELSE whatsapp_consent_withdrawn_at END,
          updated_at = now() WHERE user_id = $1`,
         [user.id, communication_method, communication_whatsapp],
-      )
-      return result
-    })
+      );
+      return result;
+    });
 
     // ========================================================
     // REQUEST ID
     // ========================================================
 
-    const requestId =
-      inserted.rows[0].id
+    const requestId = inserted.rows[0].id;
 
     if (!inserted.rows[0].created) {
       return NextResponse.json(
-        { id: requestId, case_number: inserted.rows[0].case_number, duplicate: true },
+        {
+          id: requestId,
+          case_number: inserted.rows[0].case_number,
+          duplicate: true,
+        },
         { status: 200 },
-      )
+      );
     }
 
     // ========================================================
@@ -1555,143 +1198,112 @@ export async function POST(
 
       source: "ai",
 
-      price: Number(
-        analysis.suggestedPrice,
-      ),
+      price: Number(analysis.suggestedPrice),
 
-      currency:
-        preferred_currency,
+      currency: preferred_currency,
 
       estimated_completion:
-        training_preferred_completion_date ||
-        training_preferred_start_date,
+        training_preferred_completion_date || training_preferred_start_date,
 
-      reasoning:
-        analysis.reasoning,
+      reasoning: analysis.reasoning,
 
-      status:
-        "generated",
-    })
+      status: "generated",
+    });
 
     // ========================================================
     // NOTIFY ADMINS
     // ========================================================
 
     await notifyRequestReviewers({
-      type:
-        "client_request",
+      type: "client_request",
 
-      title:
-        "New cybersecurity training request",
+      title: "New cybersecurity training request",
 
-      message:
-        `Request ${trackingNumber} is awaiting review.`,
+      message: `Request ${trackingNumber} is awaiting review.`,
 
       metadata: {
-        request_id:
-          requestId,
-        resource_type:
-          "request",
-        resource_id:
-          requestId,
-        audience:
-          "administrator",
+        request_id: requestId,
+        resource_type: "request",
+        resource_id: requestId,
+        audience: "administrator",
 
-        target_page:
-          "admin_request_review",
+        target_page: "admin_request_review",
 
-        action:
-          "review_request",
+        action: "review_request",
         force_email: true,
         request_reference: trackingNumber,
         service_category: "Cybersecurity Training",
         submitted_at: new Date().toISOString(),
 
-        category:
-          category,
+        category: category,
 
-        service_type:
-          service_type,
+        service_type: service_type,
       },
-    })
+    });
 
     await notifyUser(user.id, {
       type: "request_submitted",
       title: "Training request received",
       message: "Your request has been received and is awaiting review.",
-      metadata: { request_id: requestId, resource_type: "request", resource_id: requestId },
-    })
+      metadata: {
+        request_id: requestId,
+        resource_type: "request",
+        resource_id: requestId,
+      },
+    });
 
     // ========================================================
     // REQUEST AUDIT
     // ========================================================
 
-    await recordRequestAudit(
-      requestId,
-      user.id,
-      "ai_estimate_generated",
-      {
-        suggested_price:
-          analysis.suggestedPrice,
+    await recordRequestAudit(requestId, user.id, "ai_estimate_generated", {
+      suggested_price: analysis.suggestedPrice,
 
-        confidence:
-          analysis.confidence,
+      confidence: analysis.confidence,
 
-        complexity:
-          analysis.complexity,
+      complexity: analysis.complexity,
 
-        estimated_hours:
-          analysis.estimatedHours,
+      estimated_hours: analysis.estimatedHours,
 
-        category,
+      category,
 
-        service_type,
+      service_type,
 
-        training_preferred_start_date,
+      training_preferred_start_date,
 
-        training_preferred_completion_date,
+      training_preferred_completion_date,
 
-        training_timeline_flexible,
-      },
-    )
+      training_timeline_flexible,
+    });
 
     // ========================================================
     // AUDIT LOG
     // ========================================================
 
-    await auditLog(
-      user.id,
-      "client_request_created",
-      request,
-      {
-        request_id:
-          requestId,
+    await auditLog(user.id, "client_request_created", request, {
+      request_id: requestId,
 
-        service_type,
+      service_type,
 
-        submitted_service_type:
-          submittedServiceType,
+      submitted_service_type: submittedServiceType,
 
-        category,
+      category,
 
-        tracking_number:
-          trackingNumber,
+      tracking_number: trackingNumber,
 
-        training_preferred_start_date,
+      training_preferred_start_date,
 
-        training_preferred_completion_date,
+      training_preferred_completion_date,
 
-        training_timeline_flexible,
-      },
-    )
+      training_timeline_flexible,
+    });
 
     // ========================================================
     // LOAD CREATED REQUEST
     // ========================================================
 
-    const created =
-      await query(
-        `
+    const created = await query(
+      `
         SELECT
           id,
           case_number,
@@ -1775,45 +1387,33 @@ export async function POST(
 
         LIMIT 1
         `,
-        [
-          requestId,
-          user.id,
-        ],
-      )
+      [requestId, user.id],
+    );
 
     if (!created.rows[0]) {
-      throw new Error(
-        "Request was created but could not be loaded",
-      )
+      throw new Error("Request was created but could not be loaded");
     }
 
     // ========================================================
     // RESPONSE
     // ========================================================
 
-    return NextResponse.json(
-      created.rows[0],
-      {
-        status: 201,
-      },
-    )
+    return NextResponse.json(created.rows[0], {
+      status: 201,
+    });
   } catch (error) {
     if (error instanceof CommunicationPreferenceError) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    console.error(
-      "CYBERSECURITY REQUEST POST ERROR",
-      error,
-    )
+    console.error("CYBERSECURITY REQUEST POST ERROR", error);
 
     return NextResponse.json(
       {
-        error:
-          "Failed to create cybersecurity training request",
+        error: "Failed to create cybersecurity training request",
       },
       {
         status: 500,
       },
-    )
+    );
   }
 }

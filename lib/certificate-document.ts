@@ -1,78 +1,97 @@
-import { readFile } from "node:fs/promises"
-import path from "node:path"
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
-import QRCode from "qrcode"
-import sharp from "sharp"
+import QRCode from "qrcode";
+import sharp from "sharp";
 
-import { getTrustedApplicationOrigin } from "@/lib/app-origin"
+import { getTrustedApplicationOrigin } from "@/lib/app-origin";
 
-import type { AppUser } from "@/lib/auth"
-import { query } from "@/lib/db"
-import { ensureAccess } from "@/lib/services/training-operations-service"
+import type { AppUser } from "@/lib/auth";
+import { query } from "@/lib/db";
+import { ensureAccess } from "@/lib/services/training-operations-service";
 
-export const CERTIFICATE_WIDTH = 3508
-export const CERTIFICATE_HEIGHT = 2480
-const CERTIFICATE_FONT_PATH = path.join(process.cwd(), "assets/fonts/Geist-Regular.ttf")
+export const CERTIFICATE_WIDTH = 3508;
+export const CERTIFICATE_HEIGHT = 2480;
+const CERTIFICATE_FONT_PATH = path.join(
+  process.cwd(),
+  "assets/fonts/Geist-Regular.ttf",
+);
 
-let certificateFontData: Promise<string> | null = null
+let certificateFontData: Promise<string> | null = null;
 
 function loadCertificateFont() {
-  certificateFontData ||= readFile(CERTIFICATE_FONT_PATH).then((font) => font.toString("base64"))
-  return certificateFontData
+  certificateFontData ||= readFile(CERTIFICATE_FONT_PATH).then((font) =>
+    font.toString("base64"),
+  );
+  return certificateFontData;
 }
 
 export type CertificateDocument = {
-  id: string
-  engagementId: string
-  certificateNumber: string
-  recipientName: string
-  organizationName: string | null
-  trainingTitle: string
-  trainingType: string | null
-  trainerName: string | null
-  completionDate: string
-  issueDate: string
-  verificationUrl: string
-}
+  id: string;
+  engagementId: string;
+  certificateNumber: string;
+  recipientName: string;
+  organizationName: string | null;
+  trainingTitle: string;
+  trainingType: string | null;
+  trainerName: string | null;
+  completionDate: string;
+  issueDate: string;
+  verificationUrl: string;
+};
 
 type CertificateRow = {
-  id: string
-  training_engagement_id: string
-  certificate_number: string
-  recipient_name: string
-  organization_name: string | null
-  training_title: string
-  training_type: string | null
-  trainer_name: string | null
-  completion_date: string
-  issued_at: string
-  verification_url: string | null
-  verification_token: string
-  status: string
-}
+  id: string;
+  training_engagement_id: string;
+  certificate_number: string;
+  recipient_name: string;
+  organization_name: string | null;
+  training_title: string;
+  training_type: string | null;
+  trainer_name: string | null;
+  completion_date: string;
+  issued_at: string;
+  verification_url: string | null;
+  verification_token: string;
+  status: string;
+};
 
 function clean(value: unknown) {
-  return typeof value === "string" ? value.trim() : ""
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function xml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;",
-  })[character] || character)
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&apos;",
+      })[character] || character,
+  );
 }
 
 function safeVerificationUrl(value: string | null, token: string) {
   if (value) {
     try {
-      const parsed = new URL(value)
-      if (parsed.protocol === "https:" || (process.env.NODE_ENV !== "production" && parsed.protocol === "http:")) {
-        return parsed.toString()
+      const parsed = new URL(value);
+      if (
+        parsed.protocol === "https:" ||
+        (process.env.NODE_ENV !== "production" && parsed.protocol === "http:")
+      ) {
+        return parsed.toString();
       }
     } catch {}
   }
-  const origin = getTrustedApplicationOrigin()
-  if (!origin) throw new Error("Trusted application origin is unavailable")
-  return new URL(`/verify/certificate/${encodeURIComponent(token)}`, origin).toString()
+  const origin = getTrustedApplicationOrigin();
+  if (!origin) throw new Error("Trusted application origin is unavailable");
+  return new URL(
+    `/verify/certificate/${encodeURIComponent(token)}`,
+    origin,
+  ).toString();
 }
 
 export async function loadAuthorizedCertificateDocument(
@@ -80,7 +99,7 @@ export async function loadAuthorizedCertificateDocument(
   certificateId: string,
   user: AppUser,
 ): Promise<CertificateDocument | null> {
-  await ensureAccess(engagementId, user, false)
+  await ensureAccess(engagementId, user, false);
   const result = await query<CertificateRow>(
     `SELECT id, training_engagement_id, certificate_number, recipient_name,
        organization_name, training_title, training_type, trainer_name,
@@ -89,9 +108,9 @@ export async function loadAuthorizedCertificateDocument(
      WHERE id = $1 AND training_engagement_id = $2 AND status = 'issued'
      LIMIT 1`,
     [certificateId, engagementId],
-  )
-  const row = result.rows[0]
-  if (!row) return null
+  );
+  const row = result.rows[0];
+  if (!row) return null;
   return {
     id: row.id,
     engagementId: row.training_engagement_id,
@@ -103,42 +122,59 @@ export async function loadAuthorizedCertificateDocument(
     trainerName: clean(row.trainer_name) || null,
     completionDate: clean(row.completion_date),
     issueDate: clean(row.issued_at),
-    verificationUrl: safeVerificationUrl(row.verification_url, row.verification_token),
-  }
+    verificationUrl: safeVerificationUrl(
+      row.verification_url,
+      row.verification_token,
+    ),
+  };
 }
 
 function formattedDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date)
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function wrappedLines(value: string, maxCharacters: number, maximumLines = 2) {
-  const words = value.split(/\s+/).filter(Boolean)
-  const lines: string[] = []
+  const words = value.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
   for (const word of words) {
-    const index = Math.max(0, lines.length - 1)
-    if (!lines.length || `${lines[index]} ${word}`.trim().length > maxCharacters) lines.push(word)
-    else lines[index] = `${lines[index]} ${word}`
+    const index = Math.max(0, lines.length - 1);
+    if (
+      !lines.length ||
+      `${lines[index]} ${word}`.trim().length > maxCharacters
+    )
+      lines.push(word);
+    else lines[index] = `${lines[index]} ${word}`;
   }
   if (lines.length > maximumLines) {
-    const visible = lines.slice(0, maximumLines)
-    visible[maximumLines - 1] = `${visible[maximumLines - 1].slice(0, Math.max(1, maxCharacters - 3))}...`
-    return visible
+    const visible = lines.slice(0, maximumLines);
+    visible[maximumLines - 1] =
+      `${visible[maximumLines - 1].slice(0, Math.max(1, maxCharacters - 3))}...`;
+    return visible;
   }
-  return lines
+  return lines;
 }
 
 export async function createCertificateSvg(document: CertificateDocument) {
   const [font, qr] = await Promise.all([
     loadCertificateFont(),
-    QRCode.toDataURL(document.verificationUrl, { errorCorrectionLevel: "M", margin: 1, width: 660 }),
-  ])
-  const titleLines = wrappedLines(document.trainingTitle, 48, 3)
-  const recipientLines = wrappedLines(document.recipientName, 38)
+    QRCode.toDataURL(document.verificationUrl, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 660,
+    }),
+  ]);
+  const titleLines = wrappedLines(document.trainingTitle, 48, 3);
+  const recipientLines = wrappedLines(document.recipientName, 38);
   const trainerBlock = document.trainerName
     ? `<text x="2730" y="1980" text-anchor="middle" class="meta strong">${xml(document.trainerName)}</text><line x1="2410" y1="2015" x2="3050" y2="2015" class="line"/><text x="2730" y="2070" text-anchor="middle" class="label">TRAINER</text>`
-    : ""
+    : "";
   return Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${CERTIFICATE_WIDTH}" height="${CERTIFICATE_HEIGHT}" viewBox="0 0 ${CERTIFICATE_WIDTH} ${CERTIFICATE_HEIGHT}">
   <defs>
@@ -154,7 +190,7 @@ export async function createCertificateSvg(document: CertificateDocument) {
   <rect x="145" y="145" width="3218" height="2190" fill="none" stroke="#173e35" stroke-width="2"/>
   <path d="M145 430 H3363 M145 2180 H3363" stroke="#b58a2b" stroke-width="4"/>
   <rect x="145" y="145" width="3218" height="285" fill="#071a17"/>
-  <text x="1754" y="265" text-anchor="middle" fill="#f8faf9" font-family="ShadowNode Certificate,sans-serif" font-size="70" font-weight="700">SHADOWNODE OPERATIONS BUREAU</text>
+  <text x="1754" y="265" text-anchor="middle" fill="#f8faf9" font-family="ShadowNode Certificate,sans-serif" font-size="70" font-weight="700">SHADOWNODE OPERATIONS BUREAU LIMITED</text>
   <text x="1754" y="350" text-anchor="middle" fill="#d2b15b" font-family="ShadowNode Certificate,sans-serif" font-size="30" letter-spacing="8">CERTIFICATE REGISTRY</text>
   <text x="1754" y="650" text-anchor="middle" class="serif" font-size="104" fill="#071a17">Certificate of Completion</text>
   <text x="1754" y="770" text-anchor="middle" class="label">THIS CERTIFIES THAT</text>
@@ -168,54 +204,101 @@ export async function createCertificateSvg(document: CertificateDocument) {
   <image href="${qr}" xlink:href="${qr}" x="1450" y="1720" width="330" height="330" image-rendering="pixelated"/>
   <text x="1615" y="2090" text-anchor="middle" class="label" font-size="20">VERIFY</text>
   <text x="1754" y="2255" text-anchor="middle" class="sans" font-size="27" fill="#496159">Certificate ${xml(document.certificateNumber)} - Issued ${xml(formattedDate(document.issueDate))}</text>
-</svg>`)
+</svg>`);
 }
 
 export async function renderCertificatePng(document: CertificateDocument) {
-  return sharp(await createCertificateSvg(document), { limitInputPixels: CERTIFICATE_WIDTH * CERTIFICATE_HEIGHT })
+  return sharp(await createCertificateSvg(document), {
+    limitInputPixels: CERTIFICATE_WIDTH * CERTIFICATE_HEIGHT,
+  })
     .resize(CERTIFICATE_WIDTH, CERTIFICATE_HEIGHT, { fit: "fill" })
     .png({ compressionLevel: 9 })
-    .toBuffer()
+    .toBuffer();
 }
 
 function pdfString(value: string) {
-  return value.replace(/([\\()])/g, "\\$1").replace(/[\r\n]/g, " ")
+  return value.replace(/([\\()])/g, "\\$1").replace(/[\r\n]/g, " ");
 }
 
 function buildPdf(jpeg: Buffer, title: string, certificateNumber: string) {
-  const objects: Buffer[] = []
-  const add = (body: string | Buffer) => objects.push(Buffer.isBuffer(body) ? body : Buffer.from(body, "binary"))
-  add("<< /Type /Catalog /Pages 2 0 R >>")
-  add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-  add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 841.89 595.28] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>")
-  const content = "q 841.89 0 0 595.28 0 0 cm /Im0 Do Q"
-  add(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`)
-  add(Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${CERTIFICATE_WIDTH} /Height ${CERTIFICATE_HEIGHT} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, "binary"), jpeg, Buffer.from("\nendstream", "binary")]))
-  add(`<< /Title (${pdfString(title)}) /Subject (Training certificate ${pdfString(certificateNumber)}) /Author (ShadowNode Operations Bureau Limited) /Creator (ShadowNode Operations Bureau) >>`)
-  const chunks = [Buffer.from("%PDF-1.7\n%\xE2\xE3\xCF\xD3\n", "binary")]
-  const offsets = [0]
-  let length = chunks[0].length
+  const objects: Buffer[] = [];
+  const add = (body: string | Buffer) =>
+    objects.push(Buffer.isBuffer(body) ? body : Buffer.from(body, "binary"));
+  add("<< /Type /Catalog /Pages 2 0 R >>");
+  add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  add(
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 841.89 595.28] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>",
+  );
+  const content = "q 841.89 0 0 595.28 0 0 cm /Im0 Do Q";
+  add(
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+  );
+  add(
+    Buffer.concat([
+      Buffer.from(
+        `<< /Type /XObject /Subtype /Image /Width ${CERTIFICATE_WIDTH} /Height ${CERTIFICATE_HEIGHT} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`,
+        "binary",
+      ),
+      jpeg,
+      Buffer.from("\nendstream", "binary"),
+    ]),
+  );
+  add(
+    `<< /Title (${pdfString(title)}) /Subject (Training certificate ${pdfString(certificateNumber)}) /Author (SHADOWNODE OPERATIONS BUREAU LIMITED) /Creator (SHADOWNODE OPERATIONS BUREAU LIMITED) >>`,
+  );
+  const chunks = [Buffer.from("%PDF-1.7\n%\xE2\xE3\xCF\xD3\n", "binary")];
+  const offsets = [0];
+  let length = chunks[0].length;
   objects.forEach((object, index) => {
-    offsets.push(length)
-    const chunk = Buffer.concat([Buffer.from(`${index + 1} 0 obj\n`, "binary"), object, Buffer.from("\nendobj\n", "binary")])
-    chunks.push(chunk); length += chunk.length
-  })
-  const xrefOffset = length
-  const xref = [`xref\n0 ${objects.length + 1}\n`, "0000000000 65535 f \n", ...offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)].join("")
-  chunks.push(Buffer.from(`${xref}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`, "binary"))
-  return Buffer.concat(chunks)
+    offsets.push(length);
+    const chunk = Buffer.concat([
+      Buffer.from(`${index + 1} 0 obj\n`, "binary"),
+      object,
+      Buffer.from("\nendobj\n", "binary"),
+    ]);
+    chunks.push(chunk);
+    length += chunk.length;
+  });
+  const xrefOffset = length;
+  const xref = [
+    `xref\n0 ${objects.length + 1}\n`,
+    "0000000000 65535 f \n",
+    ...offsets
+      .slice(1)
+      .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`),
+  ].join("");
+  chunks.push(
+    Buffer.from(
+      `${xref}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+      "binary",
+    ),
+  );
+  return Buffer.concat(chunks);
 }
 
 export async function renderCertificatePdf(document: CertificateDocument) {
-  const jpeg = await sharp(await createCertificateSvg(document), { limitInputPixels: CERTIFICATE_WIDTH * CERTIFICATE_HEIGHT })
+  const jpeg = await sharp(await createCertificateSvg(document), {
+    limitInputPixels: CERTIFICATE_WIDTH * CERTIFICATE_HEIGHT,
+  })
     .resize(CERTIFICATE_WIDTH, CERTIFICATE_HEIGHT, { fit: "fill" })
     .flatten({ background: "#f8faf9" })
     .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-    .toBuffer()
-  return buildPdf(jpeg, `${document.recipientName} - ${document.trainingTitle}`, document.certificateNumber)
+    .toBuffer();
+  return buildPdf(
+    jpeg,
+    `${document.recipientName} - ${document.trainingTitle}`,
+    document.certificateNumber,
+  );
 }
 
-export function certificateFilename(certificateNumber: string, extension: "pdf" | "png") {
-  const safe = certificateNumber.replace(/[^A-Za-z0-9._-]/g, "-").replace(/-+/g, "-").slice(0, 80) || "Certificate"
-  return `ShadowNode-Certificate-${safe}.${extension}`
+export function certificateFilename(
+  certificateNumber: string,
+  extension: "pdf" | "png",
+) {
+  const safe =
+    certificateNumber
+      .replace(/[^A-Za-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 80) || "Certificate";
+  return `ShadowNode-Certificate-${safe}.${extension}`;
 }
