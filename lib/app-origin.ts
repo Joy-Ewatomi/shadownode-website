@@ -41,7 +41,8 @@ export function resolveTrustedApplicationOrigin(
   environment: Record<string, string | undefined> = process.env,
   production = process.env.NODE_ENV === "production",
 ): TrustedApplicationOrigin | null {
-  for (const source of ORIGIN_SOURCES) {
+  const sources = production ? (["APP_URL"] as const) : ORIGIN_SOURCES
+  for (const source of sources) {
     const origin = validateApplicationOrigin(environment[source], production)
     if (origin) return { origin, source }
   }
@@ -50,6 +51,12 @@ export function resolveTrustedApplicationOrigin(
 
 export function getTrustedApplicationOrigin() {
   return resolveTrustedApplicationOrigin()?.origin || null
+}
+
+export function requireTrustedApplicationOrigin() {
+  const origin = getTrustedApplicationOrigin()
+  if (!origin) throw new Error("A valid canonical APP_URL is required")
+  return origin
 }
 
 export function createPasswordResetActionUrl(

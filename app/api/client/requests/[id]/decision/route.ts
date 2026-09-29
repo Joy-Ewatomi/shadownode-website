@@ -24,6 +24,7 @@ import {
   requestQuoteReview,
 } from "@/lib/services/quote-workflow-service"
 import { isTrainingRequest as classifyIsTrainingRequest } from "@/lib/services/request-engagement-classification"
+import { isSameOriginMutation } from "@/lib/security-center"
 
 type RouteContext = {
   params: Promise<{
@@ -68,6 +69,9 @@ async function handleDecision(
   { params }: RouteContext,
 ) {
   try {
+    if (!isSameOriginMutation(request)) {
+      return NextResponse.json({ error: "Request could not be verified." }, { status: 403 })
+    }
     // ========================================================
     // AUTHENTICATION
     // ========================================================

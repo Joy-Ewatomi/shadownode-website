@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
+import { isCybersecurityTrainingServiceId } from "@/lib/cybersecurity-training-catalog"
 
 type RequestData = {
   id: string
@@ -295,15 +296,16 @@ function isAIQuote(
 function getRequestWorkflow(request: RequestData) {
   const serviceType = String(request.service_type || "").trim().toLowerCase()
 
-  const isTraining =
-    serviceType === "cybersecurity_training" ||
-    serviceType.includes("cybersecurity training") ||
-    serviceType.includes("training")
-
   const isSecurityAssessment =
     serviceType === "security_assessment" ||
     serviceType.includes("security assessment") ||
     serviceType.includes("assessment")
+
+  const isTraining =
+    (!isSecurityAssessment && isCybersecurityTrainingServiceId(serviceType)) ||
+    serviceType === "cybersecurity_training" ||
+    serviceType.includes("cybersecurity training") ||
+    serviceType.includes("training")
 
   return {
     isTraining,

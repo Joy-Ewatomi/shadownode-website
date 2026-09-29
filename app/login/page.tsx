@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { evaluatePassword, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/password-policy'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { motion } from 'framer-motion'
+import { requestedServiceLabel, safeLoginDestination } from '@/lib/safe-login-redirect'
 
 export default function AuthPage() {
   const [tab, setTab] = useState<'login' | 'signup'>('login')
@@ -22,6 +23,7 @@ export default function AuthPage() {
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [twoFactorMethod, setTwoFactorMethod] = useState<'totp' | 'recovery'>('totp')
+  const [loginDestination, setLoginDestination] = useState('/dashboard')
 
   const passwordChecks = useMemo(() => {
     const policy = evaluatePassword(password)
@@ -35,6 +37,7 @@ export default function AuthPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       const pathname = window.location.pathname
+      setLoginDestination(safeLoginDestination(params.get('next')))
 
       if (pathname.endsWith('/signup') || params.get('tab') === 'signup') {
         setTab('signup')
@@ -109,7 +112,7 @@ export default function AuthPage() {
         setPassword('')
         setConfirmPassword('')
       } else {
-        window.location.href = '/dashboard'
+        window.location.href = loginDestination
       }
     } catch {
       setError('Network error. Please try again.')
@@ -138,6 +141,11 @@ export default function AuthPage() {
           <div className="border-b border-white/5 px-6 py-5 text-center sm:px-8">
             <h1 className="font-serif text-3xl font-bold text-[#20dc73]">ShadowNode</h1>
             <p className="mt-1 font-serif text-sm text-white/55">Enterprise Security Portal</p>
+            {requestedServiceLabel(loginDestination) ? (
+              <p className="mt-3 text-sm text-[#7bf69f]" role="status">
+                Sign in to continue to your {requestedServiceLabel(loginDestination)}.
+              </p>
+            ) : null}
           </div>
 
           <div className="px-5 py-5 sm:px-8 sm:py-6">

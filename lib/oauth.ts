@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import { NextResponse, type NextRequest } from "next/server.js"
+import { getTrustedApplicationOrigin, validateApplicationOrigin } from "@/lib/app-origin"
 
 export type OAuthProvider = "google" | "github"
 
@@ -10,31 +11,12 @@ const OAUTH_CACHE_HEADERS = {
   Expires: "0",
 }
 
-function origin(value: string | undefined) {
-  if (!value) return null
-
-  try {
-    const url = new URL(value.trim())
-    return url.protocol === "https:" || url.protocol === "http:"
-      ? url.origin
-      : null
-  } catch {
-    return null
-  }
-}
-
 export function getOAuthBaseUrl(request: NextRequest) {
-  const candidates = [
-    process.env.NETLIFY === "true" ? process.env.URL : undefined,
-    process.env.APP_URL,
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.URL,
-    request.nextUrl.origin,
-  ]
-
-  for (const value of candidates) {
-    const valueOrigin = origin(value)
-    if (valueOrigin) return valueOrigin
+  const configured = getTrustedApplicationOrigin()
+  if (configured) return configured
+  if (process.env.NODE_ENV !== "production") {
+    const localOrigin = validateApplicationOrigin(request.nextUrl.origin, false)
+    if (localOrigin) return localOrigin
   }
 
   throw new Error("OAuth application URL is not configured")

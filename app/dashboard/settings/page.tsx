@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
-import CommunicationPreferences from "@/components/settings/CommunicationPreferences"
 import ProfileSettingsForm from "@/components/settings/ProfileSettingsForm"
 
 type ProfileRow = {
@@ -128,7 +127,6 @@ export default async function SettingsPage() {
 
       {user.role === "client" ? (
         <>
-        <CommunicationPreferences />
         <section className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>

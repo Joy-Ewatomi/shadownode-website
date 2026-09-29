@@ -1,0 +1,15 @@
+# Canonical production-host redirects. Host conditions are exact, so deploy
+# previews and immutable deploy permalinks remain directly accessible.
+[[redirects]]
+  from = "/*"
+  to = "https://shadownodebureau.com/:splat"
+  status = 301
+  force = true
+  conditions = { Host = ["shadownodebureau.netlify.app"] }
+
+[[redirects]]
+  from = "/*"
+  to = "https://shadownodebureau.com/:splat"
+  status = 301
+  force = true
+  conditions = { Host = ["www.shadownodebureau.com"] }

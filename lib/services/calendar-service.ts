@@ -1,6 +1,7 @@
 import crypto from "crypto"
 import { google } from "googleapis"
 import { query } from "@/lib/db"
+import { requireTrustedApplicationOrigin } from "@/lib/app-origin"
 
 const GOOGLE_PROVIDER = "google"
 
@@ -126,19 +127,10 @@ const clientId =
 const clientSecret =
   process.env.GOOGLE_CALENDAR_CLIENT_SECRET
   
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  const appUrl = requireTrustedApplicationOrigin()
+  const redirectUri = new URL("/api/calendar/google/callback", appUrl).toString()
 
-  const redirectUri = `${appUrl}/api/calendar/google/callback`
-
-  console.log("GOOGLE OAUTH CONFIG:", {
-    clientId: clientId
-      ? `${clientId.slice(0, 20)}...`
-      : "MISSING",
-    appUrl,
-    redirectUri,
-  })
-
-  if (!clientId || !clientSecret || !appUrl) {
+  if (!clientId || !clientSecret) {
     throw new Error(
       "Google Calendar OAuth is not configured",
     )

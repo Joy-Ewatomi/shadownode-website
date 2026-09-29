@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto"
+import { requireTrustedApplicationOrigin } from "@/lib/app-origin"
 
 import { query } from "@/lib/db"
 import { notifyUser } from "@/lib/services/notification-service"
@@ -739,20 +740,10 @@ export async function issueTrainingCertificate(
       `SOB-CERT-${year}-${Date.now()}`
 
     const verificationToken = randomUUID()
-    const baseUrl = (
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.APP_URL ||
-      ""
-    ).replace(/\/$/, "")
-
-    if (!baseUrl) {
-      throw new Error(
-        "Certificate verification URL base is not configured",
-      )
-    }
-
-    const verificationUrl =
-      `${baseUrl}/verify/certificate/${verificationToken}`
+    const verificationUrl = new URL(
+      `/verify/certificate/${verificationToken}`,
+      requireTrustedApplicationOrigin(),
+    ).toString()
 
     const organizationName =
       participant.organization_name ||

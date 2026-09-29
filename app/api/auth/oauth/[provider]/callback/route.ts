@@ -648,7 +648,7 @@ export async function GET(
       oauthRedirect(
         new URL(
           "/dashboard",
-          request.url
+          getOAuthBaseUrl(request)
         )
       )
 

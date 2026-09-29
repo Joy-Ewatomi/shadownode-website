@@ -25,6 +25,8 @@ const robots = read(files.robots);
 assert.ok((home.match(/Available now/g) || []).length >= 2);
 assert.match(home, /href="\/services\/osint"/);
 assert.match(home, /href="\/services\/cybersecurity-training"/);
+assert.match(home, /href="\/services\/osint" className="block rounded-md/);
+assert.match(home, /href="\/services\/cybersecurity-training" className="block rounded-md/);
 assert.match(home, /DIGITAL FORENSICS \/\/ PLANNED/);
 assert.match(home, /ETHICAL HACKING \/\/ PLANNED/);
 assert.doesNotMatch(request, /Custom Service Request/);

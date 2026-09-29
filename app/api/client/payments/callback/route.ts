@@ -6,6 +6,7 @@ import {
 import { query } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { paymentStatusDestination } from "@/lib/payment-redirect"
+import { getTrustedApplicationOrigin } from "@/lib/app-origin"
 
 import {
   verifyAndCompletePaystackPayment,
@@ -14,6 +15,10 @@ import {
 export async function GET(
   request: NextRequest,
 ) {
+  const origin = getTrustedApplicationOrigin()
+  if (!origin) {
+    return NextResponse.json({ error: "Payment callback is unavailable." }, { status: 503 })
+  }
   const startedAt =
     performance.now()
 
@@ -54,13 +59,13 @@ export async function GET(
   const fallbackUrl =
     new URL(
       "/dashboard/client/payments",
-      request.nextUrl.origin,
+      origin,
     )
 
   const user = await getCurrentUser()
   if (!user || user.role !== "client") {
     return NextResponse.redirect(
-      new URL("/login", request.nextUrl.origin),
+      new URL("/login", origin),
     )
   }
 
@@ -408,7 +413,7 @@ export async function GET(
         },
         payment.request_id,
       ),
-      request.nextUrl.origin,
+      origin,
     )
 
     // =======================================================

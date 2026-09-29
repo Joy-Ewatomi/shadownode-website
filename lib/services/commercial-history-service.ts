@@ -21,15 +21,71 @@ export async function markAcceptedQuoteVersion(
   executor: Executor,
   input: { requestId: string; userId: string; amount: number; currency: string },
 ) {
-  const selected = await executor.query<{ id: string }>(
+  let selected = await executor.query<{ id: string }>(
     `SELECT id FROM quote_versions
      WHERE request_id = $1 AND price = $2 AND UPPER(currency) = UPPER($3)
-       AND creator_role <> 'client'
+       AND creator_role IN ('administrator', 'super_administrator', 'super-administrator')
      ORDER BY version_number DESC LIMIT 1 FOR UPDATE`,
     [input.requestId, input.amount, input.currency],
   )
-  const quoteId = selected.rows[0]?.id
-  if (!quoteId) throw new Error("The accepted quotation version could not be identified.")
+  let quoteId = selected.rows[0]?.id
+
+  if (!quoteId) {
+    const authoritative = await executor.query<{
+      id: string
+      created_by: string | null
+      creator_role: string | null
+      scope_summary: string | null
+      terms: string | null
+      estimated_start: string | null
+      estimated_completion: string | null
+      expires_at: string | null
+    }>(
+      `SELECT id, created_by, creator_role, scope_summary, terms,
+              estimated_start, estimated_completion, expires_at
+       FROM quote_versions
+       WHERE request_id = $1
+         AND creator_role IN ('administrator', 'super_administrator', 'super-administrator')
+         AND status IN ('approved', 'issued', 'quote_sent', 'revised_quote_sent')
+       ORDER BY version_number DESC
+       LIMIT 1
+       FOR UPDATE`,
+      [input.requestId],
+    )
+    const source = authoritative.rows[0]
+    if (!source) throw new Error("The accepted quotation version could not be identified.")
+
+    selected = await executor.query<{ id: string }>(
+      `INSERT INTO quote_versions (
+         request_id, version_number, created_by, creator_role, source,
+         price, currency, estimated_start, estimated_completion,
+         scope_summary, terms, expires_at, issued_at, status,
+         supersedes_quote_version_id
+       )
+       SELECT $1, COALESCE(MAX(version_number), 0) + 1, $4, $5,
+              'client_currency_snapshot', $2, UPPER($3), $6, $7,
+              $8, $9, $10, NOW(), 'issued', $11
+       FROM quote_versions
+       WHERE request_id = $1
+       RETURNING id`,
+      [
+        input.requestId,
+        input.amount,
+        input.currency,
+        source.created_by,
+        source.creator_role,
+        source.estimated_start,
+        source.estimated_completion,
+        source.scope_summary,
+        source.terms,
+        source.expires_at,
+        source.id,
+      ],
+    )
+    quoteId = selected.rows[0]?.id
+  }
+
+  if (!quoteId) throw new Error("The client-facing quotation snapshot could not be created.")
   await executor.query(
     `UPDATE quote_versions SET status = CASE WHEN id = $2 THEN 'accepted' ELSE 'superseded' END,
        accepted_at = CASE WHEN id = $2 THEN COALESCE(accepted_at, now()) ELSE accepted_at END,

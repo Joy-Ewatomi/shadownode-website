@@ -9,7 +9,8 @@ import { paymentStatusDestination } from "@/lib/payment-redirect"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
-  const origin = getTrustedApplicationOrigin() || request.nextUrl.origin
+  const origin = getTrustedApplicationOrigin()
+  if (!origin) return NextResponse.json({ error: "Payment callback is unavailable." }, { status: 503 })
   const fallback = new URL("/dashboard/client/payments", origin)
   const user = await getCurrentUser()
   if (!user || user.role !== "client") return NextResponse.redirect(new URL("/login", origin), { headers: { "Cache-Control": "no-store" } })

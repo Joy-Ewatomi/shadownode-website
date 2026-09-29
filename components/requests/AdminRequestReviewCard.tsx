@@ -9,6 +9,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation"
+import { isCybersecurityTrainingServiceId } from "@/lib/cybersecurity-training-catalog"
 
 /*
  * ==========================================================
@@ -175,10 +176,7 @@ function resolveWorkflow(
   if (
     service ===
       "cybersecurity_training" ||
-    service ===
-      "custom_training" ||
-    service ===
-      "security_awareness" ||
+    (isCybersecurityTrainingServiceId(service) && service !== "security_assessment") ||
     service.includes(
       "cybersecurity",
     ) ||

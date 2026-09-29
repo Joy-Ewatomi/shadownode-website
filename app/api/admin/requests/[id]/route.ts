@@ -18,6 +18,7 @@ import {
   administratorReviewNegotiation,
 } from "@/lib/services/quote-workflow-service"
 import { normalizeCurrency } from "@/lib/config/currencies"
+import { isCybersecurityTrainingServiceId } from "@/lib/cybersecurity-training-catalog"
 
 /*
  * =====================================================
@@ -334,6 +335,7 @@ function getRequestWorkflow(
       "cyber_security_training" ||
     value ===
       "cybersecurity_training_request" ||
+    (isCybersecurityTrainingServiceId(value) && value !== "security_assessment") ||
     value.includes(
       "cybersecurity_training",
     ) ||

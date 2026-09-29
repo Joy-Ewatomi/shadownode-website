@@ -1,11 +1,34 @@
 import type { NextRequest } from "next/server"
+import { getTrustedApplicationOrigin } from "@/lib/app-origin"
+
+function headerOrigin(protocol: string, host: string | null) {
+  if (!host) return null
+  const firstHost = host.split(",")[0]?.trim()
+  if (!firstHost || /[\s\\/]/.test(firstHost)) return null
+  try {
+    return new URL(`${protocol}://${firstHost}`).origin
+  } catch {
+    return null
+  }
+}
 
 export function isSameOriginMutation(request: NextRequest) {
-  const requestOrigin = request.nextUrl.origin
   const origin = request.headers.get("origin")
   if (origin) {
     try {
-      return new URL(origin).origin === requestOrigin
+      const suppliedOrigin = new URL(origin).origin
+      const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim()
+      const protocol = forwardedProtocol === "http" || forwardedProtocol === "https"
+        ? forwardedProtocol
+        : request.nextUrl.protocol.replace(":", "")
+      const allowedOrigins = new Set([
+        request.nextUrl.origin,
+        headerOrigin(protocol, request.headers.get("x-forwarded-host")),
+        headerOrigin(protocol, request.headers.get("host")),
+        getTrustedApplicationOrigin(),
+      ].filter((value): value is string => Boolean(value)))
+      const fetchSite = request.headers.get("sec-fetch-site")
+      return fetchSite !== "cross-site" && allowedOrigins.has(suppliedOrigin)
     } catch {
       return false
     }

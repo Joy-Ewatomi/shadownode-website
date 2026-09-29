@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { getCurrentUser } from "@/lib/auth"
+import { getTrustedApplicationOrigin } from "@/lib/app-origin"
 
 import {
   exchangeGoogleCalendarCode,
@@ -12,12 +13,10 @@ import {
 export async function GET(
   request: NextRequest,
 ) {
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000"
+  const appUrl = getTrustedApplicationOrigin()
+  if (!appUrl) return NextResponse.json({ error: "Google Calendar is not configured" }, { status: 503 })
 
-  const url =
-    new URL(request.url)
+  const url = request.nextUrl
 
   const code =
     url.searchParams.get("code")

@@ -75,17 +75,6 @@ function xml(value: string) {
 }
 
 function safeVerificationUrl(value: string | null, token: string) {
-  if (value) {
-    try {
-      const parsed = new URL(value);
-      if (
-        parsed.protocol === "https:" ||
-        (process.env.NODE_ENV !== "production" && parsed.protocol === "http:")
-      ) {
-        return parsed.toString();
-      }
-    } catch {}
-  }
   const origin = getTrustedApplicationOrigin();
   if (!origin) throw new Error("Trusted application origin is unavailable");
   return new URL(

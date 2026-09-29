@@ -3,8 +3,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { auditLog, hashToken } from "@/lib/auth"
 import { withTransaction } from "@/lib/db"
 import { deliverWelcomeEmail } from "@/lib/welcome-email"
+import { getTrustedApplicationOrigin } from "@/lib/app-origin"
 
 export async function GET(request: NextRequest) {
+  const origin = getTrustedApplicationOrigin()
+  if (!origin) return NextResponse.json({ error: "Email verification is temporarily unavailable" }, { status: 503 })
   const token = request.nextUrl.searchParams.get("token")
   if (!token) return NextResponse.json({ error: "Missing verification token" }, { status: 400 })
 
@@ -47,5 +50,5 @@ export async function GET(request: NextRequest) {
       registerEligibility: result.newlyVerified,
     })
   }
-  return NextResponse.redirect(new URL("/login?verified=1", request.url))
+  return NextResponse.redirect(new URL("/login?verified=1", origin))
 }

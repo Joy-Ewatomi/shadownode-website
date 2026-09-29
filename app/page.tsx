@@ -411,12 +411,13 @@ export default function Home() {
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 px-4 md:px-0 w-full">
             {/* 1. OSINT */}
-            <motion.article
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
-            >
+            <Link href="/services/osint" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <motion.article
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="group relative h-full min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+              >
               <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
               <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
               <div className="mb-7 flex items-center justify-between gap-3">
@@ -430,18 +431,20 @@ export default function Home() {
                 Lawful public-source research, digital-footprint analysis and
                 documented reporting for authorized investigations.
               </p>
-              <Link href="/services/osint" className="mt-9 inline-flex min-h-11 items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <span className="mt-9 inline-flex min-h-11 items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary transition group-hover:underline">
                 LEARN MORE <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </motion.article>
+              </span>
+              </motion.article>
+            </Link>
 
             {/* 2. CYBERSECURITY TRAINING */}
-            <motion.article
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
-            >
+            <Link href="/services/cybersecurity-training" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <motion.article
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="group relative h-full min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+              >
               <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
               <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
               <div className="mb-7 flex items-center justify-between gap-3">
@@ -454,10 +457,11 @@ export default function Home() {
               <p className="mt-4 text-sm leading-6 text-white/70">
                 Practical digital-safety, awareness and tailored technical training for individuals and organizations.
               </p>
-              <Link href="/services/cybersecurity-training" className="mt-9 inline-flex min-h-11 items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <span className="mt-9 inline-flex min-h-11 items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary transition group-hover:underline">
                 LEARN MORE <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </motion.article>
+              </span>
+              </motion.article>
+            </Link>
 
             {/* 2. DIGITAL FORENSICS */}
             <motion.article

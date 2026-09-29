@@ -5,6 +5,7 @@ import {
 
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { getTrustedApplicationOrigin } from "@/lib/app-origin"
 
 export async function POST(
   request: NextRequest,
@@ -529,12 +530,18 @@ export async function POST(
     // 13. CALLBACK URL
     // =========================================================
 
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      request.nextUrl.origin
+    const appUrl = getTrustedApplicationOrigin()
+    if (!appUrl) {
+      return NextResponse.json(
+        { error: "Payment is temporarily unavailable." },
+        { status: 503 },
+      )
+    }
 
-    const callbackUrl =
-      `${appUrl}/api/client/payments/callback`
+    const callbackUrl = new URL(
+      "/api/client/payments/callback",
+      appUrl,
+    ).toString()
 
     // =========================================================
     // 14. CONVERT TO PAYSTACK MINOR UNIT
