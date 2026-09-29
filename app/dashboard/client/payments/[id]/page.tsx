@@ -24,7 +24,7 @@ type RequestData = {
   converted_case_id?:
     | string
     | null
-  training_engagement_id?:
+  converted_training_engagement_id?:
     | string
     | null
   status?: string | null
@@ -32,6 +32,14 @@ type RequestData = {
 }
 
 type PaymentProvider = "paystack" | "flutterwave"
+
+type PaymentEligibility = {
+  canPay: boolean
+  isPaid: boolean
+  targetType: "case" | "training" | null
+  targetId: string | null
+  targetStatus: string | null
+}
 
 export default function ClientPaymentDetailPage({
   params,
@@ -59,6 +67,7 @@ export default function ClientPaymentDetailPage({
 
   const [provider, setProvider] = useState<PaymentProvider>("paystack")
   const [providers, setProviders] = useState({ paystack: true, flutterwave: false })
+  const [eligibility, setEligibility] = useState<PaymentEligibility | null>(null)
 
   const [
     error,
@@ -110,16 +119,6 @@ export default function ClientPaymentDetailPage({
               () => null,
             )
 
-        console.log(
-          "PAYMENT PAGE REQUEST STATUS:",
-          response.status,
-        )
-
-        console.log(
-          "PAYMENT PAGE REQUEST DATA:",
-          data,
-        )
-
         if (!response.ok) {
           throw new Error(
             data?.error ||
@@ -135,14 +134,12 @@ export default function ClientPaymentDetailPage({
             const available = { paystack: Boolean(providerData.providers.paystack?.available), flutterwave: Boolean(providerData.providers.flutterwave?.available) }
             setProviders(available)
             if (!available.paystack && available.flutterwave) setProvider("flutterwave")
+            setEligibility(providerData.eligibility ?? null)
+          } else {
+            setEligibility(null)
           }
         }
       } catch (err) {
-        console.error(
-          "PAYMENT PAGE LOAD ERROR",
-          err,
-        )
-
         if (!cancelled) {
           setError(
             err instanceof Error
@@ -229,11 +226,6 @@ export default function ClientPaymentDetailPage({
             () => null,
           )
 
-      console.log(
-        "PAYMENT INITIALIZE STATUS:",
-        response.status,
-      )
-
       if (!response.ok) {
         throw new Error(
           data?.error ||
@@ -251,11 +243,6 @@ export default function ClientPaymentDetailPage({
 
       window.location.assign(data.authorization_url || data.checkout_url)
     } catch (err) {
-      console.error(
-        "PAYMENT INITIALIZATION ERROR",
-        err,
-      )
-
       setError(
         err instanceof Error
           ? err.message
@@ -304,12 +291,9 @@ export default function ClientPaymentDetailPage({
 
   // Redirect query parameters are informational only. Paid state comes from
   // the server-owned commercial history and verified payment record.
-  const isPaid = request.commercial_history?.status === "paid"
+  const isPaid = request.commercial_history?.status === "paid" || eligibility?.isPaid === true
 
-  const canPay =
-    request.status ===
-      "awaiting_payment" ||
-    request.status === "approved"
+  const canPay = eligibility?.canPay === true
 
   // =========================================================
   // PAYMENT NOT AVAILABLE
@@ -327,19 +311,30 @@ export default function ClientPaymentDetailPage({
           </p>
 
           <h1 className="mt-2 text-2xl font-bold">
-            Payment is not available yet
+            {eligibility?.targetStatus === "completed"
+              ? "This engagement is already completed"
+              : "Payment is not available"}
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-white/55">
-            Your quote must be accepted before payment can be initiated.
+            {eligibility?.targetStatus === "completed"
+              ? "No further payment can be initiated for this completed engagement."
+              : "This request is not currently eligible for a new payment. Return to the request for its latest status."}
           </p>
 
-          <Link
-            href={`/dashboard/client/requests/${request.id}`}
-            className="mt-5 inline-flex rounded-md border border-[#20dc73]/40 px-4 py-2 text-sm font-semibold text-[#20dc73] hover:border-[#20dc73]"
-          >
-            Back to request
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-3">
+            {eligibility?.targetType === "training" && eligibility.targetId ? (
+              <Link href={`/dashboard/training/${eligibility.targetId}`} className="inline-flex rounded-md bg-[#20dc73] px-4 py-2 text-sm font-semibold text-black hover:bg-[#1bc965]">
+                Open training
+              </Link>
+            ) : null}
+            <Link
+              href={`/dashboard/client/requests/${request.id}`}
+              className="inline-flex rounded-md border border-[#20dc73]/40 px-4 py-2 text-sm font-semibold text-[#20dc73] hover:border-[#20dc73]"
+            >
+              Back to request
+            </Link>
+          </div>
         </div>
       </div>
     )
@@ -560,9 +555,9 @@ export default function ClientPaymentDetailPage({
   )}
 
   {isPaid &&
-    request.training_engagement_id && (
+    eligibility?.targetType === "training" && eligibility.targetId && (
       <Link
-        href={`/dashboard/training/${request.training_engagement_id}`}
+        href={`/dashboard/training/${eligibility.targetId}`}
         className="rounded bg-[#20dc73] px-5 py-3 font-semibold text-black transition hover:bg-[#1bc965]"
       >
         Open Training
@@ -570,7 +565,7 @@ export default function ClientPaymentDetailPage({
     )}
 
   {isPaid &&
-    !request.training_engagement_id &&
+    eligibility?.targetType !== "training" &&
     request.converted_case_id && (
       <Link
         href={`/dashboard/client/cases/${request.converted_case_id}`}
@@ -581,7 +576,7 @@ export default function ClientPaymentDetailPage({
     )}
 
   {isPaid &&
-    !request.training_engagement_id &&
+    eligibility?.targetType !== "training" &&
     !request.converted_case_id && (
       <Link
         href="/dashboard/client/cases"

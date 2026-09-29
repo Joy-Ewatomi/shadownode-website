@@ -51,6 +51,8 @@ const history = readFileSync("components/requests/CommercialHistoryPanel.tsx", "
 const paystackService = readFileSync("lib/services/paystack-payment-service.ts", "utf8");
 const completion = readFileSync("lib/services/payment-completion-service.ts", "utf8");
 const accessService = readFileSync("lib/services/training-operations-service.ts", "utf8");
+const providerRoute = readFileSync("app/api/client/payments/providers/route.ts", "utf8");
+const paymentPage = readFileSync("app/dashboard/client/payments/[id]/page.tsx", "utf8");
 
 for (const callback of [paystack, flutterwave]) {
   assert.match(callback, /paymentStatusDestination/);
@@ -69,5 +71,12 @@ assert.match(trainingLayout, /!canViewTraining && !isOwner && !isAssignedTrainer
 assert.match(trainingLayout, /ensureAccess\(id, user, false\)/);
 assert.match(accessService, /engagement\.client_profile_id !== profileId/);
 assert.match(accessService, /engagement\.payment_status !== "paid"/);
+assert.match(providerRoute, /targetStatus === "awaiting_payment"/);
+assert.match(providerRoute, /paid\.status = 'paid'/);
+assert.match(providerRoute, /r\.id = \$1 AND r\.user_id = \$2/);
+assert.match(providerRoute, /te\.client_profile_id = up\.id/);
+assert.match(paymentPage, /const canPay = eligibility\?\.canPay === true/);
+assert.match(paymentPage, /This engagement is already completed/);
+assert.doesNotMatch(paymentPage, /PAYMENT PAGE REQUEST DATA/);
 
 console.log("Payment training redirect verifier passed.");

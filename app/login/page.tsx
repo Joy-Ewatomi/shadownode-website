@@ -180,7 +180,7 @@ export default function AuthPage() {
                 ) : (
                   <>
                     <Field label="Username" required>
-                      <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black placeholder:text-black/35" name="identifier" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your-username" required />
+                      <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black caret-black placeholder:text-black/45 dark:bg-[#fffdd1] dark:text-black [&:-webkit-autofill]:[-webkit-text-fill-color:#000] [&:-webkit-autofill]:[box-shadow:0_0_0_1000px_#fffdd1_inset]" name="identifier" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your-username" required />
                     </Field>
 
                     {isSignup && (
