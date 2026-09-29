@@ -4,7 +4,7 @@ import path from "node:path";
 import QRCode from "qrcode";
 import sharp from "sharp";
 
-import { getTrustedApplicationOrigin } from "@/lib/app-origin";
+import { createCanonicalApplicationUrl } from "@/lib/app-origin";
 
 import type { AppUser } from "@/lib/auth";
 import { query } from "@/lib/db";
@@ -74,13 +74,8 @@ function xml(value: string) {
   );
 }
 
-function safeVerificationUrl(value: string | null, token: string) {
-  const origin = getTrustedApplicationOrigin();
-  if (!origin) throw new Error("Trusted application origin is unavailable");
-  return new URL(
-    `/verify/certificate/${encodeURIComponent(token)}`,
-    origin,
-  ).toString();
+function certificateVerificationUrl(token: string) {
+  return createCanonicalApplicationUrl(`/verify/certificate/${encodeURIComponent(token)}`);
 }
 
 export async function loadAuthorizedCertificateDocument(
@@ -111,10 +106,7 @@ export async function loadAuthorizedCertificateDocument(
     trainerName: clean(row.trainer_name) || null,
     completionDate: clean(row.completion_date),
     issueDate: clean(row.issued_at),
-    verificationUrl: safeVerificationUrl(
-      row.verification_url,
-      row.verification_token,
-    ),
+    verificationUrl: certificateVerificationUrl(row.verification_token),
   };
 }
 

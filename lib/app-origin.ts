@@ -59,6 +59,10 @@ export function requireTrustedApplicationOrigin() {
   return origin
 }
 
+export function createCanonicalApplicationUrl(pathname: string) {
+  return new URL(pathname, requireTrustedApplicationOrigin()).toString()
+}
+
 export function createPasswordResetActionUrl(
   rawToken: string,
   trustedOrigin = getTrustedApplicationOrigin(),

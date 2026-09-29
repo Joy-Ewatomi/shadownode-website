@@ -9,8 +9,7 @@ rmSync(out, { recursive: true, force: true })
 execFileSync("npm", ["exec", "tsc", "--", "lib/email-template.ts", "lib/app-origin.ts", "--outDir", out, "--module", "commonjs", "--target", "es2022", "--esModuleInterop", "--skipLibCheck"], { stdio: "inherit" })
 const { createEmailActionUrl, renderShadowNodeEmail } = await import(pathToFileURL(out + "/email-template.js"))
 
-process.env.NETLIFY = "true"
-process.env.URL = "https://shadownodebureau.netlify.app"
+process.env.APP_URL = "https://shadownodebureau.com"
 
 test("renderer escapes user-controlled content and supports a missing name", () => {
   const rendered = renderShadowNodeEmail({
@@ -31,7 +30,7 @@ test("verification template has an absolute production action and plain text", (
   const url = createEmailActionUrl("/api/auth/verify-email", { token })
   assert.equal(
     url,
-    "https://shadownodebureau.netlify.app/api/auth/verify-email?token=verification-token-never-log",
+    "https://shadownodebureau.com/api/auth/verify-email?token=verification-token-never-log",
   )
 
   const logged = []

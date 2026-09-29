@@ -13,6 +13,7 @@ type LoginUser = {
   username: string
   email: string
   password_hash: string
+  password_login_enabled: boolean
   role:
     | "client"
     | "staff"
@@ -64,19 +65,22 @@ export async function POST(request: NextRequest) {
         username,
         email,
         password_hash,
+        password_login_enabled,
         role,
         email_verified_at,
         totp_enabled
       FROM app_users
-      WHERE ${lookup} = $1
-      LIMIT 1
+      WHERE (($2 = 'email' AND LOWER(email) = $1)
+          OR ($2 = 'username' AND LOWER(username) = $1))
+      LIMIT 2
       `,
-      [identifier]
+      [identifier, lookup]
     )
 
-    const user = rows[0]
+    // More than one case-insensitive match is ambiguous and must fail closed.
+    const user = rows.length === 1 ? rows[0] : undefined
 
-    const valid = user
+    const valid = user?.password_login_enabled
       ? await verifyPassword(
           password,
           user.password_hash

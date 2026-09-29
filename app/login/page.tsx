@@ -76,7 +76,9 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
-    const submittedPassword = isSignup ? String(formData.get('newPassword') ?? '') : password
+    const submittedIdentifier = String(formData.get('identifier') ?? '')
+    const submittedEmail = String(formData.get('email') ?? '')
+    const submittedPassword = isSignup ? String(formData.get('newPassword') ?? '') : String(formData.get('password') ?? '')
     const submittedConfirmation = isSignup ? String(formData.get('confirmNewPassword') ?? '') : confirmPassword
     setLoading(true)
     setError('')
@@ -84,8 +86,8 @@ export default function AuthPage() {
 
     const endpoint = twoFactorRequired ? '/api/auth/2fa/verify' : tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
     const bodyData = tab === 'login'
-      ? twoFactorRequired ? { code: twoFactorCode, method: twoFactorMethod } : { username, password, rememberDevice }
-      : { email, username, password: submittedPassword, confirmPassword: submittedConfirmation }
+      ? twoFactorRequired ? { code: twoFactorCode, method: twoFactorMethod } : { username: submittedIdentifier, password: submittedPassword, rememberDevice }
+      : { email: submittedEmail, username: submittedIdentifier, password: submittedPassword, confirmPassword: submittedConfirmation }
 
     try {
       const response = await fetch(endpoint, {
@@ -178,13 +180,13 @@ export default function AuthPage() {
                 ) : (
                   <>
                     <Field label="Username" required>
-                      <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black placeholder:text-black/35" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your-username" required />
+                      <Input className="h-10 border-[#19352d] bg-[#fffdd1] text-black placeholder:text-black/35" name="identifier" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your-username" required />
                     </Field>
 
                     {isSignup && (
                       <Field label="Email" required>
                         <InputShell icon={<Mail className="h-4 w-4" />}>
-                          <Input className="h-10 border-0 bg-transparent pl-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" required />
+                          <Input className="h-10 border-0 bg-transparent pl-10 text-white placeholder:text-white/45 focus-visible:ring-0" type="email" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" required />
                         </InputShell>
                       </Field>
                     )}

@@ -37,20 +37,21 @@ assert.equal(resets.isUsablePasswordReset({ expires_at: "2026-09-24T11:59:59Z", 
 assert.equal(resets.isUsablePasswordReset({ expires_at: "2026-09-24T12:15:00Z", used_at: "2026-09-24T11:00:00Z" }, now), false)
 assert.equal(resets.isUsablePasswordReset({ expires_at: "2026-09-24T12:15:00Z", used_at: null }, now), true)
 
-const cleanOrigin = "https://shadownodebureau.netlify.app"
+const cleanOrigin = "https://shadownodebureau.com"
 assert.equal(origins.validateApplicationOrigin(cleanOrigin, true), cleanOrigin)
-assert.equal(origins.validateApplicationOrigin("APP_URL=https://shadownodebureau.netlify.app", true), null)
-assert.equal(origins.validateApplicationOrigin("app_url=https://shadownodebureau.netlify.app", true), null)
-assert.equal(origins.validateApplicationOrigin("[ShadowNode](https://shadownodebureau.netlify.app)", true), null)
-assert.equal(origins.validateApplicationOrigin("https://user:pass@shadownodebureau.netlify.app", true), null)
-assert.equal(origins.validateApplicationOrigin("https://shadownodebureau.netlify.app/path", true), null)
-assert.equal(origins.validateApplicationOrigin("https://shadownodebureau.netlify.app?source=x", true), null)
-assert.equal(origins.validateApplicationOrigin("https://shadownodebureau.netlify.app#fragment", true), null)
-assert.equal(origins.validateApplicationOrigin("shadownodebureau.netlify.app", true), null)
+assert.equal(origins.validateApplicationOrigin("APP_URL=https://shadownodebureau.com", true), null)
+assert.equal(origins.validateApplicationOrigin("app_url=https://shadownodebureau.com", true), null)
+assert.equal(origins.validateApplicationOrigin("[ShadowNode](https://shadownodebureau.com)", true), null)
+assert.equal(origins.validateApplicationOrigin("https://user:pass@shadownodebureau.com", true), null)
+assert.equal(origins.validateApplicationOrigin("https://shadownodebureau.com/path", true), null)
+assert.equal(origins.validateApplicationOrigin("https://shadownodebureau.com?source=x", true), null)
+assert.equal(origins.validateApplicationOrigin("https://shadownodebureau.com#fragment", true), null)
+assert.equal(origins.validateApplicationOrigin("shadownodebureau.com", true), null)
 const fallback = origins.resolveTrustedApplicationOrigin({ APP_URL: "APP_URL=https://invalid.example", NEXT_PUBLIC_APP_URL: cleanOrigin, URL: "https://fallback.example", DEPLOY_PRIME_URL: "https://preview.example" }, true)
-assert.deepEqual(fallback, { origin: cleanOrigin, source: "NEXT_PUBLIC_APP_URL" })
+assert.equal(fallback, null)
+assert.deepEqual(origins.resolveTrustedApplicationOrigin({ APP_URL: cleanOrigin, NEXT_PUBLIC_APP_URL: "https://ignored.example" }, true), { origin: cleanOrigin, source: "APP_URL" })
 const resetUrl = origins.createPasswordResetActionUrl("test-token-placeholder", cleanOrigin)
-assert.equal(resetUrl, "https://shadownodebureau.netlify.app/reset-password?token=test-token-placeholder")
+assert.equal(resetUrl, "https://shadownodebureau.com/reset-password?token=test-token-placeholder")
 const priorAppUrl = process.env.APP_URL
 process.env.APP_URL = cleanOrigin
 const rendered = email.renderShadowNodeEmail({ preheader: "Security notice", category: "Account security", heading: "Reset your password", paragraphs: ["Use the secure link."], cta: { label: "Reset password", url: resetUrl, showFallbackUrl: true } })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createCanonicalApplicationUrl } from "@/lib/app-origin"
 
 import { getCurrentUser } from "@/lib/auth"
 
@@ -280,7 +281,7 @@ export async function POST(
             trainer_name,
             completion_date,
             issued_at,
-            verification_url,
+            verification_token,
             status
           FROM training_certificates
           WHERE id = $1
@@ -367,9 +368,9 @@ export async function POST(
             : null,
 
         verification_url:
-          toNullableString(
-            certificate.verification_url,
-          ),
+          toNullableString(certificate.verification_token)
+            ? createCanonicalApplicationUrl(`/verify/certificate/${encodeURIComponent(String(certificate.verification_token))}`)
+            : null,
 
         status:
           toNullableString(

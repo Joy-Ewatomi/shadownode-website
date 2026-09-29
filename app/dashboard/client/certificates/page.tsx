@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
+import { createCanonicalApplicationUrl } from "@/lib/app-origin"
 import { getUserProfileId } from "@/lib/services/training-operations-service"
 
 import ClientCertificateList, {
@@ -66,7 +67,7 @@ export default async function ClientCertificatesPage() {
         tc.training_type,
         tc.issued_at,
         tc.status,
-        tc.verification_url,
+        tc.verification_token,
         te.engagement_number
       FROM training_certificates tc
       JOIN training_engagements te
@@ -119,9 +120,9 @@ export default async function ClientCertificatesPage() {
         toNullableString(row.status) ||
         "issued",
       verification_url:
-        toNullableString(
-          row.verification_url,
-        ),
+        toNullableString(row.verification_token)
+          ? createCanonicalApplicationUrl(`/verify/certificate/${encodeURIComponent(String(row.verification_token))}`)
+          : null,
       engagement_number:
         toNullableString(
           row.engagement_number,
