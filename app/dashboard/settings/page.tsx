@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import CommunicationPreferences from "@/components/settings/CommunicationPreferences"
+import ProfileSettingsForm from "@/components/settings/ProfileSettingsForm"
 
 type ProfileRow = {
   id: string | null
@@ -114,8 +115,10 @@ export default async function SettingsPage() {
         <Info label="Two-Factor" value={user.totp_enabled ? "enabled" : "disabled"} />
       </section>
 
+      <ProfileSettingsForm username={user.username} displayName={profileRow?.full_name || user.username} />
+
       <section className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
-        <h2 className="font-semibold text-white">Profile</h2>
+        <h2 className="font-semibold text-white">Profile details</h2>
         <div className="mt-4 grid gap-3 text-xs text-white/50 md:grid-cols-3">
           <Info label="Full Name" value={profileRow?.full_name || "not set"} />
           <Info label="Organization" value={profileRow?.organization_name || "not linked"} />

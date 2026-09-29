@@ -10,6 +10,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/security",
     "/contact",
     "/request",
+    "/services/osint",
+    "/services/cybersecurity-training",
   ];
   return paths.map((pathname) => ({
     url: new URL(pathname, origin).toString(),

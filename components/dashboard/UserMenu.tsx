@@ -1,11 +1,22 @@
 "use client"
 
 import type { AppUser } from "@/lib/auth"
-import { LogOut, Shield, UserRound } from "lucide-react"
-import { useState } from "react"
+import { LogOut, Settings, Shield, UserRound } from "lucide-react"
+import { useEffect, useState } from "react"
 
 export default function UserMenu({ user }: { user: AppUser }) {
   const [open, setOpen] = useState(false)
+  const [avatarVersion, setAvatarVersion] = useState(Date.now())
+  const [hasAvatar, setHasAvatar] = useState(true)
+
+  useEffect(() => {
+    const refreshAvatar = () => {
+      setHasAvatar(true)
+      setAvatarVersion(Date.now())
+    }
+    window.addEventListener("shadownode:profile-updated", refreshAvatar)
+    return () => window.removeEventListener("shadownode:profile-updated", refreshAvatar)
+  }, [])
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
@@ -15,7 +26,7 @@ export default function UserMenu({ user }: { user: AppUser }) {
   return (
     <div className="relative">
       <button onClick={() => setOpen((value) => !value)} className="flex h-10 w-10 items-center justify-center rounded-md border border-[#143b28] bg-[#06110f] text-[#20dc73] hover:border-[#20dc73]/50" aria-label="User menu">
-        <UserRound className="h-5 w-5" />
+        {hasAvatar ? <img src={`/api/account/profile/avatar?v=${avatarVersion}`} alt="" className="h-8 w-8 rounded object-cover" onError={() => setHasAvatar(false)} /> : <UserRound className="h-5 w-5" />}
       </button>
       {open ? (
         <div className="absolute right-0 mt-2 w-64 rounded-md border border-[#143b28] bg-[#06110f] p-2 shadow-2xl">
@@ -23,7 +34,11 @@ export default function UserMenu({ user }: { user: AppUser }) {
             <p className="font-semibold text-white">{user.username}</p>
             <p className="truncate text-xs text-white/45">{user.email}</p>
           </div>
-          <a href="/account/security" className="mt-2 flex items-center gap-2 rounded px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
+          <a href="/dashboard/settings" className="mt-2 flex min-h-11 items-center gap-2 rounded px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
+            <Settings className="h-4 w-4" />
+            Profile Settings
+          </a>
+          <a href="/account/security" className="flex min-h-11 items-center gap-2 rounded px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
             <Shield className="h-4 w-4" />
             Security Settings
           </a>

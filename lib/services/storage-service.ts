@@ -79,3 +79,8 @@ export async function createSignedUrlForBucket(bucket: string, path: string, exp
 
   return data.signedUrl
 }
+
+export async function deleteFileFromBucket(bucket: string, path: string) {
+  const { error } = await storage.storage.from(bucket).remove([path])
+  if (error) throw error
+}

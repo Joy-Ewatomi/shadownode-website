@@ -12,13 +12,13 @@ export const metadata: Metadata = {
     template: "%s | SHADOWNODE OPERATIONS BUREAU LIMITED",
   },
   description:
-    "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
+    "Lawful open-source intelligence and cybersecurity training for authorized clients.",
   alternates: applicationOrigin ? { canonical: "/" } : undefined,
   icons: { icon: "/real1shadownodelogo.png" },
   openGraph: {
     title: "SHADOWNODE OPERATIONS BUREAU LIMITED",
     description:
-      "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
+      "Lawful open-source intelligence and cybersecurity training for authorized clients.",
     type: "website",
     images: [
       {
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "SHADOWNODE OPERATIONS BUREAU LIMITED",
     description:
-      "Lawful investigation, cybersecurity training, and custom operational services for authorized clients.",
+      "Lawful open-source intelligence and cybersecurity training for authorized clients.",
     images: ["/real1shadownodelogo.png"],
   },
 };

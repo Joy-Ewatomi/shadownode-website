@@ -4,6 +4,8 @@ import {
 } from "next/server"
 
 import { query } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
+import { paymentStatusDestination } from "@/lib/payment-redirect"
 
 import {
   verifyAndCompletePaystackPayment,
@@ -55,6 +57,13 @@ export async function GET(
       request.nextUrl.origin,
     )
 
+  const user = await getCurrentUser()
+  if (!user || user.role !== "client") {
+    return NextResponse.redirect(
+      new URL("/login", request.nextUrl.origin),
+    )
+  }
+
   // =========================================================
   // 3. VALIDATE REFERENCE
   // =========================================================
@@ -98,17 +107,19 @@ export async function GET(
       }>(
         `
         SELECT
-          id,
-          request_id,
-          case_id,
-          training_engagement_id,
-          status
-        FROM payments
-        WHERE provider = 'paystack'
-          AND transaction_id = $1
+          p.id,
+          p.request_id,
+          p.case_id,
+          p.training_engagement_id,
+          p.status
+        FROM payments p
+        JOIN requests r ON r.id = p.request_id
+        WHERE p.provider = 'paystack'
+          AND p.transaction_id = $1
+          AND r.user_id = $2
         LIMIT 1
         `,
-        [reference],
+        [reference, user.id],
       )
 
     const lookupMs =
@@ -382,50 +393,23 @@ export async function GET(
     //
     // IMPORTANT:
     //
-    // The operational entity is the final destination.
-    //
-    // Training:
-    //   /dashboard/client/training/[engagementId]
-    //
-    // Investigation / OSINT:
-    //   /dashboard/client/cases/[caseId]
-    //
-    // Only use the payment page as a fallback.
+    // Only a server-verified paid result may select an operational entity.
+    // Pending, failed, mismatched and unverified attempts remain on payments.
     // =======================================================
 
-    let target: URL
-
-    if (
-      finalTrainingEngagementId
-    ) {
-      target =
-        new URL(
-          `/dashboard/client/training/${finalTrainingEngagementId}`,
-          request.nextUrl.origin,
-        )
-    } else if (
-      finalCaseId
-    ) {
-      target =
-        new URL(
-          `/dashboard/client/cases/${finalCaseId}`,
-          request.nextUrl.origin,
-        )
-    } else if (
-      finalRequestId
-    ) {
-      target =
-        new URL(
-          `/dashboard/client/payments/${finalRequestId}`,
-          request.nextUrl.origin,
-        )
-    } else {
-      target =
-        new URL(
-          "/dashboard/client/payments",
-          request.nextUrl.origin,
-        )
-    }
+    const target = new URL(
+      paymentStatusDestination(
+        {
+          success: result.success,
+          status: result.status,
+          request_id: finalRequestId,
+          case_id: finalCaseId,
+          training_engagement_id: finalTrainingEngagementId,
+        },
+        payment.request_id,
+      ),
+      request.nextUrl.origin,
+    )
 
     // =======================================================
     // 9. SUCCESS

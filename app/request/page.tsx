@@ -2,7 +2,7 @@
 
 import { PageTransition } from "@/components/animations/PageTransition"
 import { motion } from "framer-motion"
-import { ArrowLeft, ChevronRight, KeyRound, Search, ShieldCheck, UserPlus, Wrench } from "lucide-react"
+import { ArrowLeft, ChevronRight, KeyRound, Search, ShieldCheck, UserPlus } from "lucide-react"
 import Link from "next/link"
 
 const accountOptions = [
@@ -23,9 +23,8 @@ const accountOptions = [
 ]
 
 const serviceTypes = [
-  { title: "OSINT / Investigation Request", icon: Search },
-  { title: "Cybersecurity Training Request", icon: ShieldCheck },
-  { title: "Custom Service Request", icon: Wrench },
+  { title: "OSINT / Investigation Request", icon: Search, href: "/services/osint" },
+  { title: "Cybersecurity Training Request", icon: ShieldCheck, href: "/services/cybersecurity-training" },
 ]
 
 export default function RequestPage() {
@@ -50,12 +49,12 @@ export default function RequestPage() {
 
           <section aria-labelledby="available-services" className="mb-6 rounded-md border border-primary/15 bg-[#070c0d]/70 p-5">
             <h2 id="available-services" className="font-mono text-xs uppercase tracking-wider text-primary">Available request types</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {serviceTypes.map(({ title, icon: Icon }) => (
-                <div key={title} className="flex min-h-20 items-center gap-3 rounded border border-white/10 bg-black/25 p-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {serviceTypes.map(({ title, icon: Icon, href }) => (
+                <Link key={title} href={href} className="flex min-h-20 items-center gap-3 rounded border border-white/10 bg-black/25 p-3 transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                   <Icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
                   <span className="text-sm font-medium leading-5 text-white/75">{title}</span>
-                </div>
+                </Link>
               ))}
             </div>
           </section>

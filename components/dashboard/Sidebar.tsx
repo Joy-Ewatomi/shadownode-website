@@ -52,6 +52,7 @@ export default function Sidebar({
 
       <aside
         id="dashboard-sidebar"
+        data-dashboard-sidebar
         aria-label="Dashboard navigation"
         className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[#143b28] bg-[#04100b] transition-transform lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"

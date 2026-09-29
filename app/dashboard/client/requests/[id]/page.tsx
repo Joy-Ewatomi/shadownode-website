@@ -966,7 +966,7 @@ const isCybersecurityTraining =
    * =========================================================
    */
   return (
-    <main className="w-full min-w-0 max-w-full overflow-x-hidden p-4 text-white sm:p-6">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden p-4 text-white sm:p-6">
       <MarkResourceNotificationsRead
         resourceType="request"
         resourceId={request.id}
@@ -2866,6 +2866,6 @@ console.log("EVIDENCE:", request.evidence_files)
 
       </div>
 
-    </main>
+    </div>
   )
 }

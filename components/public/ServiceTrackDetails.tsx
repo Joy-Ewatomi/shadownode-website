@@ -26,7 +26,7 @@ const TRACKS: Record<TrackKey, Track> = {
     groups: [
       { heading: "People and identity research", items: ["Identity and background verification", "Username and social-media research", "Phone and email research using lawful sources", "Employment, business and professional-history research", "Location and timeline verification where information is available"] },
       { heading: "Website and infrastructure research", items: ["Domain, DNS and website investigation", "Publicly visible network-infrastructure research", "Website and organization relationship mapping", "Scam, fraud and suspicious-domain research"] },
-      { heading: "Reports and evidence", items: ["Source capture and documentation", "Timestamped and hash-verified evidence", "Relationship and timeline mapping", "Clear investigation reports", "Technical litigation-support packages"] },
+      { heading: "Reports and evidence", items: ["Source capture and documentation", "Timestamps and source-integrity details where applicable", "Relationship and timeline mapping", "Clear investigation reports", "Technical reports prepared for client review"] },
     ],
   },
   forensics: {

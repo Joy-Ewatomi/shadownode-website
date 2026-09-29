@@ -24,7 +24,10 @@ export default function Header({
   sidebarOpen: boolean;
 }) {
   return (
-    <header className="z-30 shrink-0 border-b border-[#143b28] bg-[#030806]/92 backdrop-blur">
+    <header
+      data-dashboard-mobile-header
+      className="relative z-30 shrink-0 border-b border-[#143b28] bg-[#030806]/92 backdrop-blur"
+    >
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
           <button

@@ -4,6 +4,7 @@ import { query } from "@/lib/db"
 import { getTrustedApplicationOrigin } from "@/lib/app-origin"
 import { isSafeFlutterwaveReference } from "@/lib/payments/flutterwave"
 import { verifyAndCompleteFlutterwavePayment } from "@/lib/services/flutterwave-payment-service"
+import { paymentStatusDestination } from "@/lib/payment-redirect"
 
 export const dynamic = "force-dynamic"
 
@@ -28,10 +29,17 @@ export async function GET(request: NextRequest) {
   const payment = local.rows[0]
   if (!payment) return NextResponse.redirect(fallback, { headers: { "Cache-Control": "no-store" } })
 
-  const destination = new URL(`/dashboard/client/payments/${payment.request_id}`, origin)
+  let destination = new URL(`/dashboard/client/payments/${payment.request_id}`, origin)
   try {
-    await verifyAndCompleteFlutterwavePayment(txRef, transactionId)
-    destination.searchParams.set("payment", "processing")
+    const result = await verifyAndCompleteFlutterwavePayment(txRef, transactionId)
+    destination = new URL(
+      paymentStatusDestination(result, payment.request_id),
+      origin,
+    )
+    destination.searchParams.set(
+      "payment",
+      result.success && result.status === "paid" ? "success" : "pending",
+    )
   } catch {
     destination.searchParams.set("payment", "verification_pending")
   }

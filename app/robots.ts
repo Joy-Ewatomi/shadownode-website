@@ -13,6 +13,8 @@ export default function robots(): MetadataRoute.Robots {
           "/security",
           "/contact",
           "/request",
+          "/services/osint",
+          "/services/cybersecurity-training",
           "/verify/certificate/",
         ],
         disallow: [

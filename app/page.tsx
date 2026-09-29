@@ -20,6 +20,7 @@ import {
   ArrowUpRight,
   Terminal,
   EyeOff,
+  GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -44,7 +45,7 @@ const principles = [
   {
     icon: Target,
     title: "RESULTS FOCUSED",
-    body: "High-fidelity, actionable intelligence optimized directly for executive leadership and legal counsel decision-making.",
+    body: "Clear findings, documented sources and stated limitations help clients make informed decisions.",
   },
 ];
 
@@ -287,17 +288,15 @@ export default function Home() {
               </h1>
 
               <p className="mt-8 max-w-2xl text-lg leading-8 text-white/72">
-                Institutional-grade digital intelligence, OSINT, digital
-                forensics, ethical hacking, government consulting, and
-                court-admissible investigations — designed to support law
-                enforcement, protect corporations, and deliver justice in
-                critical situations.
+                Lawful open-source intelligence and practical cybersecurity
+                training for individuals and organizations that need clear,
+                documented and responsibly handled support.
               </p>
 
               <div className="mt-5 inline-flex items-center gap-3 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm text-white/70">
                 <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(39,213,110,0.8)]" />
-                Founder-led. Mission-driven. Built for lawful, discreet,
-                high-stakes investigations.
+                Founder-led. Mission-driven. Built for lawful, discreet and
+                evidence-oriented work.
               </div>
 
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -349,49 +348,54 @@ export default function Home() {
                     <div className="mt-3 space-y-3 rounded border border-primary/20 bg-background/35 p-4">
                       <p className="text-white/58">
                         <span className="text-primary">OSINT</span>{" "}
+                        // AVAILABLE NOW
+                      </p>
+                      <p className="text-white/58">
+                        <span className="text-primary">CYBERSECURITY TRAINING</span>{" "}
+                        // AVAILABLE NOW
                       </p>
                       <p className="text-white/58">
                         <span className="text-primary">
-                          DIGITAL FORENSICS
+                          DIGITAL FORENSICS // PLANNED
                         </span>{" "}
                       </p>
                       <p className="text-white/58">
                         <span className="text-primary">
-                          ETHICAL HACKING
+                          ETHICAL HACKING // PLANNED
                         </span>{" "}
                       </p>
                       <p className="text-white/58">
                         <span className="text-primary">
-                          GOVERNMENT CONSULTING
+                          GOVERNMENT CONSULTING // IN DEVELOPMENT
                         </span>{" "}
                       </p>
                       <p className="text-white/58">
                         <span className="text-primary">
-                          CORRECTIONAL INTELLIGENCE
+                          CORRECTIONAL INTELLIGENCE // PLANNED
                         </span>
                       </p>
                       <p className="text-white/58">
                         <span className="text-primary">
-                          LEGAL ADVISORY
+                          LEGAL ADVISORY // PLANNED
                         </span>{" "}
                       </p>
                       <p className="text-white/58">
-                        <span className="text-primary">RESEARCH</span>{" "}
+                        <span className="text-primary">RESEARCH // PLANNED</span>{" "}
                       </p>
                       <p className="text-white/58">
-                        <span className="text-primary">OPSEC CONSULTING</span>
+                        <span className="text-primary">OPSEC CONSULTING // PLANNED</span>
                       </p>
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-primary">$ client_status</p>
+                    <p className="text-primary">$ portal_status</p>
                     <div className="mt-3 flex items-center gap-3 text-primary">
-                      <span>anonymity:</span>
+                      <span>authenticated:</span>
                       <span className="h-4 min-w-0 flex-1 bg-primary/20">
                         <span className="block h-full w-full bg-gradient-to-r from-primary/70 to-primary" />
                       </span>
-                      <span>100%</span>
+                      <span>required</span>
                     </div>
                   </div>
                 </div>
@@ -411,32 +415,48 @@ export default function Home() {
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              onClick={() => handleTrackToggle("osint")}
-              className="group relative min-h-[16rem] cursor-pointer overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
             >
               <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
               <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
-              <Search
-                className="mb-7 h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]"
-                strokeWidth={1.45}
-              />
+              <div className="mb-7 flex items-center justify-between gap-3">
+                <Search className="h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+                <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] font-bold uppercase text-primary">Available now</span>
+              </div>
               <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">
                 OSINT
               </h2>
               <p className="mt-4 leading-6 text-white/70 text-sm">
-                Advanced open-source intelligence, digital footprint mapping,
-                and threat intelligence gathering.
+                Lawful public-source research, digital-footprint analysis and
+                documented reporting for authorized investigations.
               </p>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleTrackToggle("osint");
-                }}
-                className="mt-9 inline-flex items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary hover:underline text-left transition"
-              >
-                {activeTrack === "osint" ? "CLOSE MODULE —" : "LEARN MORE →"}
-              </button>
+              <Link href="/services/osint" className="mt-9 inline-flex min-h-11 items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                LEARN MORE <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </motion.article>
+
+            {/* 2. CYBERSECURITY TRAINING */}
+            <motion.article
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="group relative min-h-[16rem] overflow-hidden rounded-md border border-primary/25 bg-card/72 p-6 backdrop-blur transition hover:-translate-y-1 hover:border-primary/70"
+            >
+              <span className="absolute left-0 top-0 h-7 w-7 border-l border-t border-primary/80" />
+              <span className="absolute bottom-0 right-0 h-7 w-7 border-b border-r border-primary/80" />
+              <div className="mb-7 flex items-center justify-between gap-3">
+                <GraduationCap className="h-12 w-12 text-primary transition group-hover:drop-shadow-[0_0_16px_rgba(39,213,110,0.45)]" strokeWidth={1.45} />
+                <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] font-bold uppercase text-primary">Available now</span>
+              </div>
+              <h2 className="font-mono text-xl font-bold tracking-[0.04em] text-white">
+                CYBERSECURITY TRAINING
+              </h2>
+              <p className="mt-4 text-sm leading-6 text-white/70">
+                Practical digital-safety, awareness and tailored technical training for individuals and organizations.
+              </p>
+              <Link href="/services/cybersecurity-training" className="mt-9 inline-flex min-h-11 items-center gap-3 font-mono text-xs tracking-[0.08em] text-primary transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                LEARN MORE <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
             </motion.article>
 
             {/* 2. DIGITAL FORENSICS */}
@@ -462,8 +482,8 @@ export default function Home() {
                 DIGITAL FORENSICS
               </h2>
               <p className="mt-4 leading-6 text-white/70 text-sm">
-                Device forensics, data recovery, crypto tracing, and
-                court-admissible evidence handling.
+                Planned capability for authorized device examination, data
+                recovery and documented evidence handling.
               </p>
               <button
                 type="button"
@@ -538,8 +558,8 @@ export default function Home() {
                 GOVERNMENT CONSULTING
               </h2>
               <p className="mt-4 leading-6 text-white/70 text-sm">
-                Intelligence training, lawful surveillance support, and advisory
-                for law enforcement agencies.
+                Planned advisory and capacity-building support for authorized
+                public institutions.
               </p>
               <button
                 type="button"
@@ -574,8 +594,8 @@ export default function Home() {
                 CORRECTIONAL INTELLIGENCE
               </h2>
               <p className="mt-4 leading-6 text-white/70 text-sm">
-                Inmate monitoring, risk assessment, and intelligence support for
-                correctional facilities.
+                Planned intelligence and security support for authorized
+                correctional institutions.
               </p>
               <button
                 type="button"
@@ -612,8 +632,8 @@ export default function Home() {
                 LEGAL ADVISORY
               </h2>
               <p className="mt-4 leading-6 text-white/70 text-sm">
-                Litigation support, AML investigations, compliance consulting,
-                and court-ready evidence preparation.
+                Planned technical investigation and digital-evidence support
+                for clients and retained legal professionals.
               </p>
               <button
                 type="button"
@@ -648,8 +668,8 @@ export default function Home() {
                 RESEARCH
               </h2>
               <p className="mt-4 leading-6 text-white/70 text-sm">
-                Proactive threat hunting, syndicate mapping, and deep strategic
-                intelligence research.
+                Planned research and monitoring for digital threats, suspicious
+                activity and emerging risks.
               </p>
               <button
                 type="button"
@@ -684,8 +704,8 @@ export default function Home() {
                 OPSEC CONSULTING
               </h2>
               <p className="mt-4 leading-6 text-white/70 text-sm">
-                Strategic security architecture, executive protection, and
-                operational security (OPSEC) advisory.
+                Planned guidance for reducing digital exposure and improving
+                organizational information handling.
               </p>
               <button
                 type="button"
@@ -811,11 +831,11 @@ export default function Home() {
                 <h3 className="mt-5 font-mono text-xl text-white">{step}</h3>
                 <p className="mt-3 text-sm leading-6 text-white/56">
                   {index === 0 &&
-                    "Define tactical objectives, asset parameters, cross-border jurisdictions, and security baseline metrics."}
+                    "Define the lawful purpose, research question, scope, authorization and reporting needs."}
                   {index === 1 &&
-                    "Gather intelligence, exploit network flaws with authorization boundaries, and log step-by-step verification proofs."}
+                    "Collect relevant public information or deliver the agreed training plan, with documented work and appropriate controls."}
                   {index === 2 &&
-                    "Compile institutional-grade, peer-reviewed findings optimized for executive boards and courtroom litigation."}
+                    "Provide a clear report or training record with outcomes, sources and limitations where applicable."}
                 </p>
               </div>
             ))}
