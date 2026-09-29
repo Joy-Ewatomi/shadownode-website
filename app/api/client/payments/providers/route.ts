@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { flutterwaveSupportsCurrency, getFlutterwaveConfig } from "@/lib/payments/flutterwave"
+import { hasPaystackConfiguration, paystackSupportsCurrency } from "@/lib/payments/paystack"
 export const dynamic = "force-dynamic"
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser()
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
     && targetStatus === "awaiting_payment"
     && !isPaid
   return NextResponse.json({ providers: {
-    paystack: { available: Boolean(process.env.PAYSTACK_SECRET_KEY), label: "Paystack" },
+    paystack: { available: hasPaystackConfiguration() && paystackSupportsCurrency(currency), label: "Paystack" },
     flutterwave: { available: Boolean(getFlutterwaveConfig()) && flutterwaveSupportsCurrency(currency), label: "Flutterwave" },
   }, eligibility: {
     canPay,

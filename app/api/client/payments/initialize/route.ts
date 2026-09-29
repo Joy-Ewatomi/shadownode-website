@@ -6,6 +6,7 @@ import {
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { getTrustedApplicationOrigin } from "@/lib/app-origin"
+import { paystackSupportsCurrency } from "@/lib/payments/paystack"
 
 export async function POST(
   request: NextRequest,
@@ -277,6 +278,13 @@ export async function POST(
             "Approved quote currency is missing",
         },
         { status: 400 },
+      )
+    }
+
+    if (!paystackSupportsCurrency(currency)) {
+      return NextResponse.json(
+        { error: `Paystack is unavailable for ${currency}. Choose another available provider or contact operations.` },
+        { status: 409, headers: { "Cache-Control": "private, no-store" } },
       )
     }
 

@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { paymentStatusDestination } from "../lib/payment-redirect.ts";
+import { paystackSupportsCurrency } from "../lib/payments/paystack.ts";
 
 const trainingId = "11111111-1111-4111-8111-111111111111";
 const requestId = "22222222-2222-4222-8222-222222222222";
 const caseId = "33333333-3333-4333-8333-333333333333";
+
+assert.equal(paystackSupportsCurrency("NGN", {}), true);
+assert.equal(paystackSupportsCurrency("GBP", {}), false);
+assert.equal(
+  paystackSupportsCurrency("gbp", { PAYSTACK_SUPPORTED_CURRENCIES: "NGN, GBP" }),
+  true,
+);
+assert.equal(
+  paystackSupportsCurrency("GBP", { PAYSTACK_SUPPORTED_CURRENCIES: "APP_URL=https://bad.example" }),
+  false,
+);
 
 const paidTraining = {
   success: true,
@@ -53,6 +65,7 @@ const completion = readFileSync("lib/services/payment-completion-service.ts", "u
 const accessService = readFileSync("lib/services/training-operations-service.ts", "utf8");
 const providerRoute = readFileSync("app/api/client/payments/providers/route.ts", "utf8");
 const paymentPage = readFileSync("app/dashboard/client/payments/[id]/page.tsx", "utf8");
+const paystackInitialize = readFileSync("app/api/client/payments/initialize/route.ts", "utf8");
 
 for (const callback of [paystack, flutterwave]) {
   assert.match(callback, /paymentStatusDestination/);
@@ -75,8 +88,12 @@ assert.match(providerRoute, /targetStatus === "awaiting_payment"/);
 assert.match(providerRoute, /paid\.status = 'paid'/);
 assert.match(providerRoute, /r\.id = \$1 AND r\.user_id = \$2/);
 assert.match(providerRoute, /te\.client_profile_id = up\.id/);
+assert.match(providerRoute, /paystackSupportsCurrency\(currency\)/);
+assert.match(paystackInitialize, /if \(!paystackSupportsCurrency\(currency\)\)/);
 assert.match(paymentPage, /const canPay = eligibility\?\.canPay === true/);
 assert.match(paymentPage, /This engagement is already completed/);
+assert.match(paymentPage, /No active payment channel supports/);
+assert.match(paymentPage, /useState\(\{ paystack: false, flutterwave: false \}\)/);
 assert.doesNotMatch(paymentPage, /PAYMENT PAGE REQUEST DATA/);
 
 console.log("Payment training redirect verifier passed.");

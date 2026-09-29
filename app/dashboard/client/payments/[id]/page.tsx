@@ -66,7 +66,7 @@ export default function ClientPaymentDetailPage({
   ] = useState(false)
 
   const [provider, setProvider] = useState<PaymentProvider>("paystack")
-  const [providers, setProviders] = useState({ paystack: true, flutterwave: false })
+  const [providers, setProviders] = useState({ paystack: false, flutterwave: false })
   const [eligibility, setEligibility] = useState<PaymentEligibility | null>(null)
 
   const [
@@ -521,7 +521,9 @@ export default function ClientPaymentDetailPage({
                 "training"
                 ? "Payment has been confirmed. ShadowNode can now proceed with your training engagement."
                 : "Payment has been confirmed. ShadowNode can now proceed with your investigation."
-              : "Complete payment through your selected hosted provider. Your request becomes active only after server verification."}
+              : providers.paystack || providers.flutterwave
+                ? "Complete payment through your selected hosted provider. Your request becomes active only after server verification."
+                : `No online payment provider is currently available for ${currency}. Contact operations to have the quotation reviewed in a supported payment currency.`}
           </p>
         </div>
 
@@ -536,12 +538,17 @@ export default function ClientPaymentDetailPage({
              {providers.paystack && <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded border border-[#143b28] px-4 py-3"><input type="radio" name="payment-provider" checked={provider === "paystack"} onChange={() => setProvider("paystack")} /> Paystack</label>}
              {providers.flutterwave && <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded border border-[#143b28] px-4 py-3"><input type="radio" name="payment-provider" checked={provider === "flutterwave"} onChange={() => setProvider("flutterwave")} /> Flutterwave</label>}
            </div>
+           {!providers.paystack && !providers.flutterwave && (
+             <p role="status" className="rounded border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
+               No active payment channel supports {currency} for this merchant account. Please contact operations; your accepted amount will not be converted or changed automatically.
+             </p>
+           )}
            {provider === "flutterwave" && <p className="text-sm leading-6 text-white/55">Available payment methods are determined securely by Flutterwave based on your country, currency and merchant configuration.</p>}
          </fieldset>
        )}
 
        <div className="flex flex-wrap gap-3">
-  {!isPaid && (
+  {!isPaid && (providers.paystack || providers.flutterwave) && (
     <button
       type="button"
       disabled={paying || (!providers.paystack && !providers.flutterwave)}
