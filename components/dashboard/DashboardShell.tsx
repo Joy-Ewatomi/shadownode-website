@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { AppUser } from "@/lib/auth";
 import { ClientNotificationProvider } from "@/components/notifications/ClientNotificationProvider";
@@ -17,6 +17,7 @@ export default function DashboardShell({
   user: AppUser;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const contentRef = useRef<HTMLElement>(null);
 
   const pathname = usePathname();
 
@@ -26,13 +27,14 @@ export default function DashboardShell({
 
   useEffect(() => {
     setSidebarOpen(false);
+    contentRef.current?.scrollTo({ top: 0, left: 0 });
   }, [pathname]);
 
   return (
     <ClientNotificationProvider>
       <div
         data-dashboard-shell
-        className="relative z-10 h-svh overflow-hidden bg-transparent text-white"
+        className="fixed inset-0 z-10 h-dvh w-full overflow-hidden bg-transparent text-white"
       >
         <div className="relative flex h-full overflow-hidden">
           <Sidebar
@@ -49,6 +51,7 @@ export default function DashboardShell({
             />
 
             <main
+              ref={contentRef}
               data-dashboard-content
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
             >

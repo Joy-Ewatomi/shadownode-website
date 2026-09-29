@@ -15,6 +15,7 @@ const loading = read("app/dashboard/loading.tsx");
 const errorBoundary = read("app/dashboard/error.tsx");
 const notFound = read("app/dashboard/not-found.tsx");
 const rootLayout = read("app/layout.tsx");
+const submitted = read("components/client/RequestSubmitted.tsx");
 
 assert.match(layout, /const user = await getCurrentUser\(\)/);
 assert.match(layout, /if \(!user\)[\s\S]*redirect\("\/login"\)/);
@@ -50,12 +51,17 @@ assert.equal((shell.match(/<Header/g) || []).length, 1);
 assert.equal((shell.match(/<Sidebar/g) || []).length, 1);
 assert.match(shell, /data-dashboard-shell/);
 assert.match(shell, /data-dashboard-content/);
+assert.match(shell, /fixed inset-0[\s\S]*h-dvh/);
+assert.match(shell, /contentRef\.current\?\.scrollTo\(\{ top: 0, left: 0 \}\)/);
 assert.match(header, /data-dashboard-mobile-header/);
+assert.match(header, /sticky top-0/);
 assert.match(header, /lg:hidden/);
 assert.match(sidebar, /data-dashboard-sidebar/);
 assert.match(sidebar, /lg:translate-x-0/);
 assert.match(rootLayout, /<ThreatNodeNetwork \/>/);
-assert.match(shell, /relative z-10[\s\S]*bg-transparent/);
+assert.match(shell, /fixed inset-0 z-10[\s\S]*bg-transparent/);
+assert.match(submitted, /\[data-dashboard-content\]/);
+assert.match(submitted, /scrollTo\(\{ top: 0, left: 0, behavior: "auto" \}\)/);
 
 for (const roleDestination of [
   "/dashboard/client",

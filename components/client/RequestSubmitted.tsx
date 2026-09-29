@@ -2,12 +2,18 @@
 
 import { CheckCircle2, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
+import { useEffect } from "react";
 
 type Props = {
   referenceId: string;
 };
 
 export default function RequestSubmitted({ referenceId }: Props) {
+  useEffect(() => {
+    const content = document.querySelector<HTMLElement>("[data-dashboard-content]");
+    content?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
   return (
     <div className="rounded-md border border-[#143b28] bg-[#06110f] p-8 text-center">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#20dc73] bg-[#20dc73]/10">
