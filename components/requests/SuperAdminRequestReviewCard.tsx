@@ -107,20 +107,7 @@ type DecisionMode =
   | "reject"
   | null
 
-const CURRENCIES = [
-  "USD",
-  "EUR",
-  "GBP",
-  "NGN",
-  "CAD",
-  "AUD",
-  "JPY",
-  "INR",
-  "SGD",
-  "CNY",
-  "KES",
-  "GHS",
-]
+const CURRENCIES = ["NGN"]
 
 function formatMoney(
   amount: number | null | undefined,
@@ -529,19 +516,7 @@ export default function SuperAdminRequestReviewCard({
                 "",
             ),
 
-      currency:
-        isNegotiationReview
-          ? (
-              currentNegotiation?.quote_currency ||
-              request.preferred_currency ||
-              latestAdminQuote?.currency ||
-              "NGN"
-            )
-          : (
-              latestAdminQuote?.currency ||
-              request.approved_quote_currency ||
-              "USD"
-            ),
+      currency: "NGN",
 
       notes: "",
 
@@ -606,11 +581,7 @@ export default function SuperAdminRequestReviewCard({
       latestAdminQuote?.price ??
       request.approved_quote_amount
 
-    const currency =
-      latestAdminQuote?.currency ||
-      request.approved_quote_currency ||
-      request.preferred_currency ||
-      "USD"
+    const currency = "NGN"
 
     setDecisionMode("admin")
 
@@ -656,10 +627,12 @@ export default function SuperAdminRequestReviewCard({
       request.ai_price_estimate ??
       latestAIQuote?.price
 
-    const currency =
+    const aiCurrency = (
       latestAIQuote?.currency ||
       request.ai_price_currency ||
-      "USD"
+      ""
+    ).trim().toUpperCase()
+    const currency = "NGN"
 
     setDecisionMode("ai")
 
@@ -667,9 +640,9 @@ export default function SuperAdminRequestReviewCard({
       ...current,
 
       amount:
-        amount != null
+        amount != null && aiCurrency === "NGN"
           ? String(amount)
-          : current.amount,
+          : "",
 
       currency,
 
@@ -714,10 +687,7 @@ export default function SuperAdminRequestReviewCard({
       latestAdminQuote?.price ??
       request.approved_quote_amount
 
-    const currency =
-      currentNegotiation.quote_currency ||
-      request.preferred_currency ||
-      "NGN"
+    const currency = "NGN"
 
     setDecisionMode("negotiated")
 
@@ -779,19 +749,7 @@ export default function SuperAdminRequestReviewCard({
             request.approved_quote_amount
           )
 
-    const currency =
-      isNegotiationReview
-        ? (
-            currentNegotiation?.quote_currency ||
-            request.preferred_currency ||
-            "NGN"
-          )
-        : (
-            latestAdminQuote?.currency ||
-            request.approved_quote_currency ||
-            request.preferred_currency ||
-            "USD"
-          )
+    const currency = "NGN"
 
     setDecisionMode("adjust")
 
@@ -3456,7 +3414,7 @@ export default function SuperAdminRequestReviewCard({
 
                     {isNegotiationReview && (
                       <p className="mt-2 text-xs text-yellow-300/50">
-                        Negotiation currency is fixed to the client's preferred currency.
+                        Negotiation currency is fixed to NGN.
                       </p>
                     )}
 

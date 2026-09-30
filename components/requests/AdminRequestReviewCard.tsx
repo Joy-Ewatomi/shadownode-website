@@ -483,8 +483,7 @@ export default function AdminRequestReviewCard({
           : "",
 
       currency:
-        request.approved_quote_currency ||
-        "USD",
+        "NGN",
 
       start_date:
         hasTrainingDates
@@ -696,10 +695,7 @@ export default function AdminRequestReviewCard({
                   )
                 : "",
 
-            currency:
-              currentNegotiation.quote_currency ||
-              request.preferred_currency ||
-              "NGN",
+            currency: "NGN",
 
             start_date:
               startDate,
@@ -726,8 +722,7 @@ export default function AdminRequestReviewCard({
                 )
               : "",
 
-          currency:
-            "USD",
+          currency: "NGN",
 
           start_date:
             startDate,
@@ -915,15 +910,15 @@ export default function AdminRequestReviewCard({
        * INITIAL:
        *
        *   action = submit
-       *   amount = USD
-       *   currency = USD
+       *   amount = NGN
+       *   currency = NGN
        *
        * NEGOTIATION:
        *
        *   action = submit
        *   negotiation_id = current negotiation
-       *   amount = client's negotiation currency
-       *   currency = client currency
+       *   amount = NGN
+       *   currency = NGN
        */
 
       const payload = {
@@ -938,10 +933,7 @@ export default function AdminRequestReviewCard({
         approved_quote_amount:
           amount,
 
-        approved_quote_currency:
-          isNegotiation
-            ? form.currency
-            : "USD",
+        approved_quote_currency: "NGN",
 
         approved_estimated_start:
           hasTrainingDates
@@ -1815,9 +1807,7 @@ export default function AdminRequestReviewCard({
 
                 <p className="mt-2 text-xs text-white/30">
 
-                  {isNegotiation
-                    ? `This negotiation continues in the client's preferred currency (${form.currency}). The Administrator responds using the same currency.`
-                    : "The initial Administrator quote is prepared in USD. Currency conversion occurs during final Super Administrator approval."}
+                  All ShadowNode quotations and hosted payments are issued in NGN.
 
                 </p>
 

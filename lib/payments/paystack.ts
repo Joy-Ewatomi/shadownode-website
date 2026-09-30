@@ -1,4 +1,12 @@
 const DEFAULT_PAYSTACK_CURRENCIES = new Set(["NGN"])
+const PAYSTACK_PLATFORM_CURRENCIES = new Set([
+  "NGN",
+  "USD",
+  "GHS",
+  "ZAR",
+  "KES",
+  "XOF",
+])
 
 export function paystackSupportsCurrency(
   currency: string,
@@ -14,7 +22,8 @@ export function paystackSupportsCurrency(
       )
     : DEFAULT_PAYSTACK_CURRENCIES
 
-  return supported.has(currency.trim().toUpperCase())
+  const normalized = currency.trim().toUpperCase()
+  return PAYSTACK_PLATFORM_CURRENCIES.has(normalized) && supported.has(normalized)
 }
 
 export function hasPaystackConfiguration(

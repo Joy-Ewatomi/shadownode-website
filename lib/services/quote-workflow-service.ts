@@ -13,6 +13,7 @@ import {
 import {
   convertCurrency,
 } from "@/lib/services/currency-service"
+import { AUTHORITATIVE_QUOTE_CURRENCY, requireAuthoritativeQuoteCurrency } from "@/lib/quote-currency"
 
 type AdminQuoteReviewAction =
   | "adjust"
@@ -23,23 +24,6 @@ type AdminQuoteReviewAction =
  * HELPERS
  * =========================================================
  */
-
-function normalizeCurrency(
-  value: string | null | undefined,
-): string {
-  const currency =
-    String(value ?? "")
-      .trim()
-      .toUpperCase()
-
-  if (!/^[A-Z]{3}$/.test(currency)) {
-    throw new Error(
-      "A valid three-letter currency code is required",
-    )
-  }
-
-  return currency
-}
 
 function normalizeDate(
   value: string | null | undefined,
@@ -295,10 +279,7 @@ if (!request) {
    * CLIENT CURRENCY
    * -------------------------------------------------------
    */
-  const clientCurrency =
-    normalizeCurrency(
-      request.preferred_currency,
-    )
+  const clientCurrency = AUTHORITATIVE_QUOTE_CURRENCY
 
   /**
    * -------------------------------------------------------
@@ -310,15 +291,7 @@ if (!request) {
    *
    * If no quote currency is supplied, USD is used.
    */
-  const quoteCurrency =
-    input.currency?.trim().toUpperCase() ||
-    "USD"
-
-  if (!/^[A-Z]{3}$/.test(quoteCurrency)) {
-    throw new Error(
-      "A valid three-letter quote currency is required",
-    )
-  }
+  const quoteCurrency = requireAuthoritativeQuoteCurrency(input.currency)
 
   /**
    * -------------------------------------------------------
@@ -795,10 +768,7 @@ export async function reviewQuoteAsAdmin(input: {
    * VALIDATE CURRENCY
    * -------------------------------------------------------
    */
-  const currency =
-    normalizeCurrency(
-      input.currency,
-    )
+  const currency = requireAuthoritativeQuoteCurrency(input.currency)
 
   /**
    * -------------------------------------------------------
@@ -1710,10 +1680,7 @@ export async function requestQuoteReview(
    * -------------------------------------------------------
    */
 
-  const clientCurrency =
-    normalizeCurrency(
-      input.currency,
-    )
+  const clientCurrency = requireAuthoritativeQuoteCurrency(input.currency)
 
   /*
    * -------------------------------------------------------
@@ -1815,10 +1782,7 @@ export async function requestQuoteReview(
          * ---------------------------------------------------
          */
 
-        const requestCurrency =
-          normalizeCurrency(
-            request.preferred_currency,
-          )
+        const requestCurrency = AUTHORITATIVE_QUOTE_CURRENCY
 
         if (
           clientCurrency !==
@@ -1887,17 +1851,16 @@ export async function requestQuoteReview(
          * ---------------------------------------------------
          */
 
-        const approvedCurrency =
-          normalizeCurrency(
-            request.approved_quote_currency,
-          )
+        const approvedCurrency = requireAuthoritativeQuoteCurrency(
+          request.approved_quote_currency,
+        )
 
         if (
           approvedCurrency !==
           requestCurrency
         ) {
           throw new Error(
-            "The current quote currency does not match the client's currency",
+            "The current quote currency must be NGN",
           )
         }
 
@@ -2488,10 +2451,9 @@ export async function administratorReviewNegotiation(
    * -------------------------------------------------------
    */
 
-  const negotiationCurrency =
-    normalizeCurrency(
-      current.quote_currency,
-    )
+  const negotiationCurrency = requireAuthoritativeQuoteCurrency(
+    current.quote_currency,
+  )
 
   /*
    * -------------------------------------------------------
@@ -3194,15 +3156,11 @@ export async function superAdminDecideNegotiation(
    *   Currency the client should see.
    */
 
-  const negotiationCurrency =
-    normalizeCurrency(
-      current.quote_currency,
-    )
+  const negotiationCurrency = requireAuthoritativeQuoteCurrency(
+    current.quote_currency,
+  )
 
-  const requestCurrency =
-    normalizeCurrency(
-      current.preferred_currency,
-    )
+  const requestCurrency = AUTHORITATIVE_QUOTE_CURRENCY
 
   /*
    * =======================================================
@@ -3218,7 +3176,7 @@ export async function superAdminDecideNegotiation(
     requestCurrency
   ) {
     throw new Error(
-      "Negotiation currency no longer matches the client's preferred currency",
+      "Negotiation currency must remain NGN",
     )
   }
 

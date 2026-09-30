@@ -17,7 +17,7 @@ import {
 import {
   administratorReviewNegotiation,
 } from "@/lib/services/quote-workflow-service"
-import { normalizeCurrency } from "@/lib/config/currencies"
+import { AUTHORITATIVE_QUOTE_CURRENCY } from "@/lib/quote-currency"
 import { isCybersecurityTrainingServiceId } from "@/lib/cybersecurity-training-catalog"
 
 /*
@@ -26,20 +26,7 @@ import { isCybersecurityTrainingServiceId } from "@/lib/cybersecurity-training-c
  * =====================================================
  */
 
-const allowedCurrencies = new Set([
-  "USD",
-  "EUR",
-  "GBP",
-  "NGN",
-  "CNY",
-  "CAD",
-  "AUD",
-  "JPY",
-  "INR",
-  "SGD",
-  "KES",
-  "GHS",
-])
+const allowedCurrencies = new Set([AUTHORITATIVE_QUOTE_CURRENCY])
 
 /*
  * =====================================================
@@ -685,12 +672,7 @@ export async function PATCH(
      * =================================================
      */
 
-   const currency =
-  negotiationId
-    ? normalizeCurrency(
-        item.preferred_currency,
-      )
-    : "USD"
+   const currency = AUTHORITATIVE_QUOTE_CURRENCY
 
     if (
       !allowedCurrencies.has(

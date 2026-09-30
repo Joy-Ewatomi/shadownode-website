@@ -957,8 +957,11 @@ const isCybersecurityTraining =
 
   const clientCurrency =
     request.approved_quote_currency ||
-    request.preferred_currency ||
     "NGN"
+
+  const currencyNotice = request.preferred_currency && request.preferred_currency !== "NGN"
+    ? `Payment is charged in NGN. Your card issuer will convert it to ${request.preferred_currency} using its exchange rate and may add fees.`
+    : "Payment is charged in Nigerian naira (NGN)."
 
   /*
    * =========================================================
@@ -2149,6 +2152,7 @@ console.log("EVIDENCE:", request.evidence_files)
                   clientCurrency,
                 )}
               </p>
+              <p className="mt-2 text-xs leading-5 text-white/40">{currencyNotice}</p>
             </div>
 
             {/* CURRENCY */}
@@ -2568,6 +2572,7 @@ console.log("EVIDENCE:", request.evidence_files)
               clientCurrency,
             )}
           </p>
+          <p className="mt-2 text-xs leading-5 text-white/40">{currencyNotice}</p>
 
         </div>
 

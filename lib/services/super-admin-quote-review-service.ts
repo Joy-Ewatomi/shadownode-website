@@ -5,6 +5,7 @@ import {
   sendQuote,
 } from "@/lib/services/quote-workflow-service"
 import { createQuoteVersion } from "@/lib/services/quote-version-service"
+import { requireAuthoritativeQuoteCurrency } from "@/lib/quote-currency"
 
 export type SuperAdminQuoteReviewAction =
   | "accept"
@@ -401,21 +402,7 @@ const adminQuoteResult = await query<{
    * =========================================================
    */
 
-  const finalCurrency =
-    String(
-      input.currency ??
-        adminQuote?.currency ??
-        request.approved_quote_currency ??
-        "USD",
-    )
-      .trim()
-      .toUpperCase()
-
-  if (!finalCurrency) {
-    throw new Error(
-      "Quote currency is required",
-    )
-  }
+  const finalCurrency = requireAuthoritativeQuoteCurrency(input.currency)
 
   /*
    * =========================================================

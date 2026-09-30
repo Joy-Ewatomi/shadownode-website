@@ -11,6 +11,10 @@ assert.equal(paystackSupportsCurrency("NGN", {}), true);
 assert.equal(paystackSupportsCurrency("GBP", {}), false);
 assert.equal(
   paystackSupportsCurrency("gbp", { PAYSTACK_SUPPORTED_CURRENCIES: "NGN, GBP" }),
+  false,
+);
+assert.equal(
+  paystackSupportsCurrency("usd", { PAYSTACK_SUPPORTED_CURRENCIES: "NGN, USD" }),
   true,
 );
 assert.equal(

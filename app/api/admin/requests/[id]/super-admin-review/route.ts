@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth"
 import {
   reviewQuoteAsSuperAdmin,
 } from "@/lib/services/super-admin-quote-review-service"
+import { AUTHORITATIVE_QUOTE_CURRENCY } from "@/lib/quote-currency"
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -294,10 +295,14 @@ export async function POST(
       quoteObject?.currency ??
       body.currency
 
-    const currency =
-      cleanString(
-        currencyValue,
-      ).toUpperCase() || null
+    const suppliedCurrency = cleanString(currencyValue).toUpperCase()
+    if (rawAction !== "reject" && suppliedCurrency && suppliedCurrency !== AUTHORITATIVE_QUOTE_CURRENCY) {
+      return NextResponse.json(
+        { error: "ShadowNode quotations must be issued in NGN." },
+        { status: 400 },
+      )
+    }
+    const currency = rawAction === "reject" ? null : AUTHORITATIVE_QUOTE_CURRENCY
 
     /*
      * A quote decision must always
