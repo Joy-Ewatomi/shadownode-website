@@ -1913,8 +1913,8 @@ export default function InvestigationGraphPage() {
         </div>
       </div>
 
-      <div className="grid h-[calc(100vh-130px)] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)_360px]">
-        <aside className="overflow-y-auto border-b border-[#123a2d] bg-[#030a07] p-4 lg:border-b-0 lg:border-r">
+      <div className="grid min-w-0 grid-cols-1 lg:h-[calc(100vh-130px)] lg:grid-cols-[320px_minmax(0,1fr)_360px]">
+        <aside className="order-1 min-w-0 border-b border-[#123a2d] bg-[#030a07] p-4 lg:order-1 lg:overflow-y-auto lg:border-b-0 lg:border-r">
           <div className="mb-4">
             <div className="flex items-center gap-2 text-[#20dc73]">
               <CircleDot className="h-4 w-4" />
@@ -1959,7 +1959,7 @@ export default function InvestigationGraphPage() {
             </select>
           </div>
 
-          <div className="space-y-2">
+          <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-2 lg:block lg:space-y-2 lg:overflow-x-visible lg:pb-0">
             {filteredPalette.map(
               (item) => {
                 const Icon =
@@ -1985,7 +1985,7 @@ export default function InvestigationGraphPage() {
                         item.type,
                       )
                     }
-                    className="flex w-full items-center gap-3 rounded-md border border-[#123a2d] bg-[#06110f] px-3 py-2 text-left transition hover:border-[#20dc73]/60 hover:bg-[#0a1812]"
+                    className="flex min-h-12 w-52 shrink-0 items-center gap-3 rounded-md border border-[#123a2d] bg-[#06110f] px-3 py-2 text-left transition hover:border-[#20dc73]/60 hover:bg-[#0a1812] lg:w-full"
                   >
                     <span
                       className="grid h-8 w-8 shrink-0 place-items-center rounded-md border"
@@ -2014,7 +2014,7 @@ export default function InvestigationGraphPage() {
         </aside>
 
         <main
-          className="min-h-[520px]"
+          className="order-3 h-[65svh] min-h-[420px] min-w-0 border-t border-[#123a2d] lg:order-2 lg:h-auto lg:min-h-[520px] lg:border-t-0"
           onDragOver={(event) =>
             event.preventDefault()
           }
@@ -2063,7 +2063,7 @@ export default function InvestigationGraphPage() {
           </ReactFlow>
         </main>
 
-        <aside className="overflow-y-auto border-t border-[#123a2d] bg-[#030a07] p-4 lg:border-l lg:border-t-0">
+        <aside className="order-2 min-w-0 border-t border-[#123a2d] bg-[#030a07] p-4 lg:order-3 lg:overflow-y-auto lg:border-l lg:border-t-0">
           <div className="flex items-center gap-2 text-[#20dc73]">
             <Sparkles className="h-4 w-4" />
             <p className="font-mono text-xs uppercase tracking-[0.14em]">
@@ -2755,7 +2755,7 @@ export default function InvestigationGraphPage() {
       </div>
 
       {showEntityPanel ? (
-        <div className="absolute right-5 top-24 z-20 w-[min(28rem,calc(100vw-2.5rem))] rounded-xl border border-[#123a2d] bg-[#06110f] p-5 shadow-2xl shadow-black/50">
+        <div role="dialog" aria-modal="false" aria-labelledby="create-graph-entity-title" className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto rounded-xl border border-[#123a2d] bg-[#06110f] p-4 shadow-2xl shadow-black/50 sm:left-auto sm:right-5 sm:top-20 sm:w-[min(28rem,calc(100vw-2.5rem))] sm:p-5">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -2766,7 +2766,7 @@ export default function InvestigationGraphPage() {
                 </p>
               </div>
 
-              <h2 className="mt-2 font-bold text-white">
+              <h2 id="create-graph-entity-title" className="mt-2 font-bold text-white">
                 Create Entity
               </h2>
             </div>
@@ -3059,7 +3059,7 @@ export default function InvestigationGraphPage() {
       ) : null}
 
       {showRelationshipPanel ? (
-        <div className="absolute right-5 top-24 z-20 w-[min(28rem,calc(100vw-2.5rem))] rounded-xl border border-[#123a2d] bg-[#06110f] p-5 shadow-2xl shadow-black/50">
+        <div role="dialog" aria-modal="false" aria-labelledby="create-graph-relationship-title" className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto rounded-xl border border-[#123a2d] bg-[#06110f] p-4 shadow-2xl shadow-black/50 sm:left-auto sm:right-5 sm:top-20 sm:w-[min(28rem,calc(100vw-2.5rem))] sm:p-5">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -3070,7 +3070,7 @@ export default function InvestigationGraphPage() {
                 </p>
               </div>
 
-              <h2 className="mt-2 font-bold text-white">
+              <h2 id="create-graph-relationship-title" className="mt-2 font-bold text-white">
                 Create Relationship
               </h2>
             </div>
