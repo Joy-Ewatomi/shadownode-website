@@ -36,6 +36,7 @@ type PaymentProvider = "paystack" | "flutterwave"
 type PaymentEligibility = {
   canPay: boolean
   isPaid: boolean
+  isWaived: boolean
   targetType: "case" | "training" | null
   targetId: string | null
   targetStatus: string | null
@@ -292,6 +293,8 @@ export default function ClientPaymentDetailPage({
   // Redirect query parameters are informational only. Paid state comes from
   // the server-owned commercial history and verified payment record.
   const isPaid = request.commercial_history?.status === "paid" || eligibility?.isPaid === true
+  const isWaived = eligibility?.isWaived === true
+  const isSettled = isPaid || isWaived
 
   const canPay = eligibility?.canPay === true
 
@@ -301,7 +304,7 @@ export default function ClientPaymentDetailPage({
 
   if (
     !canPay &&
-    !isPaid
+    !isSettled
   ) {
     return (
       <div className="space-y-6 p-6 text-white">
@@ -370,10 +373,12 @@ export default function ClientPaymentDetailPage({
         </p>
 
         <h1 className="text-3xl font-bold">
-          {isPaid
-            ? "Payment confirmed"
+          {isWaived
+            ? "Payment requirement waived"
+            : isPaid
+              ? "Payment confirmed"
             : "Pay for "}
-          {!isPaid &&
+          {!isSettled &&
             (
               request.title ||
               "your investigation"
@@ -381,8 +386,10 @@ export default function ClientPaymentDetailPage({
         </h1>
 
         <p className="text-sm text-white/55">
-          {isPaid
-            ? "Your payment has been verified by ShadowNode."
+          {isWaived
+            ? "ShadowNode has authorized this engagement without requiring payment."
+            : isPaid
+              ? "Your payment has been verified by ShadowNode."
             : "Secure payment is required before your investigation can begin."}
         </p>
       </header>
@@ -412,7 +419,7 @@ export default function ClientPaymentDetailPage({
           ===================================================== */}
 
       {paymentResult ===
-        "pending" && (
+        "pending" && !isSettled && (
         <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-5">
           <p className="font-semibold text-yellow-300">
             Payment is still processing
@@ -429,7 +436,7 @@ export default function ClientPaymentDetailPage({
           ===================================================== */}
 
       {paymentResult ===
-        "verification_failed" && (
+        "verification_failed" && !isSettled && (
         <div className="rounded-md border border-red-500/30 bg-red-500/10 p-5">
           <p className="font-semibold text-red-300">
             Payment verification failed
@@ -463,7 +470,7 @@ export default function ClientPaymentDetailPage({
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded border border-[#143b28] bg-black/30 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-white/35">
-              Amount Due
+              {isWaived ? "Quoted Amount" : "Amount Due"}
             </p>
 
             <p className="mt-2 text-2xl font-semibold text-[#20dc73]">
@@ -479,13 +486,15 @@ export default function ClientPaymentDetailPage({
 
             <p
               className={`mt-2 text-lg ${
-                isPaid
+                isSettled
                   ? "text-[#20dc73]"
                   : "text-yellow-300"
               }`}
             >
-              {isPaid
-                ? "Payment Confirmed"
+              {isWaived
+                ? "Payment Waived"
+                : isPaid
+                  ? "Payment Confirmed"
                 : "Awaiting Payment"}
             </p>
           </div>
@@ -516,8 +525,10 @@ export default function ClientPaymentDetailPage({
           </p>
 
           <p className="mt-2 text-sm leading-7 text-white/65">
-            {isPaid
-              ? paymentType ===
+            {isWaived
+              ? "The payment requirement has been waived. You can continue to the authorized engagement."
+              : isPaid
+                ? paymentType ===
                 "training"
                 ? "Payment has been confirmed. ShadowNode can now proceed with your training engagement."
                 : "Payment has been confirmed. ShadowNode can now proceed with your investigation."
@@ -531,7 +542,7 @@ export default function ClientPaymentDetailPage({
             ACTIONS
             =================================================== */}
 
-       {!isPaid && (
+       {!isSettled && (
          <fieldset className="space-y-3">
            <legend className="text-sm font-semibold text-white">Payment provider</legend>
            <div className="flex flex-wrap gap-3">
@@ -548,7 +559,7 @@ export default function ClientPaymentDetailPage({
        )}
 
        <div className="flex flex-wrap gap-3">
-  {!isPaid && (providers.paystack || providers.flutterwave) && (
+  {!isSettled && (providers.paystack || providers.flutterwave) && (
     <button
       type="button"
       disabled={paying || (!providers.paystack && !providers.flutterwave)}
@@ -561,7 +572,7 @@ export default function ClientPaymentDetailPage({
     </button>
   )}
 
-  {isPaid &&
+  {isSettled &&
     eligibility?.targetType === "training" && eligibility.targetId && (
       <Link
         href={`/dashboard/training/${eligibility.targetId}`}
@@ -571,7 +582,7 @@ export default function ClientPaymentDetailPage({
       </Link>
     )}
 
-  {isPaid &&
+  {isSettled &&
     eligibility?.targetType !== "training" &&
     request.converted_case_id && (
       <Link
@@ -582,7 +593,7 @@ export default function ClientPaymentDetailPage({
       </Link>
     )}
 
-  {isPaid &&
+  {isSettled &&
     eligibility?.targetType !== "training" &&
     !request.converted_case_id && (
       <Link

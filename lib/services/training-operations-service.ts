@@ -860,7 +860,7 @@ export async function ensureAccess(
     );
   } else if (
     lifecycle === "active" &&
-    engagement.payment_status === "paid" &&
+    ["paid", "waived"].includes(engagement.payment_status || "") &&
     engagement.status === "scheduled"
   ) {
     await query(
@@ -907,8 +907,10 @@ export async function ensureAccess(
     if (!profileId || engagement.client_profile_id !== profileId) {
       throw new Error("Forbidden");
     }
-    if (engagement.payment_status !== "paid") {
-      throw new Error("Training access is available after verified payment.");
+    if (!["paid", "waived"].includes(engagement.payment_status || "")) {
+      throw new Error(
+        "Training access is available after verified payment or an authorized payment waiver.",
+      );
     }
     if (engagement.client_locked) {
       throw new Error(

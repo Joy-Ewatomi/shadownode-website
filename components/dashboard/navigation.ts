@@ -15,6 +15,7 @@ import {
   Award,
   Send,
   MailSearch,
+  ContactRound,
 } from "lucide-react"
 import type { ElementType } from "react"
 
@@ -209,6 +210,10 @@ export function getNavigation(role: string): NavigationItem[] {
 
     ...((isAdministrator || isSuperAdministrator)
       ? [{ label: "Service Launch Interests", href: "/dashboard/service-launch-interests", icon: MailSearch, permission: "audit:view" as Permission }]
+      : []),
+
+    ...(isSuperAdministrator
+      ? [{ label: "Public Profile", href: "/dashboard/public-profile", icon: ContactRound, permission: "settings:manage" as Permission }]
       : []),
 
     // =====================================================

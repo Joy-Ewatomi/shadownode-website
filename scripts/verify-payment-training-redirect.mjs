@@ -87,7 +87,7 @@ assert.match(trainingLayout, /profile\?\.user_id === user\.id/);
 assert.match(trainingLayout, /!canViewTraining && !isOwner && !isAssignedTrainer/);
 assert.match(trainingLayout, /ensureAccess\(id, user, false\)/);
 assert.match(accessService, /engagement\.client_profile_id !== profileId/);
-assert.match(accessService, /engagement\.payment_status !== "paid"/);
+assert.match(accessService, /\["paid", "waived"\]\.includes\(engagement\.payment_status/);
 assert.match(providerRoute, /targetStatus === "awaiting_payment"/);
 assert.match(providerRoute, /paid\.status = 'paid'/);
 assert.match(providerRoute, /r\.id = \$1 AND r\.user_id = \$2/);

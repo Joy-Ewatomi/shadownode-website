@@ -54,16 +54,19 @@ export async function GET(request: NextRequest) {
   const targetStatus = hasTraining ? payment.training_status : hasCase ? payment.case_status : null
   const targetPaymentStatus = hasTraining ? payment.training_payment_status : hasCase ? payment.case_payment_status : null
   const isPaid = payment.has_paid_payment || targetPaymentStatus === "paid"
+  const isWaived = targetPaymentStatus === "waived"
   const canPay = payment.request_status === "awaiting_payment"
     && hasCase !== hasTraining
     && targetStatus === "awaiting_payment"
     && !isPaid
+    && !isWaived
   return NextResponse.json({ providers: {
     paystack: { available: hasPaystackConfiguration() && paystackSupportsCurrency(currency), label: "Paystack" },
     flutterwave: { available: Boolean(getFlutterwaveConfig()) && flutterwaveSupportsCurrency(currency), label: "Flutterwave" },
   }, eligibility: {
     canPay,
     isPaid,
+    isWaived,
     targetType: hasTraining ? "training" : hasCase ? "case" : null,
     targetId: hasTraining ? payment.converted_training_engagement_id : hasCase ? payment.converted_case_id : null,
     targetStatus,

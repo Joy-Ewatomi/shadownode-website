@@ -4,6 +4,8 @@ import { query } from "@/lib/db"
 import SuperAdminRequestReviewCard from "@/components/requests/SuperAdminRequestReviewCard"
 import CustomRequestReviewPanel from "@/components/requests/CustomRequestReviewPanel"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
+import PaymentWaiverControl from "@/components/requests/PaymentWaiverControl"
+import { isSuperAdministratorRole } from "@/lib/role-access"
 
 type RequestData = {
   id: string
@@ -16,6 +18,8 @@ type RequestData = {
   supporting_links: unknown
   admin_recommendation: Record<string, unknown> | null
   status: string
+  converted_case_id: string | null
+  converted_training_engagement_id: string | null
 
   preferred_currency: string | null
 
@@ -120,6 +124,7 @@ export default async function SuperAdministratorRequestDetailPage({
   if (!user) {
     redirect("/login")
   }
+  if (!isSuperAdministratorRole(user.role)) redirect("/dashboard")
 
 
   /*
@@ -149,6 +154,8 @@ export default async function SuperAdministratorRequestDetailPage({
       supporting_links,
       admin_recommendation,
       status,
+      converted_case_id,
+      converted_training_engagement_id,
 
       preferred_currency,
 
@@ -450,6 +457,13 @@ export default async function SuperAdministratorRequestDetailPage({
           negotiationHistory={negotiationHistory}
         />
       )}
+
+      <PaymentWaiverControl
+        requestId={request.id}
+        status={request.status}
+        hasCase={Boolean(request.converted_case_id)}
+        hasTraining={Boolean(request.converted_training_engagement_id)}
+      />
     </div>
   )
 }

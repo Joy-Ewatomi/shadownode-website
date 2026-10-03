@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PolicySection, PublicPolicyLayout } from "@/components/public/PublicPolicyLayout";
-import { validReplyTo } from "@/lib/email-address";
+import ContactInquiryForm from "@/components/public/ContactInquiryForm";
+import { getPublicSiteProfile } from "@/lib/public-site-profile";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -9,8 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/contact" },
 };
 
-export default function ContactPage() {
-  const monitored = validReplyTo(process.env.CLIENT_SERVICES_REPLY_TO);
+export default async function ContactPage() {
+  const monitored = (await getPublicSiteProfile()).contact_email;
 
   return (
     <PublicPolicyLayout eyebrow="Contact" title="Contact ShadowNode" description="Use the secure client portal for active service requests and sensitive engagement communications. Use the monitored operational address below for general business, privacy, or security enquiries.">
@@ -26,6 +27,9 @@ export default function ContactPage() {
       <PolicySection title="Send information safely">
         <p>Do not email passwords, login or recovery codes, authentication tokens, payment credentials, sensitive evidence, or confidential case material. Upload engagement material only through an authorized secure workflow.</p>
         <p>For suspected vulnerabilities, include “Security report” in the subject and follow the boundaries in our <Link href="/security" className="text-[#76f0a3] underline underline-offset-4">Security Policy</Link>.</p>
+      </PolicySection>
+      <PolicySection title="Send a general enquiry">
+        <ContactInquiryForm />
       </PolicySection>
     </PublicPolicyLayout>
   );
