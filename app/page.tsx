@@ -94,19 +94,19 @@ const socialMedia = [
   {
     name: "TikTok",
     icon: TikTokIcon,
-    href: "https://www.tiktok.com/@shadownodeib",
+    href: "https://www.tiktok.com/@shadownodeob",
   },
   {
     name: "YouTube",
     icon: Youtube,
-    href: "https://youtube.com/@shadownodeintelligencebureau",
+    href: "http://www.youtube.com/@ShadowNodeOperationsBureau",
   },
   { name: "LinkedIn", icon: Linkedin, href: "https://www.linkedin.com/in/joy-ewatomi-559250366/" },
   { name: "X", icon: XIcon, href: "https://x.com/Joy_Elvera" },
   {
     name: "Instagram",
     icon: Instagram,
-    href: "https://www.instagram.com/shadownodeintelligence",
+    href: "https://www.instagram.com/shadownodeob/",
   },
   { name: "GitHub", icon: Github, href: "https://github.com/Joy-Ewatomi" },
 ];
