@@ -232,6 +232,7 @@ const investigationTasks = [
   {
     number: "11",
     title: "Domain & DNS Intelligence",
+    href: "/dashboard/intelligence/domains",
   },
 ]
 
@@ -670,32 +671,31 @@ export default function CaseDashboard() {
 
                 <div className="grid gap-3 p-5 sm:p-6 md:grid-cols-2">
 
-                  {investigationTasks.map(
-                    (task) => (
-                      <div
-                        key={task.number}
-                        className="group flex items-center gap-4 rounded-lg border border-[#123a2d] bg-black/20 p-4 transition hover:border-[#206344] hover:bg-[#071610]"
-                      >
+                  {investigationTasks.map((task) => {
+                    const content = <>
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#20dc73]/20 bg-[#20dc73]/10 font-mono text-xs font-bold text-[#20dc73]">
                           {task.number}
                         </div>
-
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold leading-5 text-white">
-                            {task.title}
-                          </p>
-
-                          <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-white/20">
-                            Investigation Task
-                          </p>
+                          <p className="text-sm font-semibold leading-5 text-white">{task.title}</p>
+                          <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-white/20">Investigation Task</p>
                         </div>
-
-                        <span className="text-xs text-white/20 transition group-hover:text-[#20dc73]">
-                          →
-                        </span>
+                        <span className="text-xs text-white/20 transition group-hover:text-[#20dc73]">→</span>
+                      </>
+                    const className = "group flex items-center gap-4 rounded-lg border border-[#123a2d] bg-black/20 p-4 transition hover:border-[#206344] hover:bg-[#071610]"
+                    return task.href ? (
+                      <Link key={task.number} href={`${task.href}?case_id=${encodeURIComponent(caseId)}`} className={className}>
+                        {content}
+                      </Link>
+                    ) : (
+                      <div
+                        key={task.number}
+                        className={className}
+                      >
+                        {content}
                       </div>
-                    ),
-                  )}
+                    )
+                  })}
 
                 </div>
               </section>

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation"
 import { getCurrentUser, isAdminRole } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
+import { isSuperAdministratorRole } from "@/lib/role-access"
+import CreateInternalCaseControl from "@/components/cases/CreateInternalCaseControl"
 
 type CaseRow = {
   id: string
@@ -103,6 +105,7 @@ export default async function CasesPage() {
 
   const profileId = await profileIdForUser(user.id)
   const isAdmin = isAdminRole(user.role)
+  const isSuperAdministrator = isSuperAdministratorRole(user.role)
 
   const { rows } = await query<CaseRow>(
     `
@@ -342,6 +345,8 @@ export default async function CasesPage() {
           )}
         </div>
       </header>
+
+      {isSuperAdministrator ? <CreateInternalCaseControl /> : null}
 
       {/* =========================================================
           METRICS
