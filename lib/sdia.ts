@@ -1,5 +1,7 @@
 import { domainToASCII } from "node:url"
 
+const PRODUCTION_SDIA_ORIGIN = "https://api.sdia.shadownodebureau.com"
+
 export function normalizeDomainInput(value: unknown) {
   if (typeof value !== "string") return null
   const input = value.trim().toLowerCase().replace(/\.$/, "")
@@ -14,7 +16,7 @@ export function normalizeDomainInput(value: unknown) {
 
 export function sdiaBaseUrl(env: NodeJS.ProcessEnv = process.env) {
   const configured = env.SDIA_API_URL?.trim()
-  const candidate = configured || (env.NODE_ENV === "development" ? "http://127.0.0.1:8000" : "")
+  const candidate = configured || (env.NODE_ENV === "development" ? "http://127.0.0.1:8000" : PRODUCTION_SDIA_ORIGIN)
   if (!candidate) return null
   try {
     const url = new URL(candidate)

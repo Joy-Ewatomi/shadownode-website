@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status, headers: HEADERS })
   const endpoint = sdiaDomainEndpoint()
   if (!endpoint) return NextResponse.json({ error: "Domain analysis is not configured." }, { status: 503, headers: HEADERS })
-  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 45_000)
+  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 60_000)
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" }
     if (process.env.SDIA_API_KEY) headers.Authorization = `Bearer ${process.env.SDIA_API_KEY}`
