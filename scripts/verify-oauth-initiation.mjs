@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server.js"
 import {
   clearOAuthStateCookie,
   createOAuthInitiationResponse,
+  getCanonicalOAuthInitiationUrl,
   getOAuthStateCookieName,
 } from "../lib/oauth.ts"
 
@@ -80,4 +81,35 @@ test("OAuth state-cookie deletion preserves security and path attributes", () =>
   assert.match(setCookie, /Path=\//i)
   assert.match(setCookie, /Max-Age=0/i)
   assert.doesNotMatch(setCookie, /Domain=/i)
+})
+
+test("canonical OAuth initiation does not self-redirect behind Netlify", () => {
+  const previous = {
+    APP_URL: process.env.APP_URL,
+    NODE_ENV: process.env.NODE_ENV,
+  }
+  process.env.APP_URL = "https://shadownodebureau.com"
+  process.env.NODE_ENV = "production"
+
+  try {
+    const proxied = new NextRequest(
+      "https://shadownodebureau.netlify.app/api/auth/oauth/github",
+      { headers: { host: "shadownodebureau.netlify.app", "x-forwarded-host": "shadownodebureau.com" } },
+    )
+    assert.equal(getCanonicalOAuthInitiationUrl(proxied, "github"), null)
+
+    const legacyHost = new NextRequest(
+      "https://shadownodebureau.netlify.app/api/auth/oauth/github",
+      { headers: { host: "shadownodebureau.netlify.app" } },
+    )
+    assert.equal(
+      getCanonicalOAuthInitiationUrl(legacyHost, "github")?.toString(),
+      "https://shadownodebureau.com/api/auth/oauth/github",
+    )
+  } finally {
+    if (previous.APP_URL === undefined) delete process.env.APP_URL
+    else process.env.APP_URL = previous.APP_URL
+    if (previous.NODE_ENV === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = previous.NODE_ENV
+  }
 })

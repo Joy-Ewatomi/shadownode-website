@@ -1,6 +1,7 @@
 import crypto from "crypto"
 import { NextResponse, type NextRequest } from "next/server.js"
 import { getTrustedApplicationOrigin, validateApplicationOrigin } from "@/lib/app-origin"
+import { oauthRequestUsesCanonicalHost } from "@/lib/oauth-origin"
 
 export type OAuthProvider = "google" | "github"
 
@@ -48,9 +49,15 @@ export function getCanonicalOAuthInitiationUrl(
   provider: OAuthProvider,
 ) {
   const canonicalOrigin = getOAuthBaseUrl(request)
-  return request.nextUrl.origin === canonicalOrigin
+  const canonical = new URL(canonicalOrigin)
+  return oauthRequestUsesCanonicalHost({
+    canonicalOrigin,
+    forwardedHost: request.headers.get("x-forwarded-host"),
+    host: request.headers.get("host"),
+    requestHost: request.nextUrl.host,
+  })
     ? null
-    : new URL("/api/auth/oauth/" + provider, canonicalOrigin)
+    : new URL("/api/auth/oauth/" + provider, canonical)
 }
 
 export function createOAuthInitiationResponse(
