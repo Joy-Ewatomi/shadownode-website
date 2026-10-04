@@ -4,7 +4,7 @@ import type { AppUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/permission";
 import { getNavigation } from "@/components/dashboard/navigation";
 import { useClientNotifications } from "@/components/notifications/ClientNotificationProvider";
-import { BarChart3, X } from "lucide-react";
+import { BarChart3, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -21,10 +21,14 @@ export default function Sidebar({
   user,
   open,
   onClose,
+  desktopCollapsed,
+  onDesktopCollapseToggle,
 }: {
   user: AppUser;
   open: boolean;
   onClose: () => void;
+  desktopCollapsed: boolean;
+  onDesktopCollapseToggle: () => void;
 }) {
   const pathname = usePathname();
   const { unreadByCategory } = useClientNotifications();
@@ -54,7 +58,7 @@ export default function Sidebar({
         id="dashboard-sidebar"
         data-dashboard-sidebar
         aria-label="Dashboard navigation"
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[#143b28] bg-[#04100b] transition-transform lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[#143b28] bg-[#04100b] transition-[width,transform] lg:translate-x-0 ${desktopCollapsed ? "lg:w-20" : "lg:w-72"} ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -64,13 +68,13 @@ export default function Sidebar({
           <Link
             href="/dashboard"
             onClick={onClose}
-            className="flex items-center gap-3"
+            className={`flex items-center gap-3 ${desktopCollapsed ? "lg:hidden" : ""}`}
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-md border border-[#20dc73]/40 bg-[#20dc73]/10 font-mono font-bold text-[#20dc73]">
               SN
             </div>
 
-            <div>
+            <div className={desktopCollapsed ? "lg:hidden" : ""}>
               <p className="font-mono text-sm font-bold tracking-[0.12em] text-white">
                 SHADOWNODE
               </p>
@@ -89,11 +93,14 @@ export default function Sidebar({
           >
             <X className="h-5 w-5" />
           </button>
+          <button type="button" onClick={onDesktopCollapseToggle} aria-label={desktopCollapsed ? "Expand dashboard sidebar" : "Collapse dashboard sidebar"} aria-expanded={!desktopCollapsed} className="hidden rounded-md p-2 text-white/55 hover:bg-white/5 hover:text-white lg:inline-flex">
+            {desktopCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          </button>
         </div>
 
         {/* USER INFO */}
 
-        <div className="border-b border-[#143b28] px-5 py-4">
+        <div className={`border-b border-[#143b28] px-5 py-4 ${desktopCollapsed ? "lg:hidden" : ""}`}>
           <p className="truncate text-sm font-semibold text-white">
             {user.username}
           </p>
@@ -143,10 +150,10 @@ export default function Sidebar({
               >
                 <Icon className="h-4 w-4" />
 
-                <span className="min-w-0 flex-1">{item.label}</span>
+                <span className={`min-w-0 flex-1 ${desktopCollapsed ? "lg:hidden" : ""}`}>{item.label}</span>
 
                 {badge > 0 && (
-                  <span className="inline-flex min-w-5 justify-center rounded-full border border-[#20dc73]/40 bg-[#20dc73]/10 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-[#20dc73]">
+                  <span className={`inline-flex min-w-5 justify-center rounded-full border border-[#20dc73]/40 bg-[#20dc73]/10 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-[#20dc73] ${desktopCollapsed ? "lg:absolute lg:ml-7 lg:-mt-6" : ""}`}>
                     {badge > 99 ? "99+" : badge}
                   </span>
                 )}
@@ -157,7 +164,7 @@ export default function Sidebar({
 
         {/* STATUS */}
 
-        <div className="border-t border-[#143b28] p-4">
+        <div className={`border-t border-[#143b28] p-4 ${desktopCollapsed ? "lg:hidden" : ""}`}>
           <div className="rounded-md border border-[#143b28] bg-black/30 p-3">
             <div className="flex items-center gap-2 text-xs text-white/55">
               <BarChart3 className="h-4 w-4 text-[#20dc73]" />

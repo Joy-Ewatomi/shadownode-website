@@ -22,6 +22,8 @@ import {
   Loader2,
   MapPin,
   Network,
+  PanelRightClose,
+  PanelRightOpen,
   Plus,
   RefreshCw,
   Save,
@@ -339,6 +341,9 @@ export default function InvestigationGraphPage() {
 
   const [actionError, setActionError] =
     useState<string | null>(null)
+
+  const [inspectorOpen, setInspectorOpen] =
+    useState(false)
 
   const [showEntityPanel, setShowEntityPanel] =
     useState(false)
@@ -938,6 +943,7 @@ export default function InvestigationGraphPage() {
     type: ReviewTargetType,
     id: string,
   ) {
+    if (id) setInspectorOpen(true)
     setReviewTargetType(type)
     setReviewTargetId(id)
 
@@ -1851,6 +1857,17 @@ export default function InvestigationGraphPage() {
             )}
             Automate
           </button>
+
+          <button
+            type="button"
+            onClick={() => setInspectorOpen((current) => !current)}
+            aria-expanded={inspectorOpen}
+            aria-controls="graph-tools-inspector"
+            className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]"
+          >
+            {inspectorOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+            {inspectorOpen ? "Hide tools" : "Tools & inspector"}
+          </button>
         </div>
       </header>
 
@@ -1913,7 +1930,7 @@ export default function InvestigationGraphPage() {
         </div>
       </div>
 
-      <div className="grid min-w-0 grid-cols-1 lg:h-[calc(100vh-130px)] lg:grid-cols-[320px_minmax(0,1fr)_360px]">
+      <div className={`grid min-w-0 grid-cols-1 lg:h-[calc(100vh-130px)] ${inspectorOpen ? "lg:grid-cols-[280px_minmax(0,1fr)_340px]" : "lg:grid-cols-[260px_minmax(0,1fr)]"}`}>
         <aside className="order-1 min-w-0 border-b border-[#123a2d] bg-[#030a07] p-4 lg:order-1 lg:overflow-y-auto lg:border-b-0 lg:border-r">
           <div className="mb-4">
             <div className="flex items-center gap-2 text-[#20dc73]">
@@ -2063,7 +2080,7 @@ export default function InvestigationGraphPage() {
           </ReactFlow>
         </main>
 
-        <aside className="order-2 min-w-0 border-t border-[#123a2d] bg-[#030a07] p-4 lg:order-3 lg:overflow-y-auto lg:border-l lg:border-t-0">
+        {inspectorOpen ? <aside id="graph-tools-inspector" className="order-2 min-w-0 border-t border-[#123a2d] bg-[#030a07] p-4 lg:order-3 lg:overflow-y-auto lg:border-l lg:border-t-0">
           <div className="flex items-center gap-2 text-[#20dc73]">
             <Sparkles className="h-4 w-4" />
             <p className="font-mono text-xs uppercase tracking-[0.14em]">
@@ -2751,7 +2768,7 @@ export default function InvestigationGraphPage() {
               </button>
             </div>
           </div>
-        </aside>
+        </aside> : null}
       </div>
 
       {showEntityPanel ? (

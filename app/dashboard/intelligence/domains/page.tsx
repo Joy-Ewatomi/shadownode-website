@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { query } from "@/lib/db"
 import { hasPermission } from "@/lib/permission"
@@ -19,6 +19,7 @@ export default async function DomainIntelligencePage({ searchParams }: { searchP
       AND c.status NOT IN ('completed','closed','archived')
     ORDER BY c.case_number DESC NULLS LAST`, [user.id])
   const requested = (await searchParams).case_id || ""
-  const selected = cases.rows.some((item) => item.id === requested) ? requested : ""
-  return <DomainIntelligenceWorkspace cases={cases.rows} initialCaseId={selected} />
+  const selectedCase = requested ? cases.rows.find((item) => item.id === requested) : null
+  if (requested && !selectedCase) notFound()
+  return <DomainIntelligenceWorkspace cases={cases.rows} initialCaseId={selectedCase?.id || ""} lockedCase={selectedCase || undefined} />
 }
