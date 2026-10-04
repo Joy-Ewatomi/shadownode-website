@@ -68,12 +68,12 @@ const checks = [
   {
     file: "app/cases/[id]/graph/page.tsx",
     patterns: [
-      "Entity Palette",
-      "Search & Review",
+      "Entity Types",
+      "Intelligence Search",
       "Provenance Linker",
       "Review State",
-      "Automate",
-      "Stage Search Result",
+      "Create review tasks",
+      "Save Research Lead",
     ],
   },
   {

@@ -39,7 +39,7 @@ assert.match(shell, /graphWorkspace/)
 assert.match(shell, /lg:pl-20/)
 assert.match(sidebar, /Collapse dashboard sidebar/)
 assert.match(graph, /inspectorOpen/)
-assert.match(graph, /Research & review/)
+assert.match(graph, /Intelligence search/)
 assert.match(graph, /setInspectorOpen\(true\)/)
 assert.match(graph, /lg:grid-cols-\[260px_minmax\(0,1fr\)\]/)
 

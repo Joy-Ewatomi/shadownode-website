@@ -21,6 +21,7 @@ import {
   Globe,
   Loader2,
   MapPin,
+  Monitor,
   Network,
   PanelRightClose,
   PanelRightOpen,
@@ -43,6 +44,7 @@ import {
 } from "react"
 
 import { useParams } from "next/navigation"
+import Link from "next/link"
 
 import "reactflow/dist/style.css"
 import {
@@ -343,6 +345,9 @@ export default function InvestigationGraphPage() {
     useState<string | null>(null)
 
   const [inspectorOpen, setInspectorOpen] =
+    useState(false)
+
+  const [showDesktopRecommendation, setShowDesktopRecommendation] =
     useState(false)
 
   const [showEntityPanel, setShowEntityPanel] =
@@ -837,6 +842,14 @@ export default function InvestigationGraphPage() {
   useEffect(() => {
     loadGraph()
   }, [loadGraph])
+
+  useEffect(() => {
+    const mobileViewport = window.matchMedia("(max-width: 767px)")
+    const updateRecommendation = () => setShowDesktopRecommendation(mobileViewport.matches)
+    updateRecommendation()
+    mobileViewport.addEventListener("change", updateRecommendation)
+    return () => mobileViewport.removeEventListener("change", updateRecommendation)
+  }, [])
 
   const entityOptions =
     useMemo(
@@ -1846,30 +1859,29 @@ export default function InvestigationGraphPage() {
 
           <button
             type="button"
-            onClick={runGraphAutomation}
-            disabled={runningAutomation}
-            className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {runningAutomation ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            Automate
-          </button>
-
-          <button
-            type="button"
             onClick={() => setInspectorOpen((current) => !current)}
             aria-expanded={inspectorOpen}
             aria-controls="graph-tools-inspector"
             className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]"
           >
             {inspectorOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-            {inspectorOpen ? "Hide research" : "Research & review"}
+            {inspectorOpen ? "Hide intelligence" : "Intelligence search"}
           </button>
         </div>
       </header>
+
+      {showDesktopRecommendation ? (
+        <aside role="status" className="mx-4 mt-4 flex items-start gap-3 rounded-md border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100">
+          <Monitor className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Desktop view recommended</p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/75">The Entity workspace remains usable on mobile, but a desktop or laptop provides more space for graph navigation, relationship review and entity editing.</p>
+          </div>
+          <button type="button" onClick={() => setShowDesktopRecommendation(false)} aria-label="Dismiss desktop view recommendation" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-amber-100/70 hover:bg-white/10 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </aside>
+      ) : null}
 
       {error || actionError ? (
         <div className="mx-4 mt-4 flex items-start gap-3 rounded-lg border border-[#5f2828] bg-[#220d0d] px-4 py-3">
@@ -2084,14 +2096,32 @@ export default function InvestigationGraphPage() {
           <div className="flex items-center gap-2 text-[#20dc73]">
             <Sparkles className="h-4 w-4" />
             <p className="font-mono text-xs uppercase tracking-[0.14em]">
-                Research & Review
+                Intelligence Search
             </p>
           </div>
 
           <div className="mt-4 space-y-3">
-            <p className="text-xs leading-5 text-white/45">
-              Stage analyst-supplied open-source research for review before adding it to the case graph. External provider lookup remains unavailable until a provider is configured.
-            </p>
+            <p className="text-xs leading-5 text-white/45">Choose an implemented intelligence capability. Additional searches become active here only after an approved provider is connected.</p>
+            <Link href={`/dashboard/intelligence/domains?case_id=${encodeURIComponent(caseId)}`} className="flex min-h-11 items-center justify-between rounded-md border border-[#20dc73]/40 bg-[#20dc73]/10 px-3 text-sm font-semibold text-[#20dc73] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]">
+              <span>Domain & DNS Intelligence</span><span className="font-mono text-[9px] uppercase">Available</span>
+            </Link>
+            <div className="grid grid-cols-2 gap-2">
+              {["People", "Email", "Company", "Phone", "Social"].map((capability) => <button key={capability} type="button" disabled className="min-h-11 rounded-md border border-white/10 bg-white/[0.02] px-2 text-left text-xs text-white/35 disabled:cursor-not-allowed"><span className="block text-white/55">{capability}</span><span className="font-mono text-[8px] uppercase">Not yet available</span></button>)}
+            </div>
+
+            <div className="rounded-md border border-[#143b28] bg-black/30 p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#20dc73]">Workflow</p>
+              <ol className="mt-2 space-y-2 text-xs leading-5 text-white/55">
+                <li><strong className="text-white/75">1. Search:</strong> run an available intelligence capability or investigate a public source manually.</li>
+                <li><strong className="text-white/75">2. Stage:</strong> save the source, value and notes as a research lead. This does not make it verified evidence.</li>
+                <li><strong className="text-white/75">3. Review:</strong> inspect the staged lead, then add it as an entity or add and link it to an existing entity.</li>
+              </ol>
+            </div>
+
+            <div className="border-t border-[#143b28] pt-4">
+              <p className="text-sm font-semibold text-white">Add a manually sourced lead</p>
+              <p className="mt-1 text-xs leading-5 text-white/40">Use this when you have already found information from a lawful public source.</p>
+            </div>
             <select
               value={queryEntityId}
               onChange={(event) =>
@@ -2184,8 +2214,9 @@ export default function InvestigationGraphPage() {
                   <option
                     key={transform.id}
                     value={transform.id}
+                    disabled={!transform.configured}
                   >
-                    {transform.label}
+                    {transform.label}{transform.configured ? "" : " - Not yet available"}
                   </option>
                 ),
               )}
@@ -2219,7 +2250,16 @@ export default function InvestigationGraphPage() {
               ) : (
                 <Search className="h-4 w-4" />
               )}
-              Stage Research Lead
+              Save Research Lead
+            </button>
+          </div>
+
+          <div className="mt-5 rounded-md border border-[#143b28] bg-black/30 p-3">
+            <p className="text-sm font-semibold text-white">Review tasks</p>
+            <p className="mt-1 text-xs leading-5 text-white/45">This checks existing case entities and relationships for low confidence, stale, disputed, candidate or unreviewed records. It creates human review tasks; it does not search the internet or change findings automatically.</p>
+            <button type="button" onClick={runGraphAutomation} disabled={runningAutomation} className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[#20dc73]/45 px-3 text-xs font-semibold text-[#20dc73] disabled:opacity-40">
+              {runningAutomation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Create review tasks
             </button>
           </div>
 
