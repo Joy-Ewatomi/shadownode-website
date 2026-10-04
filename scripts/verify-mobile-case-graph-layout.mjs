@@ -20,5 +20,7 @@ assert.match(graph, /role="dialog" aria-modal="false"/)
 assert.match(graph, /fixed inset-x-3/)
 assert.match(graph, /max-h-\[calc\(100dvh-/)
 assert.match(graph, /overflow-y-auto rounded-xl/)
+assert.match(graph, /Entity Types/)
+assert.match(graph, /Research & Review/)
 
 console.log("Mobile case graph layout verification passed.")

@@ -90,11 +90,9 @@ text-white/60
 "
             aria-label="Case workspace sections"
           >
-            <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}`}>Overview</Link>
+            <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}`}>Case Overview</Link>
 
-            <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}/workspace`}>Workspace</Link>
-
-            <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}/graph`}>Graph</Link>
+            <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}/graph`}>Entities</Link>
 
             <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}/timeline`}>Timeline</Link>
 
@@ -102,7 +100,7 @@ text-white/60
 
             <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}/reports`}>Reports</Link>
 
-            <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}/updates`}>Updates</Link>
+            <Link className="shrink-0 whitespace-nowrap" href={`/cases/${id}/updates`}>Case Activity</Link>
           </nav>
           </div>
         </div>

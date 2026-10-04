@@ -1782,11 +1782,11 @@ export default function InvestigationGraphPage() {
           </div>
 
           <h1 className="mt-2 text-xl font-bold text-white">
-            Investigation Graph
+            Case Entities
           </h1>
 
           <p className="mt-1 text-sm text-white/45">
-            Case-linked entity and relationship intelligence.
+            Build and review the entities, relationships and sourced research attached to this case.
           </p>
         </div>
 
@@ -1866,7 +1866,7 @@ export default function InvestigationGraphPage() {
             className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]"
           >
             {inspectorOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-            {inspectorOpen ? "Hide tools" : "Tools & inspector"}
+            {inspectorOpen ? "Hide research" : "Research & review"}
           </button>
         </div>
       </header>
@@ -1936,7 +1936,7 @@ export default function InvestigationGraphPage() {
             <div className="flex items-center gap-2 text-[#20dc73]">
               <CircleDot className="h-4 w-4" />
               <p className="font-mono text-xs uppercase tracking-[0.14em]">
-                Entity Palette
+                Entity Types
               </p>
             </div>
 
@@ -2084,11 +2084,14 @@ export default function InvestigationGraphPage() {
           <div className="flex items-center gap-2 text-[#20dc73]">
             <Sparkles className="h-4 w-4" />
             <p className="font-mono text-xs uppercase tracking-[0.14em]">
-              Search & Review
+                Research & Review
             </p>
           </div>
 
           <div className="mt-4 space-y-3">
+            <p className="text-xs leading-5 text-white/45">
+              Stage analyst-supplied open-source research for review before adding it to the case graph. External provider lookup remains unavailable until a provider is configured.
+            </p>
             <select
               value={queryEntityId}
               onChange={(event) =>
@@ -2216,7 +2219,7 @@ export default function InvestigationGraphPage() {
               ) : (
                 <Search className="h-4 w-4" />
               )}
-              Stage Search Result
+              Stage Research Lead
             </button>
           </div>
 
