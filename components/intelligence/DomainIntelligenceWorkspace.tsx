@@ -7,6 +7,13 @@ import { ArrowLeft, Globe2, Loader2, LockKeyhole, Search } from "lucide-react"
 type CaseOption = { id: string; case_number: string | null; title: string | null; status: string | null }
 type Json = Record<string, unknown>
 
+function analysisResponseError(status: number, data: Json | null) {
+  if (typeof data?.error === "string" && data.error) return data.error
+  if (status === 504) return "Domain analysis exceeded the available processing time. Please try again after the analyzer has warmed up."
+  if (status === 502 || status === 503) return "Domain analysis service is temporarily unavailable. Please try again later."
+  return "Domain analysis could not be completed. Please try again."
+}
+
 const sections: Array<[string, string[]]> = [
   ["Overview", ["overview", "summary"]], ["Domain / RDAP", ["rdap", "domain", "registration"]],
   ["DNS", ["dns", "dns_records"]], ["IP / ASN", ["ip", "ips", "network", "asn"]],
@@ -43,11 +50,17 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
     setStatus("analyzing"); setError(""); setResult(null)
     try {
       const response = await fetch("/api/intelligence/domains/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ case_id: caseId, domain }) })
-      const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || "Analysis failed.")
-      setResult(data.analysis); setDomain(data.domain); setStatus("completed")
+      const contentType = response.headers.get("content-type") || ""
+      const data = contentType.includes("application/json") ? asObject(await response.json().catch(() => null)) : null
+      if (!response.ok) throw new Error(analysisResponseError(response.status, data))
+      const analysis = asObject(data?.analysis)
+      if (!analysis || typeof data?.domain !== "string") throw new Error("Domain analysis returned an unavailable response. Please try again later.")
+      setResult(analysis); setDomain(data.domain); setStatus("completed")
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Analysis failed."); setStatus("failed")
+      const message = reason instanceof TypeError
+        ? "Domain analysis service did not respond within the available processing time. Please try again later."
+        : reason instanceof Error ? reason.message : "Domain analysis could not be completed. Please try again."
+      setError(message); setStatus("failed")
     }
   }
 
