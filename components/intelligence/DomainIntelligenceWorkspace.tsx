@@ -40,7 +40,7 @@ function DataSection({ title, value }: { title: string; value: unknown }) {
 export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lockedCase }: { cases: CaseOption[]; initialCaseId: string; lockedCase?: CaseOption }) {
   const [caseId, setCaseId] = useState(initialCaseId)
   const [domain, setDomain] = useState("")
-  const [status, setStatus] = useState<"ready" | "analyzing" | "completed" | "failed">("ready")
+  const [status, setStatus] = useState<"ready" | "analyzing" | "warming" | "completed" | "failed">("ready")
   const [error, setError] = useState("")
   const [result, setResult] = useState<Json | null>(null)
 
@@ -49,13 +49,17 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
     if (!caseId) { setError("Select an authorized case before analysis."); return }
     setStatus("analyzing"); setError(""); setResult(null)
     try {
-      const response = await fetch("/api/intelligence/domains/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ case_id: caseId, domain }) })
-      const contentType = response.headers.get("content-type") || ""
-      const data = contentType.includes("application/json") ? asObject(await response.json().catch(() => null)) : null
-      if (!response.ok) throw new Error(analysisResponseError(response.status, data))
-      const analysis = asObject(data?.analysis)
-      if (!analysis || typeof data?.domain !== "string") throw new Error("Domain analysis returned an unavailable response. Please try again later.")
-      setResult(analysis); setDomain(data.domain); setStatus("completed")
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await fetch("/api/intelligence/domains/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ case_id: caseId, domain }) })
+        const contentType = response.headers.get("content-type") || ""
+        const data = contentType.includes("application/json") ? asObject(await response.json().catch(() => null)) : null
+        if (response.status === 504 && attempt === 0) { setStatus("warming"); continue }
+        if (!response.ok) throw new Error(analysisResponseError(response.status, data))
+        const analysis = asObject(data?.analysis)
+        if (!analysis || typeof data?.domain !== "string") throw new Error("Domain analysis returned an unavailable response. Please try again later.")
+        setResult(analysis); setDomain(data.domain); setStatus("completed")
+        return
+      }
     } catch (reason) {
       const message = reason instanceof TypeError
         ? "Domain analysis service did not respond within the available processing time. Please try again later."
@@ -79,7 +83,7 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
     <form onSubmit={analyze} className="grid gap-4 rounded-md border border-[#143b28] bg-[#06110f] p-5 lg:grid-cols-[1fr_1fr_auto]">
       {lockedCase ? <div className="rounded border border-[#24563d] bg-black/30 px-3 py-2"><span className="flex items-center gap-2 text-xs text-[#20dc73]"><LockKeyhole className="h-3.5 w-3.5" />Authorized case locked</span><p className="mt-1 break-words text-sm text-white">{lockedCase.case_number || "Case"} - {lockedCase.title || "Untitled"}</p></div> : <label className="text-sm text-white/65">Authorized case<select value={caseId} onChange={(event) => setCaseId(event.target.value)} required className="mt-2 h-11 w-full rounded border border-[#24563d] bg-black/30 px-3 text-white"><option value="">Select case</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.case_number || "Case"} - {item.title || "Untitled"}</option>)}</select></label>}
       <label className="text-sm text-white/65">Domain<input value={domain} onChange={(event) => setDomain(event.target.value)} required placeholder="example.com" autoComplete="off" className="mt-2 h-11 w-full rounded border border-[#24563d] bg-black/30 px-3 text-white outline-none focus:border-[#20dc73]" /></label>
-      <button disabled={status === "analyzing" || !caseId} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded bg-[#20dc73] px-5 font-semibold text-black disabled:opacity-50">{status === "analyzing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}{status === "analyzing" ? "Analyzing..." : "Analyze Domain"}</button>
+      <button disabled={status === "analyzing" || status === "warming" || !caseId} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded bg-[#20dc73] px-5 font-semibold text-black disabled:opacity-50">{status === "analyzing" || status === "warming" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}{status === "warming" ? "Warming analyzer..." : status === "analyzing" ? "Analyzing..." : "Analyze Domain"}</button>
     </form>
     <div className="flex flex-wrap items-center gap-3 text-sm"><span className="rounded border border-[#24563d] px-3 py-1.5 capitalize text-[#20dc73]">{status}</span>{selected && <span className="text-white/50">Associated with {selected.case_number || selected.title}</span>}<span className="text-amber-200/70">Results are not permanently saved.</span></div>
     {!cases.length && !lockedCase ? <div className="rounded border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">No active case with an investigative assignment is available.</div> : null}
