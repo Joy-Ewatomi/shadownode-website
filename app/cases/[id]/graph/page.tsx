@@ -7,6 +7,7 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type ReactFlowInstance,
   ReactFlow,
 } from "reactflow"
 
@@ -21,6 +22,7 @@ import {
   Globe,
   Loader2,
   MapPin,
+  Maximize2,
   Monitor,
   Network,
   PanelRightClose,
@@ -40,6 +42,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 
@@ -328,6 +331,11 @@ export default function InvestigationGraphPage() {
 
   const [edges, setEdges] =
     useState<Edge[]>([])
+
+  const [graphInstance, setGraphInstance] =
+    useState<ReactFlowInstance | null>(null)
+
+  const fittedNodeCount = useRef(0)
 
   const [loading, setLoading] =
     useState(true)
@@ -736,6 +744,7 @@ export default function InvestigationGraphPage() {
             ? relationshipPayload
             : []
 
+        const layoutColumns = Math.max(4, Math.ceil(Math.sqrt(Math.max(entities.length, 1) * 1.5)))
         const graphNodes: Node[] =
           entities.map(
             (
@@ -752,8 +761,8 @@ export default function InvestigationGraphPage() {
                     entity.position_x,
                   ) ??
                   150 +
-                    (index % 4) *
-                      220,
+                    (index % layoutColumns) *
+                      210,
 
                 y:
                   numberOrNull(
@@ -761,9 +770,9 @@ export default function InvestigationGraphPage() {
                   ) ??
                   120 +
                     Math.floor(
-                      index / 4,
+                      index / layoutColumns,
                     ) *
-                      170,
+                      150,
               },
 
               data: {
@@ -842,6 +851,13 @@ export default function InvestigationGraphPage() {
   useEffect(() => {
     loadGraph()
   }, [loadGraph])
+
+  useEffect(() => {
+    if (!graphInstance || !nodes.length || nodes.length <= fittedNodeCount.current) return
+    fittedNodeCount.current = nodes.length
+    const frame = window.requestAnimationFrame(() => graphInstance.fitView({ padding: 0.12, duration: 500 }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [graphInstance, nodes.length])
 
   useEffect(() => {
     const mobileViewport = window.matchMedia("(max-width: 767px)")
@@ -939,6 +955,16 @@ export default function InvestigationGraphPage() {
           : edges,
       [edges, selectedPivotEntity],
     )
+
+  const graphGrowth = useMemo(() => {
+    const sdiaIds = new Set(nodes.filter((node) => node.data?.entity?.source_provider === "SDIA").map((node) => node.id))
+    return {
+      sdiaEntities: sdiaIds.size,
+      sdiaRelationships: edges.filter((edge) => sdiaIds.has(edge.source) || sdiaIds.has(edge.target)).length,
+      unreviewedEntities: nodes.filter((node) => node.data?.entity?.verification_status === "unreviewed").length,
+      unreviewedRelationships: edges.filter((edge) => edge.data?.relationship?.verification_status === "unreviewed").length,
+    }
+  }, [nodes, edges])
 
   const relationshipOptions =
     useMemo(
@@ -1825,6 +1851,16 @@ export default function InvestigationGraphPage() {
 
           <button
             type="button"
+            onClick={() => graphInstance?.fitView({ padding: 0.12, duration: 500 })}
+            disabled={!nodes.length}
+            className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-3 py-2 text-sm font-medium text-white/65 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Maximize2 className="h-4 w-4" />
+            Fit graph
+          </button>
+
+          <button
+            type="button"
             onClick={() => {
               setActionError(null)
               setShowEntityPanel(
@@ -1931,6 +1967,14 @@ export default function InvestigationGraphPage() {
               {edges.length}
             </strong>{" "}
             relationships
+          </span>
+
+          <span className="text-[#20dc73]">
+            SDIA added <strong>{graphGrowth.sdiaEntities}</strong> entities and <strong>{graphGrowth.sdiaRelationships}</strong> relationships
+          </span>
+
+          <span className="text-amber-200/70">
+            Awaiting review: <strong>{graphGrowth.unreviewedEntities}</strong> entities and <strong>{graphGrowth.unreviewedRelationships}</strong> relationships
           </span>
 
           {savingConnection ? (
@@ -2062,6 +2106,7 @@ export default function InvestigationGraphPage() {
           <ReactFlow
             nodes={nodes}
             edges={pivotEdges}
+            onInit={setGraphInstance}
             onConnect={onConnect}
             onNodeClick={(
               _event,
