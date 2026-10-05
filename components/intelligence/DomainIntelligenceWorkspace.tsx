@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState, type FormEvent } from "react"
-import { ArrowLeft, Globe2, Loader2, LockKeyhole, Search } from "lucide-react"
+import { ArrowLeft, FileText, GitBranch, Globe2, Loader2, LockKeyhole, Search } from "lucide-react"
 
 type CaseOption = { id: string; case_number: string | null; title: string | null; status: string | null }
 type Json = Record<string, unknown>
@@ -15,7 +15,7 @@ function analysisResponseError(status: number, data: Json | null) {
 }
 
 const sections: Array<[string, string[]]> = [
-  ["Overview", ["overview", "summary"]], ["Domain / RDAP", ["rdap", "domain", "registration"]],
+  ["Overview", ["overview", "summary"]], ["Entities", ["entities"]], ["Domain / RDAP", ["rdap", "domain", "registration"]],
   ["DNS", ["dns", "dns_records"]], ["IP / ASN", ["ip", "ips", "network", "asn"]],
   ["HTTP", ["http", "web"]], ["TLS", ["tls", "certificate"]],
   ["Certificate Transparency", ["certificate_transparency", "ct"]],
@@ -44,16 +44,20 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
   const [status, setStatus] = useState<"ready" | "queued" | "processing" | "completed" | "failed">("ready")
   const [error, setError] = useState("")
   const [result, setResult] = useState<Json | null>(null)
+  const [jobId, setJobId] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [importSummary, setImportSummary] = useState("")
 
   async function analyze(event: FormEvent) {
     event.preventDefault()
     if (!caseId) { setError("Select an authorized case before analysis."); return }
-    setStatus("queued"); setError(""); setResult(null)
+    setStatus("queued"); setError(""); setResult(null); setJobId(""); setImportSummary("")
     try {
       const queuedResponse = await fetch("/api/intelligence/domains/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ case_id: caseId, domain }) })
       const queuedData = asObject(await queuedResponse.json().catch(() => null))
       if (!queuedResponse.ok) throw new Error(analysisResponseError(queuedResponse.status, queuedData))
       if (typeof queuedData?.job_id !== "string") throw new Error("Domain analysis could not be queued. Please try again later.")
+      setJobId(queuedData.job_id)
 
       for (let poll = 0; poll < 300; poll += 1) {
         if (poll > 0) await wait(3_000)
@@ -76,6 +80,22 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
     }
   }
 
+  async function addToGraph() {
+    if (!jobId || !caseId || importing) return
+    setImporting(true); setError("")
+    try {
+      const response = await fetch("/api/intelligence/domains/analyze/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ case_id: caseId, job_id: jobId }) })
+      const data = asObject(await response.json().catch(() => null))
+      if (!response.ok) throw new Error(analysisResponseError(response.status, data))
+      const createdEntities = Number(data?.entities_created || 0)
+      const createdRelationships = Number(data?.relationships_created || 0)
+      const createdObservations = Number(data?.observations_created || 0)
+      setImportSummary(createdEntities || createdRelationships || createdObservations ? `${createdEntities} entities, ${createdRelationships} relationships and ${createdObservations} observations were added for analyst review.` : "This analysis was already added to the case workspace.")
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The intelligence could not be added to the graph.")
+    } finally { setImporting(false) }
+  }
+
   const selected = lockedCase || cases.find((item) => item.id === caseId)
   const entities = result ? pick(result, ["entities"]) : null
   const relationships = result ? pick(result, ["relationships", "correlations"]) : null
@@ -96,6 +116,6 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
     <div className="flex flex-wrap items-center gap-3 text-sm"><span className="rounded border border-[#24563d] px-3 py-1.5 capitalize text-[#20dc73]">{status}</span>{selected && <span className="text-white/50">Associated with {selected.case_number || selected.title}</span>}<span className="text-amber-200/70">Results are stored with this authorized case.</span></div>
     {!cases.length && !lockedCase ? <div className="rounded border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">No active case with an investigative assignment is available.</div> : null}
     {error ? <div role="alert" className="rounded border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-200">{error}</div> : null}
-    {result ? <><section className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[["Entities", count(entities)], ["Relationships", count(relationships)], ["Findings", count(findings)], ["Evidence artifacts", count(evidence)]].map(([label, value]) => <div key={String(label)} className="rounded-md border border-[#143b28] bg-[#06110f] p-4"><p className="text-xs uppercase text-white/40">{label}</p><p className="mt-2 text-2xl font-semibold text-white">{value}</p></div>)}</section>{sections.map(([title, keys]) => <DataSection key={title} title={title} value={pick(result, keys)} />)}<details className="rounded-md border border-[#143b28] bg-[#06110f] p-5"><summary className="cursor-pointer font-semibold text-white">Raw Intelligence</summary><pre className="mt-4 max-h-[36rem] overflow-auto whitespace-pre-wrap break-words rounded bg-black/30 p-4 text-xs leading-6 text-white/65">{JSON.stringify(result, null, 2)}</pre></details><p className="text-xs leading-5 text-white/45">Certificate Transparency hostnames may be historical or inactive. Shared IP addresses and ASNs do not by themselves establish common ownership.</p></> : null}
+    {result ? <><section className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[["Entities", count(entities)], ["Relationships", count(relationships)], ["Findings", count(findings)], ["Evidence artifacts", count(evidence)]].map(([label, value]) => <div key={String(label)} className="rounded-md border border-[#143b28] bg-[#06110f] p-4"><p className="text-xs uppercase text-white/40">{label}</p><p className="mt-2 text-2xl font-semibold text-white">{value}</p></div>)}</section><section className="rounded-md border border-[#24563d] bg-[#06110f] p-5"><h2 className="font-semibold text-white">Use this intelligence</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">Review the result before adding it. Imported records remain confidential and unreviewed until an analyst verifies them. A case report is created separately after the graph and evidence have been reviewed.</p><div className="mt-4 flex flex-wrap gap-3"><button type="button" onClick={addToGraph} disabled={importing} className="inline-flex min-h-11 items-center gap-2 rounded bg-[#20dc73] px-4 font-semibold text-black disabled:opacity-50">{importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}{importing ? "Adding..." : "Add to case graph"}</button><Link href={`/cases/${caseId}/graph`} className="inline-flex min-h-11 items-center gap-2 rounded border border-[#24563d] px-4 text-white hover:border-[#20dc73]"><GitBranch className="h-4 w-4" />Open graph</Link><Link href={`/dashboard/cases/${caseId}/reports`} className="inline-flex min-h-11 items-center gap-2 rounded border border-[#24563d] px-4 text-white hover:border-[#20dc73]"><FileText className="h-4 w-4" />Create report</Link></div>{importSummary ? <p role="status" className="mt-4 text-sm text-[#20dc73]">{importSummary}</p> : null}</section>{sections.map(([title, keys]) => <DataSection key={title} title={title} value={pick(result, keys)} />)}<details className="rounded-md border border-[#143b28] bg-[#06110f] p-5"><summary className="cursor-pointer font-semibold text-white">Raw Intelligence</summary><pre className="mt-4 max-h-[36rem] overflow-auto whitespace-pre-wrap break-words rounded bg-black/30 p-4 text-xs leading-6 text-white/65">{JSON.stringify(result, null, 2)}</pre></details><p className="text-xs leading-5 text-white/45">Certificate Transparency hostnames may be historical or inactive. Shared IP addresses and ASNs do not by themselves establish common ownership.</p></> : null}
   </div>
 }
