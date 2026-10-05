@@ -69,7 +69,7 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
         if (data?.status === "failed") throw new Error(typeof data.error === "string" ? data.error : "Domain analysis service could not complete the request.")
         const analysis = asObject(data?.analysis)
         if (data?.status !== "completed" || !analysis || typeof data.domain !== "string") throw new Error("Domain analysis returned an unavailable response. Please try again later.")
-        setResult(analysis); setDomain(data.domain); setStatus("completed"); return
+        setResult(analysis); setDomain(data.domain); setError(""); setStatus("completed"); return
       }
       throw new Error("Domain analysis is still processing. You may safely return to this page and try again shortly.")
     } catch (reason) {
@@ -82,7 +82,7 @@ export default function DomainIntelligenceWorkspace({ cases, initialCaseId, lock
 
   async function addToGraph() {
     if (!jobId || !caseId || importing) return
-    setImporting(true); setError("")
+    setImporting(true); setError(""); setImportSummary("")
     try {
       const response = await fetch("/api/intelligence/domains/analyze/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ case_id: caseId, job_id: jobId }) })
       const data = asObject(await response.json().catch(() => null))

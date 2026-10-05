@@ -65,36 +65,37 @@ export async function POST(request: NextRequest) {
     const entities = Array.isArray(analysis.entities) ? analysis.entities : []
     const relationships = Array.isArray(analysis.relationships) ? analysis.relationships : []
     const findings = Array.isArray(analysis.findings) ? analysis.findings : []
-    const entityIds = new Map<string, string>()
-    let entitiesCreated = 0
-    let relationshipsCreated = 0
-    let observationsCreated = 0
-
+    const normalizedEntities: Array<Record<string, unknown>> = []
     for (const raw of entities.slice(0, 500)) {
       const item = object(raw)
       if (!item) continue
       const externalId = text(item.entity_id) || text(item.id)
       if (!externalId) continue
-      const reference = `${jobId}:${externalId}`
-      const existing = await client.query<{ id: string }>(
-        "SELECT id FROM investigation_entities WHERE case_id=$1 AND source_provider='SDIA' AND source_reference=$2 LIMIT 1",
-        [access.caseId, reference],
-      )
-      if (existing.rows[0]) { entityIds.set(externalId, existing.rows[0].id); continue }
       const value = text(item.value) || text(item.name) || externalId.split(":").slice(1).join(":") || externalId
-      const name = text(item.name) || text(item.label) || value
-      const inserted = await client.query<{ id: string }>(
-        `INSERT INTO investigation_entities
-          (case_id, entity_type, name, value, description, aliases, source_provider, source_reference,
-           retrieved_at, verification_status, confidence_score, classification, client_visible, notes, created_by)
-         VALUES ($1,$2,$3,$4,$5,'[]'::jsonb,'SDIA',$6,NOW(),'unreviewed',$7,'confidential',false,$8,$9)
-         RETURNING id`,
-        [access.caseId, entityType(externalId, item), name.slice(0, 500), value.slice(0, 2000), safeDescription(item), reference, confidence(item.confidence), `SDIA identifier: ${externalId}`, actorProfileId],
-      )
-      entityIds.set(externalId, inserted.rows[0].id)
-      entitiesCreated += 1
+      const name = text(item.display_name) || text(item.name) || text(item.label) || value
+      normalizedEntities.push({ external_id: externalId, entity_type: entityType(externalId, item), name: name.slice(0, 500), value: value.slice(0, 2000), description: safeDescription(item), source_reference: `${jobId}:${externalId}`, confidence_score: confidence(item.confidence), notes: `SDIA identifier: ${externalId}` })
     }
+    const entityInsert = await client.query(
+      `INSERT INTO investigation_entities
+        (case_id, entity_type, name, value, description, aliases, source_provider, source_reference,
+         retrieved_at, verification_status, confidence_score, classification, client_visible, notes, created_by)
+       SELECT $1, x.entity_type, x.name, x.value, x.description, '[]'::jsonb, 'SDIA', x.source_reference,
+              NOW(), 'unreviewed', x.confidence_score, 'confidential', false, x.notes, $3
+       FROM jsonb_to_recordset($2::jsonb) AS x(entity_type text, name text, value text, description text, source_reference text, confidence_score numeric, notes text)
+       WHERE NOT EXISTS (
+         SELECT 1 FROM investigation_entities ie
+         WHERE ie.case_id=$1 AND ie.source_provider='SDIA' AND ie.source_reference=x.source_reference
+       )`,
+      [access.caseId, JSON.stringify(normalizedEntities), actorProfileId],
+    )
+    const references = normalizedEntities.map((item) => String(item.source_reference))
+    const storedEntities = references.length ? await client.query<{ id: string; source_reference: string }>(
+      "SELECT id, source_reference FROM investigation_entities WHERE case_id=$1 AND source_provider='SDIA' AND source_reference=ANY($2::text[])",
+      [access.caseId, references],
+    ) : { rows: [] }
+    const entityIds = new Map(storedEntities.rows.map((item) => [item.source_reference.slice(jobId.length + 1), item.id]))
 
+    const normalizedRelationships: Array<Record<string, unknown>> = []
     for (const raw of relationships.slice(0, 1000)) {
       const item = object(raw)
       if (!item) continue
@@ -102,22 +103,22 @@ export async function POST(request: NextRequest) {
       const source = text(item.source_entity_id)
       const target = text(item.target_entity_id)
       if (!externalId || !source || !target || !entityIds.get(source) || !entityIds.get(target)) continue
-      const reference = `${jobId}:${externalId}`
-      const exists = await client.query(
-        "SELECT 1 FROM entity_relationships WHERE case_id=$1 AND source_reference=$2 LIMIT 1",
-        [access.caseId, reference],
-      )
-      if (exists.rows[0]) continue
-      await client.query(
-        `INSERT INTO entity_relationships
-          (case_id, source_entity_id, target_entity_id, relationship_type, direction, description,
-           source_reference, client_visible, verification_status, confidence_score, created_by)
-         VALUES ($1,$2,$3,$4,'directed',$5,$6,false,'unreviewed',$7,$8)`,
-        [access.caseId, entityIds.get(source), entityIds.get(target), text(item.relationship_type) || "linked_to", safeDescription(item), reference, confidence(item.confidence), actorProfileId],
-      )
-      relationshipsCreated += 1
+      normalizedRelationships.push({ source_entity_id: entityIds.get(source), target_entity_id: entityIds.get(target), relationship_type: text(item.relationship_type) || "linked_to", description: safeDescription(item), source_reference: `${jobId}:${externalId}`, confidence_score: confidence(item.confidence) })
     }
+    const relationshipInsert = await client.query(
+      `INSERT INTO entity_relationships
+        (case_id, source_entity_id, target_entity_id, relationship_type, direction, description,
+         source_reference, client_visible, verification_status, confidence_score, created_by)
+       SELECT $1, x.source_entity_id, x.target_entity_id, x.relationship_type, 'directed', x.description,
+              x.source_reference, false, 'unreviewed', x.confidence_score, $3
+       FROM jsonb_to_recordset($2::jsonb) AS x(source_entity_id uuid, target_entity_id uuid, relationship_type text, description text, source_reference text, confidence_score numeric)
+       WHERE NOT EXISTS (
+         SELECT 1 FROM entity_relationships er WHERE er.case_id=$1 AND er.source_reference=x.source_reference
+       )`,
+      [access.caseId, JSON.stringify(normalizedRelationships), actorProfileId],
+    )
 
+    const normalizedFindings: Array<Record<string, unknown>> = []
     for (const raw of findings.slice(0, 500)) {
       const item = object(raw)
       if (!item) continue
@@ -125,21 +126,22 @@ export async function POST(request: NextRequest) {
       const title = text(item.name) || text(item.title)
       const description = text(item.description)
       if (!externalId || !title || !description) continue
-      const source = JSON.stringify([{ provider: "SDIA", job_id: jobId, finding_id: externalId }])
-      const exists = await client.query(
-        "SELECT 1 FROM intelligence_observations WHERE case_id=$1 AND related_sources @> $2::jsonb LIMIT 1",
-        [access.caseId, source],
-      )
-      if (exists.rows[0]) continue
-      await client.query(
-        `INSERT INTO intelligence_observations
-          (case_id, observation_type, title, description, related_entities, related_sources, confidence_score, status)
-         VALUES ($1,$2,$3,$4,'[]'::jsonb,$5::jsonb,$6,'pending')`,
-        [access.caseId, text(item.finding_type) || text(item.category) || "observation", title.slice(0, 500), description.slice(0, 8000), source, confidence(item.confidence)],
-      )
-      observationsCreated += 1
+      normalizedFindings.push({ finding_id: externalId, observation_type: text(item.finding_type) || text(item.category) || "observation", title: title.slice(0, 500), description: description.slice(0, 8000), confidence_score: confidence(item.confidence) })
     }
-    return { entities_created: entitiesCreated, relationships_created: relationshipsCreated, observations_created: observationsCreated, entities_available: entities.length, relationships_available: relationships.length, findings_available: findings.length }
+    const observationInsert = await client.query(
+      `INSERT INTO intelligence_observations
+        (case_id, observation_type, title, description, related_entities, related_sources, confidence_score, status)
+       SELECT $1, x.observation_type, x.title, x.description, '[]'::jsonb,
+              jsonb_build_array(jsonb_build_object('provider','SDIA','job_id',$3::text,'finding_id',x.finding_id)),
+              x.confidence_score, 'pending'
+       FROM jsonb_to_recordset($2::jsonb) AS x(finding_id text, observation_type text, title text, description text, confidence_score numeric)
+       WHERE NOT EXISTS (
+         SELECT 1 FROM intelligence_observations io
+         WHERE io.case_id=$1 AND io.related_sources @> jsonb_build_array(jsonb_build_object('provider','SDIA','job_id',$3::text,'finding_id',x.finding_id))
+       )`,
+      [access.caseId, JSON.stringify(normalizedFindings), jobId],
+    )
+    return { entities_created: entityInsert.rowCount ?? 0, relationships_created: relationshipInsert.rowCount ?? 0, observations_created: observationInsert.rowCount ?? 0, entities_available: entities.length, relationships_available: relationships.length, findings_available: findings.length }
   })
 
   await recordInvestigationTimeline(access.caseId, access.user.id, "sdia_graph_imported", "SDIA intelligence added for review", `${imported.entities_created} entities, ${imported.relationships_created} relationships and ${imported.observations_created} observations added for analyst review.`)
