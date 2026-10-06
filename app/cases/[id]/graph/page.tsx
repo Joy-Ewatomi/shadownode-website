@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronUp,
   Fingerprint,
+  Download,
   FileText,
   GitBranch,
   Globe,
@@ -328,6 +329,15 @@ function paletteIcon(name: string) {
     default:
       return Fingerprint
   }
+}
+
+function escapeSvgText(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;")
 }
 
 export default function InvestigationGraphPage() {
@@ -1946,6 +1956,48 @@ export default function InvestigationGraphPage() {
     })
   }
 
+  function downloadVisibleGraph() {
+    if (!visibleGraph.nodes.length) return
+    const nodeWidth = 190
+    const nodeHeight = 92
+    const padding = 72
+    const minX = Math.min(...visibleGraph.nodes.map((node) => node.position.x))
+    const minY = Math.min(...visibleGraph.nodes.map((node) => node.position.y))
+    const maxX = Math.max(...visibleGraph.nodes.map((node) => node.position.x + nodeWidth))
+    const maxY = Math.max(...visibleGraph.nodes.map((node) => node.position.y + nodeHeight))
+    const width = Math.max(640, maxX - minX + padding * 2)
+    const height = Math.max(420, maxY - minY + padding * 2 + 54)
+    const offsetX = padding - minX
+    const offsetY = padding + 54 - minY
+    const nodeById = new Map(visibleGraph.nodes.map((node) => [node.id, node]))
+    const relationships = visibleGraph.edges.map((edge) => {
+      const sourceNode = nodeById.get(edge.source)
+      const targetNode = nodeById.get(edge.target)
+      if (!sourceNode || !targetNode) return ""
+      const x1 = sourceNode.position.x + offsetX + nodeWidth / 2
+      const y1 = sourceNode.position.y + offsetY + nodeHeight / 2
+      const x2 = targetNode.position.x + offsetX + nodeWidth / 2
+      const y2 = targetNode.position.y + offsetY + nodeHeight / 2
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#718078" stroke-width="1.5" opacity="0.7" />`
+    }).join("")
+    const entities = visibleGraph.nodes.map((node) => {
+      const lines = String(node.data?.label || node.id).split("\n").slice(0, 3)
+      const x = node.position.x + offsetX
+      const y = node.position.y + offsetY
+      const labels = lines.map((line, index) => `<text x="${x + nodeWidth / 2}" y="${y + 34 + index * 20}" text-anchor="middle" fill="${index ? "#9ab6aa" : "#20dc73"}" font-family="ui-monospace, monospace" font-size="${index ? 11 : 13}">${escapeSvgText(line)}</text>`).join("")
+      return `<g><rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" rx="6" fill="#06110f" stroke="#20dc73" stroke-width="1.5" />${labels}</g>`
+    }).join("")
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#000604"/><text x="${padding}" y="34" fill="#ffffff" font-family="ui-sans-serif, sans-serif" font-size="18" font-weight="700">ShadowNode case intelligence graph</text><text x="${padding}" y="54" fill="#789087" font-family="ui-monospace, monospace" font-size="11">${visibleGraph.nodes.length} entities · ${visibleGraph.edges.length} relationships · ${escapeSvgText(graphLayout)} layout</text><g>${relationships}${entities}</g></svg>`
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }))
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `case-${caseId}-${graphScope}-${graphLayout}-graph.svg`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#000604] text-[#20dc73]">
@@ -2271,6 +2323,7 @@ export default function InvestigationGraphPage() {
             <span className="mx-1 hidden w-px self-stretch bg-[#143b28] sm:block" aria-hidden="true" />
             <button type="button" onClick={() => setGraphLayout("radial")} title="Arrange entities around the selected entity" className={`inline-flex h-9 items-center gap-2 rounded px-3 text-xs font-semibold ${graphLayout === "radial" ? "border border-[#20dc73]/50 text-[#20dc73]" : "text-white/60 hover:bg-white/5"}`}><Network className="h-3.5 w-3.5" />Radial</button>
             <button type="button" onClick={() => setGraphLayout("tree")} title="Arrange entities in levels from the selected entity" className={`inline-flex h-9 items-center gap-2 rounded px-3 text-xs font-semibold ${graphLayout === "tree" ? "border border-[#20dc73]/50 text-[#20dc73]" : "text-white/60 hover:bg-white/5"}`}><GitBranch className="h-3.5 w-3.5" />Tree</button>
+            <button type="button" onClick={downloadVisibleGraph} title="Download the currently visible graph as SVG" className="inline-flex h-9 items-center gap-2 rounded px-3 text-xs font-semibold text-white/60 hover:bg-white/5 hover:text-white"><Download className="h-3.5 w-3.5" />Download</button>
             {graphScope === "neighborhood" ? <span className="self-center px-2 text-xs text-white/40">Showing {visibleGraph.nodes.length} of {nodes.length}</span> : null}
           </div>
           <div className="absolute bottom-4 left-4 z-10 grid grid-cols-3 gap-1 rounded-md border border-[#143b28] bg-[#030a07]/95 p-2 shadow-xl backdrop-blur">
