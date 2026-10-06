@@ -16,6 +16,7 @@ import {
   Building2,
   CheckCircle2,
   CircleDot,
+  ChevronLeft,
   Fingerprint,
   FileText,
   GitBranch,
@@ -47,7 +48,7 @@ import {
 } from "react"
 
 import { useParams } from "next/navigation"
-import Link from "next/link"
+import GraphDomainIntelligence from "@/components/intelligence/GraphDomainIntelligence"
 
 import "reactflow/dist/style.css"
 import {
@@ -354,6 +355,10 @@ export default function InvestigationGraphPage() {
 
   const [inspectorOpen, setInspectorOpen] =
     useState(false)
+
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [graphScope, setGraphScope] = useState<"neighborhood" | "all">("neighborhood")
+  const [focusEntityId, setFocusEntityId] = useState("")
 
   const [showDesktopRecommendation, setShowDesktopRecommendation] =
     useState(false)
@@ -965,6 +970,66 @@ export default function InvestigationGraphPage() {
       unreviewedRelationships: edges.filter((edge) => edge.data?.relationship?.verification_status === "unreviewed").length,
     }
   }, [nodes, edges])
+
+  const recommendedFocusId = useMemo(() => {
+    if (!nodes.length) return ""
+    const degree = new Map<string, number>()
+    edges.forEach((edge) => {
+      degree.set(edge.source, (degree.get(edge.source) || 0) + 1)
+      degree.set(edge.target, (degree.get(edge.target) || 0) + 1)
+    })
+    return [...nodes]
+      .sort((left, right) => {
+        const leftEntity = left.data?.entity as GraphEntity | undefined
+        const rightEntity = right.data?.entity as GraphEntity | undefined
+        const leftDomain = leftEntity?.entity_type === "DOMAIN" ? 10000 : 0
+        const rightDomain = rightEntity?.entity_type === "DOMAIN" ? 10000 : 0
+        const leftSdia = leftEntity?.source_provider === "SDIA" ? 1000 : 0
+        const rightSdia = rightEntity?.source_provider === "SDIA" ? 1000 : 0
+        return (rightDomain + rightSdia + (degree.get(right.id) || 0)) - (leftDomain + leftSdia + (degree.get(left.id) || 0))
+      })[0]?.id || nodes[0].id
+  }, [nodes, edges])
+
+  useEffect(() => {
+    if (!focusEntityId && recommendedFocusId) setFocusEntityId(recommendedFocusId)
+  }, [focusEntityId, recommendedFocusId])
+
+  const visibleGraph = useMemo(() => {
+    if (graphScope === "all" || !focusEntityId) return { nodes, edges }
+    const visibleIds = new Set<string>([focusEntityId])
+    edges.forEach((edge) => {
+      if (edge.source === focusEntityId) visibleIds.add(edge.target)
+      if (edge.target === focusEntityId) visibleIds.add(edge.source)
+    })
+    const selectedNodes = nodes.filter((node) => visibleIds.has(node.id))
+    const selectedEdges = edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
+    const center = selectedNodes.find((node) => node.id === focusEntityId)
+    const others = selectedNodes.filter((node) => node.id !== focusEntityId)
+    const radius = Math.max(280, Math.min(620, others.length * 13))
+    const arranged = [
+      ...(center ? [{ ...center, position: { x: 0, y: 0 }, style: { ...center.style, borderWidth: 2 } }] : []),
+      ...others.map((node, index) => {
+        const angle = (index / Math.max(others.length, 1)) * Math.PI * 2
+        return { ...node, position: { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius } }
+      }),
+    ]
+    return { nodes: arranged, edges: selectedEdges }
+  }, [nodes, edges, graphScope, focusEntityId])
+
+  const displayEdges = useMemo(
+    () => (graphScope === "all" ? pivotEdges : visibleGraph.edges).map((edge) => ({
+      ...edge,
+      label: reviewTargetType === "relationship" && reviewTargetId === edge.id ? edge.label : undefined,
+      style: { stroke: reviewTargetId === edge.id ? "#20dc73" : "#718078", strokeWidth: reviewTargetId === edge.id ? 2 : 1 },
+    })),
+    [graphScope, pivotEdges, visibleGraph.edges, reviewTargetType, reviewTargetId],
+  )
+
+  useEffect(() => {
+    if (!graphInstance || !visibleGraph.nodes.length) return
+    const frame = window.requestAnimationFrame(() => graphInstance.fitView({ padding: 0.18, duration: 450 }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [graphInstance, graphScope, focusEntityId, visibleGraph.nodes.length])
 
   const relationshipOptions =
     useMemo(
@@ -1832,6 +1897,15 @@ export default function InvestigationGraphPage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={() => setPaletteOpen((current) => !current)}
+            aria-expanded={paletteOpen}
+            className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-3 py-2 text-sm font-medium text-white/65 transition hover:bg-white/5 hover:text-white"
+          >
+            <CircleDot className="h-4 w-4" />
+            {paletteOpen ? "Hide entity types" : "Entity types"}
+          </button>
+          <button
+            type="button"
             onClick={() =>
               loadGraph(true)
             }
@@ -1986,8 +2060,8 @@ export default function InvestigationGraphPage() {
         </div>
       </div>
 
-      <div className={`grid min-w-0 grid-cols-1 lg:h-[calc(100vh-130px)] ${inspectorOpen ? "lg:grid-cols-[280px_minmax(0,1fr)_340px]" : "lg:grid-cols-[260px_minmax(0,1fr)]"}`}>
-        <aside className="order-1 min-w-0 border-b border-[#123a2d] bg-[#030a07] p-4 lg:order-1 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+      <div className={`grid min-w-0 grid-cols-1 lg:h-[calc(100vh-130px)] ${paletteOpen && inspectorOpen ? "lg:grid-cols-[280px_minmax(0,1fr)_380px]" : paletteOpen ? "lg:grid-cols-[280px_minmax(0,1fr)]" : inspectorOpen ? "lg:grid-cols-[minmax(0,1fr)_380px]" : "lg:grid-cols-1"}`}>
+        {paletteOpen ? <aside className="order-1 min-w-0 border-b border-[#123a2d] bg-[#030a07] p-4 lg:order-1 lg:overflow-y-auto lg:border-b-0 lg:border-r">
           <div className="mb-4">
             <div className="flex items-center gap-2 text-[#20dc73]">
               <CircleDot className="h-4 w-4" />
@@ -2084,10 +2158,10 @@ export default function InvestigationGraphPage() {
               },
             )}
           </div>
-        </aside>
+        </aside> : null}
 
         <main
-          className="order-3 h-[65svh] min-h-[420px] min-w-0 border-t border-[#123a2d] lg:order-2 lg:h-auto lg:min-h-[520px] lg:border-t-0"
+          className="relative order-3 h-[72svh] min-h-[520px] min-w-0 border-t border-[#123a2d] lg:order-2 lg:h-auto lg:min-h-[620px] lg:border-t-0"
           onDragOver={(event) =>
             event.preventDefault()
           }
@@ -2103,19 +2177,24 @@ export default function InvestigationGraphPage() {
             }
           }}
         >
+          <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2 rounded-md border border-[#143b28] bg-[#030a07]/95 p-2 shadow-xl backdrop-blur">
+            <button type="button" onClick={() => setGraphScope("neighborhood")} className={`h-9 rounded px-3 text-xs font-semibold ${graphScope === "neighborhood" ? "bg-[#20dc73] text-black" : "text-white/60 hover:bg-white/5"}`}>Focused network</button>
+            <button type="button" onClick={() => setGraphScope("all")} className={`h-9 rounded px-3 text-xs font-semibold ${graphScope === "all" ? "bg-[#20dc73] text-black" : "text-white/60 hover:bg-white/5"}`}>Complete graph</button>
+            {graphScope === "neighborhood" ? <span className="self-center px-2 text-xs text-white/40">Showing {visibleGraph.nodes.length} of {nodes.length}</span> : null}
+          </div>
           <ReactFlow
-            nodes={nodes}
-            edges={pivotEdges}
+            nodes={visibleGraph.nodes}
+            edges={displayEdges}
             onInit={setGraphInstance}
             onConnect={onConnect}
             onNodeClick={(
               _event,
               node,
             ) =>
-              selectReviewTarget(
-                "entity",
-                node.id,
-              )
+              {
+                setFocusEntityId(node.id)
+                selectReviewTarget("entity", node.id)
+              }
             }
             onEdgeClick={(
               _event,
@@ -2126,9 +2205,7 @@ export default function InvestigationGraphPage() {
                 edge.id,
               )
             }
-            onNodeDragStop={() =>
-              savePositions(nodes)
-            }
+            onNodeDragStop={(_event, _node, nextNodes) => graphScope === "all" ? savePositions(nextNodes) : undefined}
             fitView
           >
             <Background />
@@ -2138,18 +2215,19 @@ export default function InvestigationGraphPage() {
         </main>
 
         {inspectorOpen ? <aside id="graph-tools-inspector" className="order-2 min-w-0 border-t border-[#123a2d] bg-[#030a07] p-4 lg:order-3 lg:overflow-y-auto lg:border-l lg:border-t-0">
-          <div className="flex items-center gap-2 text-[#20dc73]">
+          <div className="flex items-center justify-between gap-2 text-[#20dc73]">
+            <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
             <p className="font-mono text-xs uppercase tracking-[0.14em]">
                 Intelligence Search
             </p>
+            </div>
+            <button type="button" onClick={() => setInspectorOpen(false)} aria-label="Close intelligence" className="grid h-9 w-9 place-items-center rounded-md text-white/45 hover:bg-white/5 hover:text-white"><ChevronLeft className="h-4 w-4" /></button>
           </div>
 
           <div className="mt-4 space-y-3">
-            <p className="text-xs leading-5 text-white/45">Choose an implemented intelligence capability. Additional searches become active here only after an approved provider is connected.</p>
-            <Link href={`/dashboard/intelligence/domains?case_id=${encodeURIComponent(caseId)}`} className="flex min-h-11 items-center justify-between rounded-md border border-[#20dc73]/40 bg-[#20dc73]/10 px-3 text-sm font-semibold text-[#20dc73] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]">
-              <span>Domain & DNS Intelligence</span><span className="font-mono text-[9px] uppercase">Available</span>
-            </Link>
+            <GraphDomainIntelligence caseId={caseId} onImported={async () => { setFocusEntityId(""); setGraphScope("neighborhood"); await loadGraph(true) }} />
+            <div className="border-t border-[#143b28] pt-4"><p className="text-xs leading-5 text-white/45">Other intelligence capabilities appear here as their approved providers become available.</p></div>
             <div className="grid grid-cols-2 gap-2">
               {["People", "Email", "Company", "Phone", "Social"].map((capability) => <button key={capability} type="button" disabled className="min-h-11 rounded-md border border-white/10 bg-white/[0.02] px-2 text-left text-xs text-white/35 disabled:cursor-not-allowed"><span className="block text-white/55">{capability}</span><span className="font-mono text-[8px] uppercase">Not yet available</span></button>)}
             </div>
