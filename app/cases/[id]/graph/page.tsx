@@ -358,6 +358,7 @@ export default function InvestigationGraphPage() {
 
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [graphScope, setGraphScope] = useState<"neighborhood" | "all">("neighborhood")
+  const [graphLayout, setGraphLayout] = useState<"radial" | "tree">("radial")
   const [focusEntityId, setFocusEntityId] = useState("")
 
   const [showDesktopRecommendation, setShowDesktopRecommendation] =
@@ -995,16 +996,63 @@ export default function InvestigationGraphPage() {
   }, [focusEntityId, recommendedFocusId])
 
   const visibleGraph = useMemo(() => {
-    if (graphScope === "all" || !focusEntityId) return { nodes, edges }
-    const visibleIds = new Set<string>([focusEntityId])
-    edges.forEach((edge) => {
-      if (edge.source === focusEntityId) visibleIds.add(edge.target)
-      if (edge.target === focusEntityId) visibleIds.add(edge.source)
-    })
+    const visibleIds = new Set<string>()
+    if (graphScope === "all" || !focusEntityId) nodes.forEach((node) => visibleIds.add(node.id))
+    else {
+      visibleIds.add(focusEntityId)
+      edges.forEach((edge) => {
+        if (edge.source === focusEntityId) visibleIds.add(edge.target)
+        if (edge.target === focusEntityId) visibleIds.add(edge.source)
+      })
+    }
     const selectedNodes = nodes.filter((node) => visibleIds.has(node.id))
     const selectedEdges = edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
     const center = selectedNodes.find((node) => node.id === focusEntityId)
     const others = selectedNodes.filter((node) => node.id !== focusEntityId)
+
+    if (graphLayout === "tree" && center) {
+      const adjacency = new Map<string, string[]>()
+      selectedEdges.forEach((edge) => {
+        adjacency.set(edge.source, [...(adjacency.get(edge.source) || []), edge.target])
+        adjacency.set(edge.target, [...(adjacency.get(edge.target) || []), edge.source])
+      })
+      const levels = new Map<string, number>([[center.id, 0]])
+      const queue = [center.id]
+      while (queue.length) {
+        const current = queue.shift() as string
+        for (const next of adjacency.get(current) || []) {
+          if (levels.has(next)) continue
+          levels.set(next, (levels.get(current) || 0) + 1)
+          queue.push(next)
+        }
+      }
+      const fallbackLevel = Math.max(0, ...levels.values()) + 1
+      const byLevel = new Map<number, Node[]>()
+      selectedNodes.forEach((node) => {
+        const level = levels.get(node.id) ?? fallbackLevel
+        byLevel.set(level, [...(byLevel.get(level) || []), node])
+      })
+      let rowOffset = 0
+      const arranged: Node[] = []
+      for (const [level, levelNodes] of [...byLevel.entries()].sort(([left], [right]) => left - right)) {
+        const columns = Math.min(9, levelNodes.length)
+        levelNodes
+          .sort((left, right) => String(left.data?.label || "").localeCompare(String(right.data?.label || "")))
+          .forEach((node, index) => arranged.push({
+            ...node,
+            position: {
+              x: (index % columns) * 230 - ((columns - 1) * 230) / 2,
+              y: (rowOffset + Math.floor(index / columns)) * 165,
+            },
+            style: node.id === center.id ? { ...node.style, borderWidth: 2 } : node.style,
+          }))
+        rowOffset += Math.max(1, Math.ceil(levelNodes.length / Math.max(columns, 1)))
+        if (level === 0) rowOffset += 1
+      }
+      return { nodes: arranged, edges: selectedEdges }
+    }
+
+    if (graphScope === "all") return { nodes: selectedNodes, edges: selectedEdges }
     const radius = Math.max(280, Math.min(620, others.length * 13))
     const arranged = [
       ...(center ? [{ ...center, position: { x: 0, y: 0 }, style: { ...center.style, borderWidth: 2 } }] : []),
@@ -1014,7 +1062,7 @@ export default function InvestigationGraphPage() {
       }),
     ]
     return { nodes: arranged, edges: selectedEdges }
-  }, [nodes, edges, graphScope, focusEntityId])
+  }, [nodes, edges, graphScope, graphLayout, focusEntityId])
 
   const displayEdges = useMemo(
     () => (graphScope === "all" ? pivotEdges : visibleGraph.edges).map((edge) => ({
@@ -1029,7 +1077,7 @@ export default function InvestigationGraphPage() {
     if (!graphInstance || !visibleGraph.nodes.length) return
     const frame = window.requestAnimationFrame(() => graphInstance.fitView({ padding: 0.18, duration: 450 }))
     return () => window.cancelAnimationFrame(frame)
-  }, [graphInstance, graphScope, focusEntityId, visibleGraph.nodes.length])
+  }, [graphInstance, graphScope, graphLayout, focusEntityId, visibleGraph.nodes.length])
 
   const relationshipOptions =
     useMemo(
@@ -2180,6 +2228,9 @@ export default function InvestigationGraphPage() {
           <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2 rounded-md border border-[#143b28] bg-[#030a07]/95 p-2 shadow-xl backdrop-blur">
             <button type="button" onClick={() => setGraphScope("neighborhood")} className={`h-9 rounded px-3 text-xs font-semibold ${graphScope === "neighborhood" ? "bg-[#20dc73] text-black" : "text-white/60 hover:bg-white/5"}`}>Focused network</button>
             <button type="button" onClick={() => setGraphScope("all")} className={`h-9 rounded px-3 text-xs font-semibold ${graphScope === "all" ? "bg-[#20dc73] text-black" : "text-white/60 hover:bg-white/5"}`}>Complete graph</button>
+            <span className="mx-1 hidden w-px self-stretch bg-[#143b28] sm:block" aria-hidden="true" />
+            <button type="button" onClick={() => setGraphLayout("radial")} title="Arrange entities around the selected entity" className={`inline-flex h-9 items-center gap-2 rounded px-3 text-xs font-semibold ${graphLayout === "radial" ? "border border-[#20dc73]/50 text-[#20dc73]" : "text-white/60 hover:bg-white/5"}`}><Network className="h-3.5 w-3.5" />Radial</button>
+            <button type="button" onClick={() => setGraphLayout("tree")} title="Arrange entities in levels from the selected entity" className={`inline-flex h-9 items-center gap-2 rounded px-3 text-xs font-semibold ${graphLayout === "tree" ? "border border-[#20dc73]/50 text-[#20dc73]" : "text-white/60 hover:bg-white/5"}`}><GitBranch className="h-3.5 w-3.5" />Tree</button>
             {graphScope === "neighborhood" ? <span className="self-center px-2 text-xs text-white/40">Showing {visibleGraph.nodes.length} of {nodes.length}</span> : null}
           </div>
           <ReactFlow
