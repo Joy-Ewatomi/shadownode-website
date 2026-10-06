@@ -66,6 +66,7 @@ import {
   RELATIONSHIP_TYPES as OSINT_RELATIONSHIP_TYPES,
   VERIFICATION_STATES,
 } from "@/lib/osint-workspace"
+import { INTELLIGENCE_DOMAINS } from "@/lib/intelligence-domains"
 
 const nodeStyle = {
   background: "#06110f",
@@ -2386,8 +2387,8 @@ export default function InvestigationGraphPage() {
           <div className="mt-4 space-y-3">
             <GraphDomainIntelligence caseId={caseId} onImported={async () => { setFocusEntityId(""); setGraphScope("neighborhood"); await loadGraph(true) }} />
             <div className="border-t border-[#143b28] pt-4"><p className="text-xs leading-5 text-white/45">Other intelligence capabilities appear here as their approved providers become available.</p></div>
-            <div className="grid grid-cols-2 gap-2">
-              {["People", "Email", "Company", "Phone", "Social"].map((capability) => <button key={capability} type="button" disabled className="min-h-11 rounded-md border border-white/10 bg-white/[0.02] px-2 text-left text-xs text-white/35 disabled:cursor-not-allowed"><span className="block text-white/55">{capability}</span><span className="font-mono text-[8px] uppercase">Not yet available</span></button>)}
+            <div className="space-y-2">
+              {INTELLIGENCE_DOMAINS.filter((domain) => !domain.available).map((domain) => <button key={domain.id} type="button" disabled className="min-h-14 w-full rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-left text-xs text-white/35 disabled:cursor-not-allowed"><span className="block text-white/60">{domain.title}</span><span className="mt-1 block text-[9px] leading-4 text-white/25">{domain.capabilities.join(" · ")}</span><span className="mt-1 block font-mono text-[8px] uppercase">Not yet available</span></button>)}
             </div>
 
             <div className="rounded-md border border-[#143b28] bg-black/30 p-3">

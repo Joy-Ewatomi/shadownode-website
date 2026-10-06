@@ -10,22 +10,25 @@ import {
   CircleAlert,
   Clock3,
   FileText,
+  FileSearch2,
   Fingerprint,
   FolderOpen,
   GitBranch,
   Globe2,
-  Mail,
   Building2,
-  Phone,
-  Share2,
+  Image as ImageIcon,
+  Landmark,
   Loader2,
   MessageSquare,
   Network,
+  MapPinned,
   Shield,
+  ShieldAlert,
   Users,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import MarkResourceNotificationsRead from "@/components/notifications/MarkResourceNotificationsRead"
+import { INTELLIGENCE_DOMAINS, type IntelligenceDomainId } from "@/lib/intelligence-domains"
 
 type CaseData = {
   id: string
@@ -193,14 +196,15 @@ function priorityTone(
   return "text-[#7ce7a7]"
 }
 
-const intelligenceCapabilities = [
-  { title: "Domain & DNS Intelligence", description: "Domain, DNS, IP, ASN, HTTP, TLS and CT intelligence powered by SDIA.", icon: Globe2, available: true, kind: "domain" },
-  { title: "People Intelligence", description: "Person-focused intelligence operations.", icon: Users, available: false },
-  { title: "Email Intelligence", description: "Email intelligence and analysis.", icon: Mail, available: false },
-  { title: "Company Intelligence", description: "Company intelligence and analysis.", icon: Building2, available: false },
-  { title: "Phone Intelligence", description: "Phone intelligence and analysis.", icon: Phone, available: false },
-  { title: "Social Intelligence", description: "Social-platform intelligence and analysis.", icon: Share2, available: false },
-] as const
+const intelligenceIcons: Record<IntelligenceDomainId, typeof Users> = {
+  people: Users, company: Building2, domain: Globe2, image: ImageIcon,
+  document: FileSearch2, geo: MapPinned, threat: ShieldAlert,
+  financial: Landmark, case: Network,
+}
+
+const intelligenceCapabilities = INTELLIGENCE_DOMAINS
+  .filter((domain) => domain.id !== "case")
+  .map((domain) => ({ ...domain, icon: intelligenceIcons[domain.id] }))
 
 export default function CaseDashboard() {
   const params = useParams()
@@ -639,8 +643,8 @@ export default function CaseDashboard() {
 
                   {intelligenceCapabilities.map((capability) => {
                     const Icon = capability.icon
-                    const content = <><Icon className={`h-6 w-6 shrink-0 ${capability.available ? "text-[#20dc73]" : "text-white/25"}`} aria-hidden="true" /><div className="min-w-0 flex-1"><p className="text-sm font-semibold leading-5 text-white">{capability.title}</p><p className="mt-1 text-xs leading-5 text-white/40">{capability.description}</p></div><span className={`shrink-0 rounded border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] ${capability.available ? "border-[#20dc73]/30 bg-[#20dc73]/10 text-[#20dc73]" : "border-white/10 text-white/35"}`}>{capability.available ? "Available" : "Not Yet Available"}</span></>
-                    return capability.available ? <Link key={capability.title} href={`/dashboard/intelligence/domains?case_id=${encodeURIComponent(caseId)}`} className="group flex items-center gap-4 rounded-lg border border-[#123a2d] bg-black/20 p-4 transition hover:border-[#206344] hover:bg-[#071610] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]">{content}</Link> : <div key={capability.title} aria-disabled="true" className="flex items-center gap-4 rounded-lg border border-white/10 bg-black/20 p-4 opacity-75">{content}</div>
+                    const content = <><Icon className={`h-6 w-6 shrink-0 ${capability.available ? "text-[#20dc73]" : "text-white/25"}`} aria-hidden="true" /><div className="min-w-0 flex-1"><p className="text-sm font-semibold leading-5 text-white">{capability.title}</p><p className="mt-1 text-xs leading-5 text-white/40">{capability.description}</p><p className="mt-2 text-[10px] leading-4 text-white/25">{capability.capabilities.join(" · ")}</p></div><span className={`shrink-0 rounded border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] ${capability.available ? "border-[#20dc73]/30 bg-[#20dc73]/10 text-[#20dc73]" : "border-white/10 text-white/35"}`}>{capability.available ? "Available" : "Not Yet Available"}</span></>
+                    return capability.id === "domain" ? <Link key={capability.id} href={`/dashboard/intelligence/domains?case_id=${encodeURIComponent(caseId)}`} className="group flex items-center gap-4 rounded-lg border border-[#123a2d] bg-black/20 p-4 transition hover:border-[#206344] hover:bg-[#071610] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]">{content}</Link> : <div key={capability.id} aria-disabled="true" className="flex items-center gap-4 rounded-lg border border-white/10 bg-black/20 p-4 opacity-75">{content}</div>
                   })}
 
                 </div>

@@ -1,15 +1,12 @@
 import Link from "next/link"
-import { Building2, Globe2, Mail, Network, Phone, Share2, Users } from "lucide-react"
+import { Building2, FileSearch2, Globe2, Image, Landmark, MapPinned, Network, ShieldAlert, Users } from "lucide-react"
+import { INTELLIGENCE_DOMAINS, type IntelligenceDomainId } from "@/lib/intelligence-domains"
 
-const modules = [
-  { title: "Domain & DNS Intelligence", description: "Domain, DNS, IP, ASN, HTTP, TLS and Certificate Transparency intelligence powered by SDIA.", href: "/dashboard/intelligence/domains", icon: Globe2, available: true },
-  { title: "People Intelligence", description: "Person-focused intelligence operations.", icon: Users, available: false },
-  { title: "Email Intelligence", description: "Email intelligence and analysis.", icon: Mail, available: false },
-  { title: "Company Intelligence", description: "Company intelligence and analysis.", icon: Building2, available: false },
-  { title: "Phone Intelligence", description: "Phone intelligence and analysis.", icon: Phone, available: false },
-  { title: "Social Intelligence", description: "Social-platform intelligence and analysis.", icon: Share2, available: false },
-  { title: "Entity Graph", description: "Visualize and investigate relationships between entities in an authorized case.", icon: Network, available: true, caseRequired: true },
-] as const
+const icons: Record<IntelligenceDomainId, typeof Users> = {
+  people: Users, company: Building2, domain: Globe2, image: Image,
+  document: FileSearch2, geo: MapPinned, threat: ShieldAlert,
+  financial: Landmark, case: Network,
+}
 
 export default function IntelligencePage() {
   return <div className="space-y-6">
@@ -19,8 +16,9 @@ export default function IntelligencePage() {
       <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">Review current intelligence capabilities. Operational analysis remains attached to an authorized case workspace.</p>
     </header>
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Intelligence capabilities">
-      {modules.map((module) => {
-        const Icon = module.icon
+      {INTELLIGENCE_DOMAINS.map((module) => {
+        const Icon = icons[module.id]
+        const href = module.id === "domain" ? "/dashboard/intelligence/domains" : null
         const content = <>
           <div className="flex items-start justify-between gap-3">
             <Icon className={`h-6 w-6 ${module.available ? "text-[#20dc73]" : "text-white/30"}`} aria-hidden="true" />
@@ -28,14 +26,15 @@ export default function IntelligencePage() {
           </div>
           <h2 className="mt-4 font-semibold text-white">{module.title}</h2>
           <p className="mt-2 text-sm leading-6 text-white/45">{module.description}</p>
-          {"caseRequired" in module && module.caseRequired ? <p className="mt-4 text-xs text-white/35">Open an authorized case to use the Entity Graph.</p> : module.available ? <p className="mt-4 text-xs font-semibold text-[#20dc73]">Open capability</p> : null}
+          <p className="mt-3 text-xs leading-5 text-white/30">{module.capabilities.join(" · ")}</p>
+          {module.id === "case" ? <p className="mt-4 text-xs text-white/35">Open an authorized case to use Case Intelligence.</p> : module.available ? <p className="mt-4 text-xs font-semibold text-[#20dc73]">Open capability</p> : null}
         </>
-        return "href" in module && module.href ? <Link key={module.title} href={module.href} className="rounded-md border border-[#143b28] bg-[#06110f] p-5 transition hover:border-[#20dc73]/50 hover:bg-[#20dc73]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]">{content}</Link> : <div key={module.title} aria-disabled="true" className="rounded-md border border-white/10 bg-[#06110f]/70 p-5 opacity-75">{content}</div>
+        return href ? <Link key={module.id} href={href} className="rounded-md border border-[#143b28] bg-[#06110f] p-5 transition hover:border-[#20dc73]/50 hover:bg-[#20dc73]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20dc73]">{content}</Link> : <div key={module.id} aria-disabled={module.available ? undefined : "true"} className={`rounded-md border bg-[#06110f]/70 p-5 ${module.available ? "border-[#143b28]" : "border-white/10 opacity-75"}`}>{content}</div>
       })}
     </section>
     <section className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
       <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#20dc73]">Architecture</p>
-      <p className="mt-3 text-sm leading-6 text-white/55">SDIA currently powers Domain & DNS Intelligence only. The Entity Graph is the existing case visualization workspace; unavailable capabilities do not run searches or create findings.</p>
+      <p className="mt-3 text-sm leading-6 text-white/55">Eight intelligence domains feed Case Intelligence, the operational layer for investigation, evidence, findings, timelines, relationships and reports. SDIA remains the engine for Domain & Infrastructure Intelligence. Planned domains do not run searches or create findings until their approved engines are connected.</p>
     </section>
   </div>
 }
