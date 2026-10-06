@@ -2,7 +2,6 @@
 
 import {
   Background,
-  Controls,
   MiniMap,
   type Connection,
   type Edge,
@@ -13,15 +12,22 @@ import {
 
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Building2,
   CheckCircle2,
   CircleDot,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Fingerprint,
   FileText,
   GitBranch,
   Globe,
   Loader2,
+  LocateFixed,
   MapPin,
   Maximize2,
   Monitor,
@@ -37,6 +43,8 @@ import {
   User,
   Wallet,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react"
 
 import {
@@ -357,6 +365,7 @@ export default function InvestigationGraphPage() {
     useState(false)
 
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [graphHeaderOpen, setGraphHeaderOpen] = useState(false)
   const [graphScope, setGraphScope] = useState<"neighborhood" | "all">("neighborhood")
   const [graphLayout, setGraphLayout] = useState<"radial" | "tree">("radial")
   const [focusEntityId, setFocusEntityId] = useState("")
@@ -1910,6 +1919,33 @@ export default function InvestigationGraphPage() {
     setActionError(null)
   }
 
+  function panCanvas(direction: "up" | "down" | "left" | "right") {
+    if (!graphInstance) return
+    const viewport = graphInstance.getViewport()
+    const distance = 260
+    const movement = {
+      up: { x: 0, y: distance },
+      down: { x: 0, y: -distance },
+      left: { x: distance, y: 0 },
+      right: { x: -distance, y: 0 },
+    }[direction]
+    graphInstance.setViewport(
+      { x: viewport.x + movement.x, y: viewport.y + movement.y, zoom: viewport.zoom },
+      { duration: 220 },
+    )
+  }
+
+  function centerFocusedEntity() {
+    if (!graphInstance || !focusEntityId) return
+    const node = visibleGraph.nodes.find((item) => item.id === focusEntityId)
+    if (!node) return
+    const viewport = graphInstance.getViewport()
+    graphInstance.setCenter(node.position.x + 95, node.position.y + 55, {
+      zoom: Math.max(viewport.zoom, 0.75),
+      duration: 350,
+    })
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#000604] text-[#20dc73]">
@@ -1923,7 +1959,7 @@ export default function InvestigationGraphPage() {
 
   return (
     <div className="relative min-h-screen bg-[#000604] text-white">
-      <header className="flex flex-col gap-4 border-b border-[#123a2d] p-4 sm:flex-row sm:items-center sm:justify-between">
+      {graphHeaderOpen ? <header className="flex flex-col gap-4 border-b border-[#123a2d] p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <Network className="h-5 w-5 text-[#20dc73]" />
@@ -1943,6 +1979,7 @@ export default function InvestigationGraphPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setGraphHeaderOpen(false)} className="inline-flex items-center gap-2 rounded-md border border-[#254936] px-3 py-2 text-sm font-medium text-white/65 hover:bg-white/5 hover:text-white"><ChevronUp className="h-4 w-4" />Close tools</button>
           <button
             type="button"
             onClick={() => setPaletteOpen((current) => !current)}
@@ -2026,7 +2063,10 @@ export default function InvestigationGraphPage() {
             {inspectorOpen ? "Hide intelligence" : "Intelligence search"}
           </button>
         </div>
-      </header>
+      </header> : <div className="flex min-h-11 items-center justify-between border-b border-[#123a2d] px-4 text-white/55">
+        <span className="inline-flex items-center gap-2 text-xs"><Network className="h-4 w-4 text-[#20dc73]" />Case entities</span>
+        <button type="button" onClick={() => setGraphHeaderOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs hover:bg-white/5 hover:text-white"><ChevronDown className="h-4 w-4" />Open tools</button>
+      </div>}
 
       {showDesktopRecommendation ? (
         <aside role="status" className="mx-4 mt-4 flex items-start gap-3 rounded-md border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100">
@@ -2075,7 +2115,7 @@ export default function InvestigationGraphPage() {
         </div>
       ) : null}
 
-      <div className="border-b border-[#123a2d] px-4 py-3">
+      {graphHeaderOpen ? <div className="border-b border-[#123a2d] px-4 py-3">
         <div className="flex flex-wrap gap-4 text-xs text-white/35">
           <span>
             <strong className="text-white/65">
@@ -2106,7 +2146,7 @@ export default function InvestigationGraphPage() {
             </span>
           ) : null}
         </div>
-      </div>
+      </div> : null}
 
       <div className={`grid min-w-0 grid-cols-1 lg:h-[calc(100vh-130px)] ${paletteOpen && inspectorOpen ? "lg:grid-cols-[280px_minmax(0,1fr)_380px]" : paletteOpen ? "lg:grid-cols-[280px_minmax(0,1fr)]" : inspectorOpen ? "lg:grid-cols-[minmax(0,1fr)_380px]" : "lg:grid-cols-1"}`}>
         {paletteOpen ? <aside className="order-1 min-w-0 border-b border-[#123a2d] bg-[#030a07] p-4 lg:order-1 lg:overflow-y-auto lg:border-b-0 lg:border-r">
@@ -2233,6 +2273,17 @@ export default function InvestigationGraphPage() {
             <button type="button" onClick={() => setGraphLayout("tree")} title="Arrange entities in levels from the selected entity" className={`inline-flex h-9 items-center gap-2 rounded px-3 text-xs font-semibold ${graphLayout === "tree" ? "border border-[#20dc73]/50 text-[#20dc73]" : "text-white/60 hover:bg-white/5"}`}><GitBranch className="h-3.5 w-3.5" />Tree</button>
             {graphScope === "neighborhood" ? <span className="self-center px-2 text-xs text-white/40">Showing {visibleGraph.nodes.length} of {nodes.length}</span> : null}
           </div>
+          <div className="absolute bottom-4 left-4 z-10 grid grid-cols-3 gap-1 rounded-md border border-[#143b28] bg-[#030a07]/95 p-2 shadow-xl backdrop-blur">
+            <span />
+            <button type="button" onClick={() => panCanvas("up")} title="Move toward the top of the graph" aria-label="Move toward the top of the graph" className="grid h-9 w-9 place-items-center rounded text-white/65 hover:bg-white/10 hover:text-white"><ArrowUp className="h-4 w-4" /></button>
+            <button type="button" onClick={centerFocusedEntity} title="Return to the selected root entity" aria-label="Return to the selected root entity" className="grid h-9 w-9 place-items-center rounded text-[#20dc73] hover:bg-[#20dc73]/10"><LocateFixed className="h-4 w-4" /></button>
+            <button type="button" onClick={() => panCanvas("left")} title="Move left" aria-label="Move left" className="grid h-9 w-9 place-items-center rounded text-white/65 hover:bg-white/10 hover:text-white"><ArrowLeft className="h-4 w-4" /></button>
+            <button type="button" onClick={() => panCanvas("down")} title="Move toward the bottom of the graph" aria-label="Move toward the bottom of the graph" className="grid h-9 w-9 place-items-center rounded text-white/65 hover:bg-white/10 hover:text-white"><ArrowDown className="h-4 w-4" /></button>
+            <button type="button" onClick={() => panCanvas("right")} title="Move right" aria-label="Move right" className="grid h-9 w-9 place-items-center rounded text-white/65 hover:bg-white/10 hover:text-white"><ArrowRight className="h-4 w-4" /></button>
+            <button type="button" onClick={() => graphInstance?.zoomOut({ duration: 180 })} title="Zoom out" aria-label="Zoom out" className="grid h-9 w-9 place-items-center rounded text-white/65 hover:bg-white/10 hover:text-white"><ZoomOut className="h-4 w-4" /></button>
+            <button type="button" onClick={() => graphInstance?.fitView({ padding: 0.18, duration: 350 })} title="Fit visible graph" aria-label="Fit visible graph" className="grid h-9 w-9 place-items-center rounded text-white/65 hover:bg-white/10 hover:text-white"><Maximize2 className="h-4 w-4" /></button>
+            <button type="button" onClick={() => graphInstance?.zoomIn({ duration: 180 })} title="Zoom in" aria-label="Zoom in" className="grid h-9 w-9 place-items-center rounded text-white/65 hover:bg-white/10 hover:text-white"><ZoomIn className="h-4 w-4" /></button>
+          </div>
           <ReactFlow
             nodes={visibleGraph.nodes}
             edges={displayEdges}
@@ -2257,10 +2308,13 @@ export default function InvestigationGraphPage() {
               )
             }
             onNodeDragStop={(_event, _node, nextNodes) => graphScope === "all" ? savePositions(nextNodes) : undefined}
+            panOnScroll
+            zoomOnScroll={false}
+            zoomOnPinch
+            zoomOnDoubleClick
             fitView
           >
             <Background />
-            <Controls />
             <MiniMap />
           </ReactFlow>
         </main>
