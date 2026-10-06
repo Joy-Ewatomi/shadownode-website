@@ -15,6 +15,8 @@ type EvidenceRow = Record<string, unknown> & { id: string; file_name: string; fi
 type TimelineRow = Record<string, unknown> & { event_date: string | Date | null; title: string | null; description: string | null; created_at: string | Date }
 type UpdateRow = Record<string, unknown> & { update_type: string | null; title: string | null; content: string | null; created_at: string | Date }
 type ExportTimelineRow = { date: string | Date | null; type: string; title: string | null; detail: string | null }
+type ExportEntityRow = Record<string, unknown> & { id: string; name: string | null; entity_type: string | null; verification_status: string | null; confidence_score: number | null }
+type ExportRelationshipRow = Record<string, unknown> & { id: string; source_entity_id: string; source_name: string | null; target_entity_id: string; target_name: string | null; relationship_type: string | null; verification_status: string | null; confidence_score: number | null; source_reference: string | null }
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
@@ -44,6 +46,49 @@ function safeCustody(value: unknown) {
     }
   }
   return []
+}
+
+function buildGraphExhibit(entities: ExportEntityRow[], relationships: ExportRelationshipRow[]) {
+  if (!entities.length) return '<p>No report entities were available for the graph exhibit.</p>'
+  const degree = new Map<string, number>()
+  relationships.forEach((item) => {
+    degree.set(item.source_entity_id, (degree.get(item.source_entity_id) || 0) + 1)
+    degree.set(item.target_entity_id, (degree.get(item.target_entity_id) || 0) + 1)
+  })
+  const selected = [...entities]
+    .sort((left, right) => {
+      const leftPriority = left.entity_type === "DOMAIN" ? 10000 : 0
+      const rightPriority = right.entity_type === "DOMAIN" ? 10000 : 0
+      return (rightPriority + (degree.get(right.id) || 0)) - (leftPriority + (degree.get(left.id) || 0))
+    })
+    .slice(0, 48)
+  const selectedIds = new Set(selected.map((item) => item.id))
+  const graphRelationships = relationships.filter((item) => selectedIds.has(item.source_entity_id) && selectedIds.has(item.target_entity_id))
+  const columns = Math.min(6, selected.length)
+  const nodeWidth = 150
+  const nodeHeight = 58
+  const horizontalGap = 34
+  const verticalGap = 52
+  const width = Math.max(640, columns * (nodeWidth + horizontalGap) + 40)
+  const height = Math.max(260, Math.ceil(selected.length / columns) * (nodeHeight + verticalGap) + 70)
+  const positions = new Map(selected.map((item, index) => [item.id, {
+    x: 28 + (index % columns) * (nodeWidth + horizontalGap),
+    y: 48 + Math.floor(index / columns) * (nodeHeight + verticalGap),
+  }]))
+  const edgeSvg = graphRelationships.map((item) => {
+    const source = positions.get(item.source_entity_id)
+    const target = positions.get(item.target_entity_id)
+    if (!source || !target) return ""
+    return `<line x1="${source.x + nodeWidth / 2}" y1="${source.y + nodeHeight / 2}" x2="${target.x + nodeWidth / 2}" y2="${target.y + nodeHeight / 2}" stroke="#68776f" stroke-width="1" opacity="0.65" />`
+  }).join("")
+  const nodeSvg = selected.map((item) => {
+    const position = positions.get(item.id)!
+    const name = String(item.name || "Unnamed entity")
+    const shortName = name.length > 24 ? `${name.slice(0, 23)}…` : name
+    return `<g><rect x="${position.x}" y="${position.y}" width="${nodeWidth}" height="${nodeHeight}" rx="5" fill="#06110f" stroke="#159957" stroke-width="1.5"/><text x="${position.x + nodeWidth / 2}" y="${position.y + 25}" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="10" font-weight="700">${escapeHtml(shortName)}</text><text x="${position.x + nodeWidth / 2}" y="${position.y + 42}" text-anchor="middle" fill="#50c785" font-family="Consolas, monospace" font-size="8">${escapeHtml(item.entity_type || "ENTITY")}</text></g>`
+  }).join("")
+  const note = entities.length > selected.length ? `Overview displays the ${selected.length} most connected entities. The complete entity and relationship registers follow.` : "All report entities are displayed."
+  return `<div class="graph-exhibit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Case intelligence relationship graph"><rect width="100%" height="100%" fill="#f7faf8"/><text x="28" y="26" fill="#0d693d" font-family="Arial, sans-serif" font-size="12" font-weight="700">Case intelligence relationship overview</text>${edgeSvg}${nodeSvg}</svg><p class="caption">${escapeHtml(note)} Nodes are investigative records; connecting lines indicate recorded relationships and do not independently prove ownership or wrongdoing.</p></div>`
 }
 
 export async function GET(
@@ -95,7 +140,7 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const [sections, evidence, entities, timeline, updates] = await Promise.all([
+    const [sections, evidence, entities, relationships, timeline, updates] = await Promise.all([
       query<ReportSectionRow>(`SELECT section_type, title, content, order_index FROM case_report_sections WHERE report_id = $1 ORDER BY order_index, created_at`, [id]),
       query<EvidenceRow>(`
         SELECT ff.id, ff.file_name, ff.file_type, ff.file_size, ff.file_hash,
@@ -107,12 +152,26 @@ export async function GET(
         WHERE cre.report_id = $1
         ORDER BY ff.created_at
       `, [id]),
-      query(`
+      query<ExportEntityRow>(`
         SELECT ie.id, ie.name, ie.entity_type, ie.verification_status, ie.confidence_score
         FROM case_report_entities cre
         JOIN investigation_entities ie ON ie.id = cre.entity_id
         WHERE cre.report_id = $1
         ORDER BY ie.name
+      `, [id]),
+      query<ExportRelationshipRow>(`
+        SELECT er.id, er.source_entity_id, source_entity.name AS source_name,
+               er.target_entity_id, target_entity.name AS target_name,
+               er.relationship_type, er.verification_status,
+               er.confidence_score, er.source_reference
+        FROM entity_relationships er
+        JOIN case_report_entities source_report_entity
+          ON source_report_entity.entity_id = er.source_entity_id AND source_report_entity.report_id = $1
+        JOIN case_report_entities target_report_entity
+          ON target_report_entity.entity_id = er.target_entity_id AND target_report_entity.report_id = $1
+        JOIN investigation_entities source_entity ON source_entity.id = er.source_entity_id
+        JOIN investigation_entities target_entity ON target_entity.id = er.target_entity_id
+        ORDER BY source_entity.name, er.relationship_type, target_entity.name
       `, [id]),
       query<TimelineRow>(`
         SELECT event_date, title, description, created_at
@@ -145,6 +204,7 @@ export async function GET(
         chain_of_custody: item.chain_of_custody,
       })),
       entities: entities.rows,
+      relationships: relationships.rows,
       timeline: timeline.rows,
       updates: updates.rows,
     }
@@ -189,6 +249,11 @@ export async function GET(
       ? timelineRows.map((item) => `<tr><td>${escapeHtml(formatDate(item.date))}</td><td>${escapeHtml(item.type)}</td><td><strong>${escapeHtml(item.title)}</strong><br>${escapeHtml(item.detail)}</td></tr>`).join("")
       : '<tr><td colspan="3">No timeline records available.</td></tr>'
 
+    const graphHtml = buildGraphExhibit(entities.rows, relationships.rows)
+    const relationshipHtml = relationships.rows.length
+      ? relationships.rows.map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(item.source_name)}</td><td>${escapeHtml(String(item.relationship_type || "related to").replaceAll("_", " "))}</td><td>${escapeHtml(item.target_name)}</td><td>${escapeHtml(item.verification_status || "unreviewed")}<br>Confidence: ${escapeHtml(item.confidence_score ?? "Not scored")}</td><td class="mono">${escapeHtml(item.source_reference || "Not recorded")}</td></tr>`).join("")
+      : '<tr><td colspan="6">No relationships were attached between report entities.</td></tr>'
+
     const html = `<!doctype html>
 <html><head><meta charset="utf-8"><title>${escapeHtml(report.title)}</title>
 <style>
@@ -205,6 +270,9 @@ export async function GET(
   table.register th { background: #0d693d; color: white; padding: 7px; text-align: left; }
   table.register td { border: 1px solid #cbd8d0; padding: 7px; vertical-align: top; }
   .mono { font-family: Consolas, monospace; overflow-wrap: anywhere; }
+  .graph-exhibit { border: 1px solid #cfe5d8; padding: 10px; page-break-inside: avoid; }
+  .graph-exhibit svg { display: block; width: 100%; max-height: 185mm; }
+  .caption { margin: 8px 2px 0; color: #607068; font-size: 7.5pt; }
   .notice { margin-top: 28px; border: 1px solid #c9a227; background: #fffbea; padding: 12px; font-size: 8.5pt; }
   .signature { margin-top: 48px; page-break-inside: avoid; } .signature-line { width: 260px; border-top: 1px solid #17211c; margin-top: 50px; padding-top: 6px; }
   .footer { margin-top: 38px; padding-top: 10px; border-top: 1px solid #cfe5d8; font-size: 7.5pt; color: #607068; }
@@ -219,6 +287,8 @@ export async function GET(
   </table>
   <section><h2>Executive Summary</h2><div class="content">${escapeHtml(report.summary || "No executive summary recorded.").replaceAll("\n", "<br>")}</div></section>
   ${sectionHtml}
+  <section><h2>Intelligence Graph Exhibit</h2>${graphHtml}</section>
+  <section><h2>Relationship Register</h2><table class="register"><thead><tr><th>#</th><th>Source Entity</th><th>Relationship</th><th>Target Entity</th><th>Review State</th><th>Source Reference</th></tr></thead><tbody>${relationshipHtml}</tbody></table></section>
   <section><h2>Evidence Register and Chain of Custody</h2><table class="register"><thead><tr><th>#</th><th>Evidence</th><th>SHA-256</th><th>Custodian / Collection</th><th>Custody History</th></tr></thead><tbody>${evidenceHtml}</tbody></table></section>
   <section><h2>Referenced Entities</h2><table class="register"><thead><tr><th>Entity</th><th>Type</th><th>Verification</th><th>Confidence</th></tr></thead><tbody>${entities.rows.length ? entities.rows.map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.entity_type)}</td><td>${escapeHtml(item.verification_status)}</td><td>${escapeHtml(item.confidence_score ?? "Not scored")}</td></tr>`).join("") : '<tr><td colspan="4">No entities attached.</td></tr>'}</tbody></table></section>
   <section><h2>Investigation and Case Timeline</h2><table class="register"><thead><tr><th>Date</th><th>Record Type</th><th>Event</th></tr></thead><tbody>${timelineHtml}</tbody></table></section>

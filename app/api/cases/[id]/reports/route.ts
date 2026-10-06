@@ -1074,10 +1074,19 @@ CRITICAL RULES:
 13. Preserve uncertainty where uncertainty exists.
 14. Write in professional intelligence-analysis language.
 15. The investigator will review the draft before it becomes final.
+16. Do not infer the governing country, court, jurisdiction, evidentiary rule,
+    or legal standard from currency, client location, business location, domain
+    data, or any other indirect signal.
+17. Do not cite or claim compliance with a statute, evidence act, procedural
+    rule, or court requirement unless that jurisdiction and authority are
+    explicitly supplied in the case data and verified by the reviewing analyst.
+18. If jurisdiction is not supplied, state that jurisdiction-specific legal
+    review remains required; keep the report jurisdiction-neutral.
 
 The report must include:
 - executive summary
-- methodology
+- scope, instructions, and methodology, including collection dates, tools or
+  providers recorded in the data, reproducibility limits, and exclusions
 - key findings
 - identity analysis
 - corporate analysis
@@ -1088,6 +1097,15 @@ The report must include:
 - hypotheses
 - conclusion
 - source notes
+
+Write findings so that an independent reviewer can distinguish direct
+observation from analyst inference. For each material conclusion, identify
+the supporting record references, confidence and verification state, relevant
+dates, and any plausible limitation or alternative explanation present in the
+data. In the evidence assessment, distinguish native evidence from intelligence
+leads, describe recorded hashes and custody information without claiming more
+than the supplied metadata proves, and identify missing integrity or custody
+details. Use UTC when explaining recorded machine timestamps.
 
 For hypotheses, clearly label them as hypotheses and provide the evidence
 that caused the hypothesis to be considered.

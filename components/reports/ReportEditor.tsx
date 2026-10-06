@@ -803,7 +803,7 @@ export default function ReportEditor({
 
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7af2a9]">
-                Court-Ready Editing Standard
+                Evidence-Grounded Editing Standard
               </p>
 
               <p className="mt-2 text-xs leading-6 text-white/40">
@@ -814,7 +814,10 @@ export default function ReportEditor({
                 information. Do not strengthen a statement
                 beyond what its supporting record permits.
                 Keep source and evidence references intact
-                when editing investigative findings.
+                when editing investigative findings. Do not
+                assume a governing jurisdiction or legal
+                standard unless it is explicitly recorded
+                and reviewed for this case.
               </p>
             </div>
           </div>
