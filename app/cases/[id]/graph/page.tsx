@@ -67,6 +67,7 @@ import {
   VERIFICATION_STATES,
 } from "@/lib/osint-workspace"
 import { INTELLIGENCE_DOMAINS } from "@/lib/intelligence-domains"
+import type { IntelligenceVerificationResult } from "@/lib/intelligence-verifier"
 
 const nodeStyle = {
   background: "#06110f",
@@ -75,6 +76,14 @@ const nodeStyle = {
   padding: "15px",
   borderRadius: "8px",
   whiteSpace: "pre-line" as const,
+}
+
+const VERIFICATION_TONES: Record<string, string> = {
+  SUPPORTED: "border-[#20dc73]/50 bg-[#20dc73]/10 text-[#20dc73]",
+  SUPPORTED_AS_DERIVED: "border-cyan-400/50 bg-cyan-400/10 text-cyan-300",
+  LIMITED_SUPPORT: "border-amber-400/50 bg-amber-400/10 text-amber-300",
+  INSUFFICIENT_EVIDENCE: "border-white/20 bg-white/5 text-white/60",
+  FAILED_VERIFICATION: "border-red-400/50 bg-red-400/10 text-red-300",
 }
 
 const RELATIONSHIP_TYPES = [
@@ -581,6 +590,10 @@ export default function InvestigationGraphPage() {
 
   const [updatingReview, setUpdatingReview] =
     useState(false)
+
+  const [evidenceVerification, setEvidenceVerification] = useState<IntelligenceVerificationResult | null>(null)
+  const [verificationLoading, setVerificationLoading] = useState(false)
+  const [verificationError, setVerificationError] = useState("")
 
   const loadGraph = useCallback(
     async (
@@ -1098,6 +1111,28 @@ export default function InvestigationGraphPage() {
     const frame = window.requestAnimationFrame(() => graphInstance.fitView({ padding: 0.18, duration: 450 }))
     return () => window.cancelAnimationFrame(frame)
   }, [graphInstance, graphScope, graphLayout, focusEntityId, visibleGraph.nodes.length])
+
+  useEffect(() => {
+    if (!reviewTargetId) {
+      setEvidenceVerification(null)
+      setVerificationError("")
+      return
+    }
+    const controller = new AbortController()
+    setVerificationLoading(true)
+    setVerificationError("")
+    fetch(`/api/cases/${encodeURIComponent(caseId)}/graph/verification?target_type=${encodeURIComponent(reviewTargetType)}&target_id=${encodeURIComponent(reviewTargetId)}`, { credentials: "include", cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const data = await response.json()
+        if (!response.ok) throw new Error(data?.error || "Evidence verification failed.")
+        setEvidenceVerification(data as IntelligenceVerificationResult)
+      })
+      .catch((reason) => {
+        if (reason?.name !== "AbortError") setVerificationError(reason instanceof Error ? reason.message : "Evidence verification failed.")
+      })
+      .finally(() => setVerificationLoading(false))
+    return () => controller.abort()
+  }, [caseId, reviewTargetId, reviewTargetType])
 
   const relationshipOptions =
     useMemo(
@@ -2573,6 +2608,44 @@ export default function InvestigationGraphPage() {
               )}
             </select>
           </div>
+
+          <section className="mt-5 rounded-md border border-[#123a2d] bg-[#06110f] p-3" aria-live="polite">
+            <div className="flex items-center gap-2 text-[#20dc73]">
+              <Fingerprint className="h-4 w-4" />
+              <h2 className="font-mono text-xs uppercase tracking-[0.14em]">Intelligence Verifier</h2>
+            </div>
+            {!reviewTargetId ? <p className="mt-3 text-xs leading-5 text-white/45">Select an entity or relationship to check it against the evidence currently stored with this case.</p> : null}
+            {verificationLoading ? <div className="mt-3 flex items-center gap-2 text-xs text-white/55"><Loader2 className="h-4 w-4 animate-spin" />Checking stored evidence...</div> : null}
+            {verificationError ? <div className="mt-3 rounded-md border border-red-400/35 bg-red-400/10 p-2 text-xs leading-5 text-red-200">{verificationError}</div> : null}
+            {evidenceVerification && !verificationLoading ? <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-md border px-2 py-1 font-mono text-[10px] font-semibold ${VERIFICATION_TONES[evidenceVerification.status] || VERIFICATION_TONES.INSUFFICIENT_EVIDENCE}`}>{evidenceVerification.status.replaceAll("_", " ")}</span>
+                <span className="text-[10px] uppercase text-white/45">{evidenceVerification.classification}</span>
+                <span className="text-[10px] text-white/45">Analyst confidence: {evidenceVerification.confidence.score ?? "not scored"} {evidenceVerification.confidence.score != null ? `(${evidenceVerification.confidence.label}, contextual only)` : ""}</span>
+              </div>
+              <p className="text-xs leading-5 text-white/70">{evidenceVerification.conclusion}</p>
+              <p className="rounded-md border border-[#143b28] bg-black/30 p-2 text-[11px] leading-5 text-white/45">This verifier measures support from current case evidence. It does not prove ownership, control, attribution, wrongdoing, or legal admissibility.</p>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="rounded-md border border-white/10 p-2"><span className="block text-white/35">Integrity</span><strong className={evidenceVerification.integrity.status === "VALID" ? "text-[#20dc73]" : evidenceVerification.integrity.status === "INVALID" ? "text-red-300" : "text-amber-300"}>{evidenceVerification.integrity.status}</strong></div>
+                <div className="rounded-md border border-white/10 p-2"><span className="block text-white/35">Semantic support</span><strong className={evidenceVerification.semantic_support === "MATCH" ? "text-[#20dc73]" : evidenceVerification.semantic_support === "MISMATCH" ? "text-red-300" : "text-amber-300"}>{evidenceVerification.semantic_support.replaceAll("_", " ")}</strong></div>
+                <div className="rounded-md border border-white/10 p-2"><span className="block text-white/35">Provenance</span><strong className={evidenceVerification.provenance.status === "VALID" ? "text-[#20dc73]" : "text-amber-300"}>{evidenceVerification.provenance.status}</strong></div>
+                <div className="rounded-md border border-white/10 p-2"><span className="block text-white/35">Currency</span><strong className={evidenceVerification.currency === "STALE" ? "text-amber-300" : evidenceVerification.currency === "CURRENT" ? "text-[#20dc73]" : "text-white/60"}>{evidenceVerification.currency}</strong></div>
+              </div>
+              <div className="text-[11px] leading-5 text-white/50">
+                <p><span className="text-white/75">Evidence:</span> {[...evidenceVerification.evidence_artifacts, ...evidenceVerification.parent_artifacts].length || "none linked"}</p>
+                <p><span className="text-white/75">Sources:</span> {evidenceVerification.source_information.join(", ") || "not recorded"}</p>
+                <p><span className="text-white/75">Collected:</span> {evidenceVerification.collection_timestamps.join(", ") || "not recorded"}</p>
+              </div>
+              <details className="rounded-md border border-white/10 bg-black/20 p-2">
+                <summary className="cursor-pointer text-xs font-semibold text-white/70">Verification checks</summary>
+                <div className="mt-2 space-y-2">{evidenceVerification.checks.map((check) => <div key={check.check} className="flex gap-2 text-[10px] leading-4"><span className={check.passed ? "text-[#20dc73]" : check.severity === "error" ? "text-red-300" : "text-amber-300"}>{check.passed ? "PASS" : "CHECK"}</span><span className="text-white/50"><strong className="block text-white/70">{check.check.replaceAll("_", " ")}</strong>{check.message}</span></div>)}</div>
+              </details>
+              <details className="rounded-md border border-white/10 bg-black/20 p-2">
+                <summary className="cursor-pointer text-xs font-semibold text-white/70">Limitations</summary>
+                <ul className="mt-2 space-y-1 text-[10px] leading-4 text-white/45">{evidenceVerification.limitations.map((item) => <li key={item}>- {item}</li>)}</ul>
+              </details>
+            </div> : null}
+          </section>
 
           <div className="mt-5 rounded-md border border-[#123a2d] bg-[#06110f] p-3">
             <div className="flex items-center gap-2 text-[#20dc73]">

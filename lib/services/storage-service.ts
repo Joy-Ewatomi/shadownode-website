@@ -46,6 +46,12 @@ export async function createSignedEvidenceUrl(
   return data.signedUrl
 }
 
+export async function downloadEvidenceFile(path: string) {
+  const { data, error } = await storage.storage.from("evidence").download(path)
+  if (error) throw error
+  return Buffer.from(await data.arrayBuffer())
+}
+
 // Generic upload helper that can be used by server-side code for other buckets
 export async function uploadFileToBucket(
   bucket: string,

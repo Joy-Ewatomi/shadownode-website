@@ -1,4 +1,3 @@
-import crypto from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 
 import { auditLog } from "@/lib/auth"
@@ -15,6 +14,7 @@ import {
   uploadEvidenceFile,
 } from "@/lib/services/storage-service"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
+import { sha256Buffer } from "@/lib/evidence-integrity"
 
 type EvidenceRow = {
   id: string
@@ -193,11 +193,7 @@ export async function POST(
         await uploaded.arrayBuffer(),
       )
 
-    const hash =
-      crypto
-        .createHash("sha256")
-        .update(buffer)
-        .digest("hex")
+    const hash = sha256Buffer(buffer)
 
     const safeFileName =
       uploaded.name
