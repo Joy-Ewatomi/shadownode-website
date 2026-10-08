@@ -14,6 +14,7 @@ import {
 } from "@/lib/investigation-workspace"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 import { calculateReportDraftingReadiness } from "@/lib/report-drafting-readiness"
+import { buildEvidenceBasedDraft } from "@/lib/evidence-based-report"
 import {
   notifyAdmins,
   notifySuperAdmins,
@@ -599,6 +600,93 @@ function calculateReadiness(
     case_activity_count: investigation.case_activity.length,
     note_count: investigation.notes.length,
   })
+}
+
+async function createEvidenceBasedDraft(
+  investigation: Awaited<ReturnType<typeof loadInvestigationData>>,
+  options: {
+    caseId: string
+    creatorProfileId: string
+    title: string
+    reportType: string
+    classification: string
+  },
+) {
+  const draft = buildEvidenceBasedDraft(investigation)
+  const entityIds = investigation.entities
+    .map((entity) => optionalText(entity.id))
+    .filter((entityId): entityId is string => Boolean(entityId))
+  const evidenceIds = investigation.evidence
+    .map((evidence) => optionalText(evidence.id))
+    .filter((evidenceId): evidenceId is string => Boolean(evidenceId))
+
+  const report = await withTransaction(async (client) => {
+    const inserted = await client.query<{ id: string }>(
+      `
+        INSERT INTO case_reports (
+          case_id, title, file_url, summary, created_by, report_type,
+          status, classification, created_at, updated_at
+        )
+        VALUES ($1, $2, NULL, $3, $4, $5, 'draft', $6, NOW(), NOW())
+        RETURNING id
+      `,
+      [
+        options.caseId,
+        options.title,
+        draft.executive_summary,
+        options.creatorProfileId,
+        options.reportType,
+        options.classification,
+      ],
+    )
+    const reportId = inserted.rows[0]?.id
+    if (!reportId) throw new Error("Evidence-based report creation returned no record")
+
+    await client.query(
+      `
+        INSERT INTO case_report_sections (
+          report_id, section_type, title, content, order_index,
+          created_by, created_at, updated_at
+        )
+        SELECT $1, section_type, title, content, order_index, $2, NOW(), NOW()
+        FROM jsonb_to_recordset($3::jsonb)
+          AS section(section_type text, title text, content text, order_index integer)
+      `,
+      [reportId, options.creatorProfileId, JSON.stringify(draft.sections)],
+    )
+
+    if (entityIds.length) {
+      await client.query(
+        `
+          INSERT INTO case_report_entities (report_id, entity_id, created_by, created_at)
+          SELECT $1, ie.id, $2, NOW()
+          FROM investigation_entities ie
+          WHERE ie.case_id = $3 AND ie.id = ANY($4::uuid[])
+          ON CONFLICT (report_id, entity_id) DO NOTHING
+        `,
+        [reportId, options.creatorProfileId, options.caseId, entityIds],
+      )
+    }
+
+    if (evidenceIds.length) {
+      await client.query(
+        `
+          INSERT INTO case_report_evidence (report_id, forensic_file_id, created_by, created_at)
+          SELECT $1, ff.id, $2, NOW()
+          FROM forensic_files ff
+          WHERE ff.case_id = $3
+            AND (ff.is_evidence = true OR ff.is_evidence IS NULL)
+            AND ff.id = ANY($4::uuid[])
+          ON CONFLICT (report_id, forensic_file_id) DO NOTHING
+        `,
+        [reportId, options.creatorProfileId, options.caseId, evidenceIds],
+      )
+    }
+
+    return { id: reportId, draft }
+  })
+
+  return report
 }
 
 /*
@@ -1946,6 +2034,9 @@ export async function GET(
  * AI:
  *   action = generate_ai_draft
  *
+ * Deterministic evidence-based draft:
+ *   action = generate_evidence_based_draft
+ *
  * The AI flow creates one report and its generated sections.
  */
 export async function POST(
@@ -2005,6 +2096,67 @@ export async function POST(
         body?.action,
       ) ||
       "create"
+
+    if (action === "generate_evidence_based_draft") {
+      const investigation = await loadInvestigationData(access.caseId)
+      if (!investigation.case) {
+        return NextResponse.json({ error: "Case not found" }, { status: 404 })
+      }
+
+      const creatorProfileId = await profileIdForUser(access.user.id)
+      if (!creatorProfileId) {
+        return NextResponse.json({ error: "User profile missing" }, { status: 500 })
+      }
+
+      const title =
+        optionalText(body?.title) ||
+        `${investigation.case.title || "Investigation"} — Evidence-Based Investigation Report`
+      const reportType = optionalText(body?.report_type) || "evidence_based"
+      const classification = optionalText(body?.classification) || "confidential"
+      const created = await createEvidenceBasedDraft(investigation, {
+        caseId: access.caseId,
+        creatorProfileId,
+        title,
+        reportType,
+        classification,
+      })
+
+      await recordInvestigationTimeline(
+        access.caseId,
+        access.user.id,
+        "report_evidence_based_generated",
+        "Evidence-Based Investigation Report Generated",
+        title,
+      )
+      await emitCaseWorkspaceEvent({
+        type: "report.created",
+        case_id: access.caseId,
+        actor_id: access.user.id,
+        record_id: created.id,
+        data: {
+          title,
+          status: "draft",
+          generated_by_evidence_assembly: true,
+        },
+      })
+      await auditLog(access.user.id, "report_evidence_based_draft_generated", request, {
+        case_id: access.caseId,
+        report_id: created.id,
+        evidence_attached: investigation.evidence.length,
+        entities_attached: investigation.entities.length,
+        relationships_referenced: investigation.relationships.length,
+        timeline_records_referenced: investigation.timeline.length,
+      })
+
+      const refreshed = await loadReportDetails(access.caseId, created.id)
+      return NextResponse.json(
+        {
+          report: refreshed[0] || { id: created.id },
+          generated_by_evidence_assembly: true,
+        },
+        { status: 201 },
+      )
+    }
 
     /*
      * ==========================================================

@@ -194,6 +194,9 @@ export default function ReportBuilder({
   const [generating, setGenerating] =
     useState(false)
 
+  const [generatingEvidenceDraft, setGeneratingEvidenceDraft] =
+    useState(false)
+
   const [creating, setCreating] =
     useState(false)
 
@@ -586,6 +589,55 @@ export default function ReportBuilder({
       )
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function generateEvidenceBasedDraft() {
+    if (generatingEvidenceDraft) return
+
+    try {
+      setGeneratingEvidenceDraft(true)
+      setError("")
+      setMessage("")
+
+      const res = await fetch(
+        `/api/cases/${encodeURIComponent(caseId)}/reports`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "generate_evidence_based_draft",
+            title: draft.title.trim() || undefined,
+            report_type: "evidence_based",
+            classification: draft.classification.trim() || "confidential",
+          }),
+        },
+      )
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to generate the evidence-based draft.")
+      }
+
+      if (data?.report?.id) setSelectedReportId(String(data.report.id))
+
+      setDraft({
+        title: "",
+        report_type: "intelligence",
+        classification: "confidential",
+        executive_summary: "",
+      })
+      setMessage("Evidence-based investigation report draft generated. Review and edit it before approval.")
+      await loadReports()
+    } catch (generationError) {
+      console.error("EVIDENCE-BASED REPORT GENERATION ERROR", generationError)
+      setError(
+        generationError instanceof Error
+          ? generationError.message
+          : "Failed to generate the evidence-based draft.",
+      )
+    } finally {
+      setGeneratingEvidenceDraft(false)
     }
   }
 
@@ -1403,6 +1455,28 @@ if (refreshedResponse.ok) {
                   ? "Generating AI Draft..."
                   : "Generate AI Report Draft"}
               </button>
+
+              <button
+                onClick={() => {
+                  void generateEvidenceBasedDraft()
+                }}
+                disabled={generatingEvidenceDraft}
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#20dc73]/40 bg-[#20dc73]/10 text-sm font-bold text-[#20dc73] transition hover:bg-[#20dc73]/15 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {generatingEvidenceDraft ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FilePlus2 className="h-4 w-4" />
+                )}
+
+                {generatingEvidenceDraft
+                  ? "Assembling Evidence Draft..."
+                  : "Generate Evidence-Based Draft"}
+              </button>
+
+              <p className="text-[9px] leading-4 text-white/35">
+                Uses only authorized case records. It does not call an AI provider or inspect evidence files.
+              </p>
 
               <div className="flex items-start gap-2 rounded-lg border border-[#143b28] bg-black/30 p-3">
                 <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#20dc73]" />

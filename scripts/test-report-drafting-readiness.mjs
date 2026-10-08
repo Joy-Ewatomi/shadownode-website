@@ -20,6 +20,8 @@ function compile(source, mocks = {}) {
 
 const readinessSource = fs.readFileSync("lib/report-drafting-readiness.ts", "utf8")
 const { calculateReportDraftingReadiness } = compile(readinessSource)
+const evidenceBasedSource = fs.readFileSync("lib/evidence-based-report.ts", "utf8")
+const { buildEvidenceBasedDraft } = compile(evidenceBasedSource)
 
 function material(overrides = {}) {
   return {
@@ -118,6 +120,7 @@ const unauthorizedRoute = compile(routeSource, {
   },
   "@/lib/realtime/workspace-events": { emitCaseWorkspaceEvent: async () => undefined },
   "@/lib/report-drafting-readiness": { calculateReportDraftingReadiness },
+  "@/lib/evidence-based-report": { buildEvidenceBasedDraft },
   "@/lib/services/notification-service": {
     notifyAdmins: async () => undefined,
     notifySuperAdmins: async () => undefined,

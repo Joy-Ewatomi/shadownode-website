@@ -15,7 +15,8 @@
     "verify:intelligence-verifier-route": "node scripts/verify-intelligence-verifier-route.mjs",
     "test:verifier:integration": "NODE_ENV=test VERIFIER_TEST_MODE=isolated node scripts/test-intelligence-verifier-integration.mjs",
     "test:evidence-associations": "NODE_ENV=test EVIDENCE_ASSOCIATION_TEST_MODE=isolated node scripts/test-evidence-associations.mjs",
-    "test:report-drafting-readiness": "node scripts/test-report-drafting-readiness.mjs"
+    "test:report-drafting-readiness": "node scripts/test-report-drafting-readiness.mjs",
+    "test:evidence-based-report": "node scripts/test-evidence-based-report.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
