@@ -1,5 +1,8 @@
 # Canonical production-host redirects. Host conditions are exact, so deploy
 # previews and immutable deploy permalinks remain directly accessible.
+[build.environment]
+  NODE_VERSION = "22"
+
 [[redirects]]
   from = "/*"
   to = "https://shadownodebureau.com/:splat"

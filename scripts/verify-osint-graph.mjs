@@ -54,6 +54,9 @@ const checks = [
       "relationship_sources",
       "entity_evidence",
       "relationship_evidence",
+      "evidence.associated",
+      "evidence.unlinked",
+      "export async function DELETE",
     ],
   },
   {

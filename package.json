@@ -2,6 +2,9 @@
   "name": "shadownode-intelligence-bureau",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +13,9 @@
     "verify:osint-graph": "node scripts/verify-osint-graph.mjs",
     "verify:intelligence-verifier": "node scripts/verify-intelligence-verifier.mjs",
     "verify:intelligence-verifier-route": "node scripts/verify-intelligence-verifier-route.mjs",
-    "test:verifier:integration": "NODE_ENV=test VERIFIER_TEST_MODE=isolated node scripts/test-intelligence-verifier-integration.mjs"
+    "test:verifier:integration": "NODE_ENV=test VERIFIER_TEST_MODE=isolated node scripts/test-intelligence-verifier-integration.mjs",
+    "test:evidence-associations": "NODE_ENV=test EVIDENCE_ASSOCIATION_TEST_MODE=isolated node scripts/test-evidence-associations.mjs",
+    "test:report-drafting-readiness": "node scripts/test-report-drafting-readiness.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

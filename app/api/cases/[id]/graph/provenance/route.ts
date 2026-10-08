@@ -287,6 +287,11 @@ export async function POST(
       return NextResponse.json({ error: `${targetType === "entity" ? "Entity" : "Relationship"} not found.` }, { status: 404 })
     }
 
+    // Validate every requested record before creating either kind of provenance link.
+    if (evidenceId && !await assertEvidenceBelongsToCase(evidenceId, access.caseId)) {
+      return NextResponse.json({ error: "Evidence not found for this case." }, { status: 404 })
+    }
+
     if (sourceId) {
       const sourceTable = targetType === "entity" ? "entity_sources" : "relationship_sources"
       const targetColumn = targetType === "entity" ? "entity_id" : "relationship_id"
@@ -307,10 +312,6 @@ export async function POST(
     let association: EvidenceAssociation | null = null
 
     if (evidenceId) {
-      if (!await assertEvidenceBelongsToCase(evidenceId, access.caseId)) {
-        return NextResponse.json({ error: "Evidence not found for this case." }, { status: 404 })
-      }
-
       const actorProfileId = await profileIdForUser(access.user.id)
       if (!actorProfileId) return NextResponse.json({ error: "User profile missing." }, { status: 500 })
 

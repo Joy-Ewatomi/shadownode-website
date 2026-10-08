@@ -1544,7 +1544,10 @@ export default function InvestigationGraphPage() {
 
       const payload =
         (await response.json()) as
-          | { ok?: boolean }
+          | {
+              ok?: boolean
+              association?: EvidenceAssociation | null
+            }
           | GraphErrorResponse
 
       if (!response.ok) {
@@ -1562,9 +1565,16 @@ export default function InvestigationGraphPage() {
       if (
         provenanceEvidenceId &&
         provenanceTargetType === reviewTargetType &&
-        provenanceTargetId === reviewTargetId
+        provenanceTargetId === reviewTargetId &&
+        "association" in payload &&
+        payload.association
       ) {
-        setSupportingEvidence((current) => [...current])
+        setSupportingEvidence((current) => [
+          payload.association as EvidenceAssociation,
+          ...current.filter(
+            (item) => item.evidence_id !== provenanceEvidenceId,
+          ),
+        ])
       }
     } catch (err) {
       setOsintError(
@@ -2725,71 +2735,6 @@ export default function InvestigationGraphPage() {
               )}
             </select>
 
-            <div className="mt-4 border-t border-[#143b28] pt-4">
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#20dc73]">
-                Supporting Evidence
-              </p>
-              {!reviewTargetId ? (
-                <p className="mt-3 text-xs leading-5 text-white/40">
-                  Select an entity or relationship to view its supporting evidence.
-                </p>
-              ) : null}
-              {reviewTargetId ? (
-                <>
-                  {supportingEvidenceLoading ? (
-                    <p className="mt-3 flex items-center gap-2 text-xs text-white/50">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading supporting evidence...
-                    </p>
-                  ) : null}
-                  {supportingEvidenceError ? (
-                    <p className="mt-3 rounded-md border border-red-400/30 bg-red-400/10 p-2 text-xs text-red-200">
-                      {supportingEvidenceError}
-                    </p>
-                  ) : null}
-                  {!supportingEvidenceLoading ? (
-                    <EvidenceAssociationList
-                      associations={supportingEvidence}
-                      view="supporting"
-                      onRemove={removeSupportingEvidence}
-                      removingAssociationId={removingSupportingEvidenceId}
-                    />
-                  ) : null}
-
-                  <div className="mt-3 flex gap-2">
-                    <select
-                      value={supportingEvidenceId}
-                      onChange={(event) => setSupportingEvidenceId(event.target.value)}
-                      className="h-10 min-w-0 flex-1 rounded-md border border-[#143b28] bg-black px-3 text-xs text-white outline-none"
-                    >
-                      <option value="">Add existing evidence</option>
-                      {evidence.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.file_name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={addSupportingEvidence}
-                      disabled={!supportingEvidenceId || linkingSupportingEvidence}
-                      className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-md border border-[#20dc73]/50 px-3 text-xs font-semibold text-[#20dc73] transition hover:bg-[#20dc73]/10 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {linkingSupportingEvidence ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Plus className="h-3.5 w-3.5" />
-                      )}
-                      Link
-                    </button>
-                  </div>
-                  <p className="mt-2 text-[11px] leading-4 text-white/40">
-                    A supporting-evidence link records relevance. It does not verify a claim by itself.
-                  </p>
-                </>
-              ) : null}
-            </div>
-
             <select
               value={selectedTransform}
               onChange={(event) =>
@@ -3006,6 +2951,71 @@ export default function InvestigationGraphPage() {
                     ),
                   )}
             </select>
+
+            <div className="mt-4 border-t border-[#143b28] pt-4">
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#20dc73]">
+                Supporting Evidence
+              </p>
+              {!reviewTargetId ? (
+                <p className="mt-3 text-xs leading-5 text-white/40">
+                  Select an entity or relationship to view its supporting evidence.
+                </p>
+              ) : null}
+              {reviewTargetId ? (
+                <>
+                  {supportingEvidenceLoading ? (
+                    <p className="mt-3 flex items-center gap-2 text-xs text-white/50">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading supporting evidence...
+                    </p>
+                  ) : null}
+                  {supportingEvidenceError ? (
+                    <p className="mt-3 rounded-md border border-red-400/30 bg-red-400/10 p-2 text-xs text-red-200">
+                      {supportingEvidenceError}
+                    </p>
+                  ) : null}
+                  {!supportingEvidenceLoading ? (
+                    <EvidenceAssociationList
+                      associations={supportingEvidence}
+                      view="supporting"
+                      onRemove={removeSupportingEvidence}
+                      removingAssociationId={removingSupportingEvidenceId}
+                    />
+                  ) : null}
+
+                  <div className="mt-3 flex gap-2">
+                    <select
+                      value={supportingEvidenceId}
+                      onChange={(event) => setSupportingEvidenceId(event.target.value)}
+                      className="h-10 min-w-0 flex-1 rounded-md border border-[#143b28] bg-black px-3 text-xs text-white outline-none"
+                    >
+                      <option value="">Add existing evidence</option>
+                      {evidence.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.file_name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={addSupportingEvidence}
+                      disabled={!supportingEvidenceId || linkingSupportingEvidence}
+                      className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-md border border-[#20dc73]/50 px-3 text-xs font-semibold text-[#20dc73] transition hover:bg-[#20dc73]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {linkingSupportingEvidence ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5" />
+                      )}
+                      Link
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-4 text-white/40">
+                    A supporting-evidence link records relevance. It does not verify a claim by itself.
+                  </p>
+                </>
+              ) : null}
+            </div>
 
             <select
               value={reviewVerificationStatus}

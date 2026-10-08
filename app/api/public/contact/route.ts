@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       from: operationalEmailFrom() || undefined,
       replyTo: email,
       subject: `Website enquiry: ${subject}`,
-      content: { category: "Public enquiry", heading: subject, paragraphs: [`From: ${name}${organization ? ` (${organization})` : ""}`, message], securityNotice: "Treat links and attachments referenced by an unknown sender with care." },
+      content: { preheader: "A new website enquiry requires review.", category: "Public enquiry", heading: subject, paragraphs: [`From: ${name}${organization ? ` (${organization})` : ""}`, message], securityNotice: "Treat links and attachments referenced by an unknown sender with care." },
     })
     await query(`UPDATE contact_inquiries SET email_delivery_status=$2 WHERE id=$1`, [inquiryId, sent ? "sent" : "skipped"])
   } catch { await query(`UPDATE contact_inquiries SET email_delivery_status='failed' WHERE id=$1`, [inquiryId]).catch(() => undefined) }

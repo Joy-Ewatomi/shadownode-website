@@ -13,6 +13,7 @@ import {
   requireCaseReadAccess,
 } from "@/lib/investigation-workspace"
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
+import { calculateReportDraftingReadiness } from "@/lib/report-drafting-readiness"
 import {
   notifyAdmins,
   notifySuperAdmins,
@@ -154,6 +155,7 @@ async function loadInvestigationData(
     tasksResult,
     notesResult,
     graphProvenanceResult,
+    caseActivityResult,
   ] = await Promise.all([
     query(
       `
@@ -468,6 +470,7 @@ async function loadInvestigationData(
         JOIN intelligence_sources ins
           ON ins.id = es.source_id
         WHERE ie.case_id = $1
+          AND ins.case_id = $1
 
         UNION ALL
 
@@ -488,6 +491,7 @@ async function loadInvestigationData(
         JOIN intelligence_sources ins
           ON ins.id = rs.source_id
         WHERE er.case_id = $1
+          AND ins.case_id = $1
 
         UNION ALL
 
@@ -508,6 +512,7 @@ async function loadInvestigationData(
         JOIN forensic_files ff
           ON ff.id = ee.forensic_file_id
         WHERE ie.case_id = $1
+          AND ff.case_id = $1
 
         UNION ALL
 
@@ -528,8 +533,29 @@ async function loadInvestigationData(
         JOIN forensic_files ff
           ON ff.id = re.forensic_file_id
         WHERE er.case_id = $1
+          AND ff.case_id = $1
 
         ORDER BY created_at ASC
+      `,
+      [caseId],
+    ),
+
+    query(
+      `
+        SELECT
+          cu.id,
+          cu.update_type,
+          cu.title,
+          cu.content,
+          cu.created_at,
+          actor.username AS updated_by_username
+        FROM case_updates cu
+        LEFT JOIN user_profiles updater_profile
+          ON updater_profile.id = cu.updated_by
+        LEFT JOIN app_users actor
+          ON actor.id = updater_profile.user_id
+        WHERE cu.case_id = $1
+        ORDER BY cu.created_at ASC
       `,
       [caseId],
     ),
@@ -553,123 +579,26 @@ async function loadInvestigationData(
       notesResult.rows,
     graph_provenance:
       graphProvenanceResult.rows,
+    case_activity:
+      caseActivityResult.rows,
   }
 }
 
-/*
- * ============================================================
- * READINESS
- * ============================================================
- */
 function calculateReadiness(
-  investigation: Awaited<
-    ReturnType<typeof loadInvestigationData>
-  >,
+  investigation: Awaited<ReturnType<typeof loadInvestigationData>>,
 ) {
-  const entityCount =
-    investigation.entities.length
-
-  const relationshipCount =
-    investigation.relationships.length
-
-  const sourceCount =
-    investigation.sources.length
-
-  const observationCount =
-    investigation.observations.length
-
-  const evidenceCount =
-    investigation.evidence.length
-
-  const timelineCount =
-    investigation.timeline.length
-
-  const missing: string[] = []
-
-  if (entityCount < 2) {
-    missing.push(
-      "At least 2 investigation entities",
-    )
-  }
-
-  if (relationshipCount < 1) {
-    missing.push(
-      "At least 1 verified or investigated relationship",
-    )
-  }
-
-  if (sourceCount < 1) {
-    missing.push(
-      "At least 1 intelligence source",
-    )
-  }
-
-  if (evidenceCount < 1) {
-    missing.push(
-      "At least 1 evidence item",
-    )
-  }
-
-  if (
-    observationCount < 1 &&
-    timelineCount < 1
-  ) {
-    missing.push(
-      "At least 1 observation or timeline event",
-    )
-  }
-
-  /*
-   * Readiness is intentionally weighted toward
-   * the core investigative graph.
-   */
-  const checks = [
-    entityCount >= 2,
-    relationshipCount >= 1,
-    sourceCount >= 1,
-    evidenceCount >= 1,
-    observationCount > 0 ||
-      timelineCount > 0,
-  ]
-
-  const passed =
-    checks.filter(Boolean).length
-
-  const score =
-    Math.round(
-      (passed / checks.length) *
-        100,
-    )
-
-  return {
-    ready:
-      entityCount >= 2 &&
-      relationshipCount >= 1 &&
-      sourceCount >= 1 &&
-      evidenceCount >= 1,
-
-    score,
-
-    entity_count:
-      entityCount,
-
-    relationship_count:
-      relationshipCount,
-
-    source_count:
-      sourceCount,
-
-    observation_count:
-      observationCount,
-
-    evidence_count:
-      evidenceCount,
-
-    timeline_count:
-      timelineCount,
-
-    missing,
-  }
+  return calculateReportDraftingReadiness({
+    case_present: Boolean(investigation.case),
+    entity_count: investigation.entities.length,
+    relationship_count: investigation.relationships.length,
+    source_count: investigation.sources.length,
+    observation_count: investigation.observations.length,
+    timeline_count: investigation.timeline.length,
+    evidence_count: investigation.evidence.length,
+    graph_provenance_count: investigation.graph_provenance.length,
+    case_activity_count: investigation.case_activity.length,
+    note_count: investigation.notes.length,
+  })
 }
 
 /*
@@ -1045,6 +974,44 @@ async function generateAiReport(
       }),
     )
 
+  const activityIndex =
+    investigation.case_activity.map(
+      (activity, index) => ({
+        reference: `A${index + 1}`,
+        ...activity,
+      }),
+    )
+
+  const sourceReferences = new Map(
+    sourceIndex.map((source) => [
+      String((source as { id?: unknown }).id || ""),
+      source.reference,
+    ]),
+  )
+  const evidenceReferences = new Map(
+    evidenceIndex.map((evidence) => [
+      String((evidence as { id?: unknown }).id || ""),
+      evidence.reference,
+    ]),
+  )
+  const provenanceIndex =
+    investigation.graph_provenance.map(
+      (link, index) => ({
+        reference: `P${index + 1}`,
+        ...link,
+        source_reference:
+          link.source_id
+            ? sourceReferences.get(String(link.source_id)) || null
+            : null,
+        evidence_reference:
+          link.evidence_id
+            ? evidenceReferences.get(String(link.evidence_id)) || null
+            : null,
+      }),
+    )
+
+  const draftingReadiness = calculateReadiness(investigation)
+
   const systemInstructions = `
 You are ShadowNode's senior intelligence report analyst.
 
@@ -1068,7 +1035,7 @@ CRITICAL RULES:
    - inferred
    - unresolved
 8. Every substantive finding should reference supporting source/evidence IDs
-   using the supplied references such as [S1], [E2], [N4], [R3], or [T2].
+   using the supplied references such as [S1], [E2], [N4], [R3], [T2], or [P2].
 9. Do not create citations that are not present in the supplied data.
 10. If evidence is insufficient, explicitly state that it is insufficient.
 11. The report is an analyst's structured assessment, not a statement of
@@ -1085,6 +1052,34 @@ CRITICAL RULES:
     explicitly supplied in the case data and verified by the reviewing analyst.
 18. If jurisdiction is not supplied, state that jurisdiction-specific legal
     review remains required; keep the report jurisdiction-neutral.
+19. Treat evidence record created_at values as upload, collection, or custody
+    metadata only. They are not incident dates and must never be presented as
+    dates when the underlying event occurred.
+20. Use the TIMELINE data for directly documented incident chronology. You may
+    describe a preliminary chronology from an evidence description only where
+    that description explicitly records an incident date or sequence; cite the
+    evidence reference and label the chronology preliminary.
+21. CASE ACTIVITY records document workspace activity, not incident events.
+    They may support methodology or procedural history, but never incident
+    chronology, identity, or substantive findings.
+22. A GRAPH PROVENANCE LINK records that an investigator associated a source or
+    evidence item with a graph record. It does not authenticate the evidence,
+    verify the entity or relationship, establish ownership or control, or prove
+    the linked claim.
+23. Clearly separate directly documented observations, client-reported
+    information, corroborated findings, investigative hypotheses, unverified
+    claims, and unresolved questions. Only call a finding corroborated when
+    independent supplied records support it; an association link alone is not
+    corroboration.
+24. Where the case concerns a minor or sensitive sexual material, do not
+    reproduce, transcribe, summarize graphically, or describe sexually explicit
+    imagery. Use neutral, necessary, non-graphic language and identify any
+    limitation caused by unavailable content.
+25. Treat the CASE description as intake or case-reported context, not a
+    confirmed finding. Treat a TIMELINE entry without a cited source as a
+    recorded timeline entry, not a direct observation. Use "client-reported"
+    only when the supplied record identifies the client or reporter as its
+    origin; otherwise use "reported" or "unverified" as appropriate.
 
 The report must include:
 - executive summary
@@ -1115,6 +1110,11 @@ that caused the hypothesis to be considered.
 
 For contradictions, identify the conflicting claims and explain why they
 remain unresolved unless the supplied evidence actually resolves them.
+
+For limited material, create a preliminary report that explains what was
+provided, what is directly documented, what remains unverified, and what
+additional records or review would be needed. Do not fill gaps with plausible
+but unsupported detail.
 `
 
   const userInput = `
@@ -1188,7 +1188,23 @@ ${JSON.stringify(
 GRAPH PROVENANCE LINKS
 
 ${JSON.stringify(
-  investigation.graph_provenance,
+  provenanceIndex,
+  null,
+  2,
+)}
+
+CASE ACTIVITY (PROCEDURAL HISTORY ONLY; NOT INCIDENT CHRONOLOGY)
+
+${JSON.stringify(
+  activityIndex,
+  null,
+  2,
+)}
+
+DRAFTING LIMITATIONS
+
+${JSON.stringify(
+  draftingReadiness.limitations,
   null,
   2,
 )}

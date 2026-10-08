@@ -42,13 +42,17 @@ type EntityOption = {
 type Readiness = {
   ready: boolean
   score: number
+  mode: "preliminary" | "evidence_backed"
   entity_count: number
   relationship_count: number
   source_count: number
   observation_count: number
   evidence_count: number
   timeline_count: number
-  missing: string[]
+  graph_provenance_count: number
+  case_activity_count: number
+  note_count: number
+  limitations: string[]
 }
 
 type ReportPayload = {
@@ -529,8 +533,8 @@ export default function ReportBuilder({
 
       if (!res.ok) {
         const readinessMessage =
-          data?.readiness?.missing?.length
-            ? ` Missing: ${data.readiness.missing.join(
+          data?.readiness?.limitations?.length
+            ? ` Limitations: ${data.readiness.limitations.join(
                 ", ",
               )}.`
             : ""
@@ -1217,8 +1221,10 @@ if (refreshedResponse.ok) {
 
                 <p className="mt-1 text-sm font-semibold text-white">
                   {payload.readiness?.ready
-                    ? "Ready for AI drafting"
-                    : "Not ready for AI drafting"}
+                    ? payload.readiness.mode === "evidence_backed"
+                      ? "Ready for evidence-backed AI drafting"
+                      : "Ready for preliminary AI drafting"
+                    : "Case details are unavailable"}
                 </p>
               </div>
 
@@ -1247,12 +1253,9 @@ if (refreshedResponse.ok) {
               />
             </div>
 
-            {payload.readiness &&
-            !payload.readiness.ready &&
-            payload.readiness.missing
-              .length ? (
+            {payload.readiness?.limitations.length ? (
               <div className="mt-4 space-y-2">
-                {payload.readiness.missing.map(
+                {payload.readiness.limitations.map(
                   (
                     item,
                     index,
@@ -1274,9 +1277,8 @@ if (refreshedResponse.ok) {
 
             {payload.readiness?.ready ? (
               <p className="mt-4 text-[10px] leading-4 text-[#7af2a9]">
-                The investigation contains enough
-                structured material for an AI-assisted
-                report draft.
+                The AI can prepare a draft from available case material. Every
+                draft remains subject to human review and approval.
               </p>
             ) : null}
           </div>
