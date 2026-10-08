@@ -11,8 +11,11 @@ export const caseWorkspaceEventTypes = [
   "observation.updated",
   "evidence.uploaded",
   "evidence.deleted",
+  "evidence.associated",
+  "evidence.unlinked",
   "timeline.created",
   "report.created",
+  "report.deleted",
   "report.published",
   "case.updated",
 ] as const

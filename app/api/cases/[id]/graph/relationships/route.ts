@@ -696,7 +696,7 @@ export async function PATCH(
     )
 
     await emitCaseWorkspaceEvent({
-      type: "relationship.created",
+      type: "relationship.updated",
       case_id: access.caseId,
       actor_id: access.user.id,
       record_id: String(

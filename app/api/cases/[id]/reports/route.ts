@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { auditLog } from "@/lib/auth"
-import { query } from "@/lib/db"
+import { query, withTransaction } from "@/lib/db"
 import {
   canUseCaseOperationalAccess,
   canUseCaseOversightRead,
@@ -36,6 +36,9 @@ const CLIENT_VISIBLE_STATUSES = new Set([
 const AI_REPORT_MODEL =
   process.env.OPENAI_REPORT_MODEL ||
   "gpt-5.6-luna"
+
+const REPORT_NOT_DELETABLE =
+  "REPORT_NOT_DELETABLE"
 
 type AiReportSection = {
   section_type: string
@@ -4584,6 +4587,135 @@ export async function PATCH(
     )
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const access = await requireCaseOperationalAccess(request, id)
+
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
+    }
+
+    if (!canManageReports(access.user.role)) {
+      return NextResponse.json(
+        { error: "You are not authorized to delete case reports." },
+        { status: 403 },
+      )
+    }
+
+    const body = await request.json()
+    const reportId = optionalText(body?.report_id)
+
+    if (!reportId) {
+      return NextResponse.json({ error: "Report id required." }, { status: 400 })
+    }
+
+    const report = await verifyReportBelongsToCase(reportId, access.caseId)
+
+    if (!report) {
+      return NextResponse.json({ error: "Report not found." }, { status: 404 })
+    }
+
+    const status = String(report.status || "draft").toLowerCase()
+    if (!['draft', 'review'].includes(status)) {
+      return NextResponse.json(
+        {
+          error: "Only draft or review reports can be deleted. Approved, finalized, delivered, and published reports are retained as controlled records.",
+        },
+        { status: 409 },
+      )
+    }
+
+    const deleted = await withTransaction(
+      async (client) => {
+        await client.query(
+          "DELETE FROM case_report_sections WHERE report_id = $1",
+          [reportId],
+        )
+        await client.query(
+          "DELETE FROM case_report_evidence WHERE report_id = $1",
+          [reportId],
+        )
+        await client.query(
+          "DELETE FROM case_report_entities WHERE report_id = $1",
+          [reportId],
+        )
+
+        const deleted = await client.query<{
+          id: string
+          title: string | null
+        }>(
+          `
+            DELETE FROM case_reports
+            WHERE id = $1
+              AND case_id = $2
+              AND status IN ('draft', 'review')
+            RETURNING id, title
+          `,
+          [
+            reportId,
+            access.caseId,
+          ],
+        )
+
+        if (!deleted.rows[0]) {
+          throw new Error(
+            REPORT_NOT_DELETABLE,
+          )
+        }
+
+        return deleted
+      },
+    )
+
+    await recordInvestigationTimeline(
+      access.caseId,
+      access.user.id,
+      "report_deleted",
+      "Report Deleted",
+      deleted.rows[0].title || "Case report",
+    )
+
+    await emitCaseWorkspaceEvent({
+      type: "report.deleted",
+      case_id: access.caseId,
+      actor_id: access.user.id,
+      record_id: reportId,
+      data: { title: deleted.rows[0].title, status },
+    })
+
+    await auditLog(access.user.id, "report_deleted", request, {
+      case_id: access.caseId,
+      report_id: reportId,
+      title: deleted.rows[0].title,
+      status,
+    })
+
+    return NextResponse.json({ success: true, id: reportId })
+  } catch (error) {
+    console.error("REPORTS DELETE ERROR", error)
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        REPORT_NOT_DELETABLE
+    ) {
+      return NextResponse.json(
+        {
+          error: "This report is no longer a draft or review record and cannot be deleted.",
+        },
+        { status: 409 },
+      )
+    }
+
+    return NextResponse.json({ error: "Failed to delete report." }, { status: 500 })
+  }
+}
+
 function formatLabel(nextStatus: string) {
   throw new Error("Function not implemented.")
 }

@@ -15,6 +15,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
@@ -193,6 +194,9 @@ export default function ReportBuilder({
     useState(false)
 
   const [saving, setSaving] =
+    useState(false)
+
+  const [deletingReport, setDeletingReport] =
     useState(false)
 
   const [message, setMessage] =
@@ -690,6 +694,40 @@ export default function ReportBuilder({
       )
 
       return null
+    }
+  }
+
+  async function deleteSelectedReport() {
+    if (!selectedReport || reportLocked || deletingReport) return
+
+    if (!window.confirm(`Delete ${selectedReport.title || "this report"}? Its sections and attached case links will be removed.`)) return
+
+    try {
+      setDeletingReport(true)
+      setError("")
+      setMessage("")
+
+      const response = await fetch(
+        `/api/cases/${encodeURIComponent(caseId)}/reports`,
+        {
+          method: "DELETE",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ report_id: selectedReport.id }),
+        },
+      )
+
+      const result = await response.json()
+      if (!response.ok) throw new Error(result?.error || "Failed to delete report.")
+
+      setSelectedReportId("")
+      setEditorMode(false)
+      setMessage("Report deleted.")
+      await loadReports(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to delete report.")
+    } finally {
+      setDeletingReport(false)
     }
   }
 
@@ -1538,6 +1576,18 @@ if (refreshedResponse.ok) {
                         {editorMode
                           ? "Close Editor"
                           : "Edit Report"}
+                      </button>
+                    ) : null}
+
+                    {!reportLocked ? (
+                      <button
+                        type="button"
+                        onClick={() => void deleteSelectedReport()}
+                        disabled={deletingReport || saving}
+                        title="Delete this draft or review report"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-400/30 text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {deletingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </button>
                     ) : null}
 
