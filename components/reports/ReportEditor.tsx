@@ -6,6 +6,12 @@ import {
   FileText,
   Fingerprint,
   LockKeyhole,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Save,
   ShieldCheck,
   UserCheck,
@@ -13,6 +19,7 @@ import {
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 
@@ -125,6 +132,16 @@ const READ_ONLY_STATUSES =
     "published",
   ])
 
+const REGISTER_KINDS: RegisterKind[] = [
+  "evidence",
+  "entities",
+  "relationships",
+  "financial",
+  "chronology",
+  "correlation",
+  "findings",
+]
+
 function formatLabel(
   value:
     | string
@@ -234,6 +251,12 @@ export default function ReportEditor({
     sections: Record<string, RichDocument>
   } | null>(null)
 
+  const [expanded, setExpanded] = useState(false)
+  const [sectionNavigationOpen, setSectionNavigationOpen] = useState(true)
+  const [registerPanelOpen, setRegisterPanelOpen] = useState(false)
+  const workspaceScrollRef = useRef<HTMLDivElement>(null)
+  const sectionEditorRef = useRef<HTMLDivElement>(null)
+
   const [
     newSection,
     setNewSection,
@@ -279,6 +302,23 @@ export default function ReportEditor({
     report.status,
   ])
 
+  useEffect(() => {
+    if (!expanded) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setExpanded(false)
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [expanded])
+
   const selectedSection =
     useMemo(
       () =>
@@ -296,6 +336,18 @@ export default function ReportEditor({
   function markDirty() {
     setDirty(true)
     setNotice(null)
+  }
+
+  function selectSection(sectionId: string) {
+    setSelectedSectionId(sectionId)
+    setShowNewSection(false)
+
+    window.requestAnimationFrame(() => {
+      sectionEditorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
   }
 
   function updateSection(
@@ -624,12 +676,12 @@ export default function ReportEditor({
     ).toLowerCase()
 
   return (
-    <section className="overflow-hidden rounded-xl border border-[#143b28] bg-[#020604]">
+    <section className={expanded ? "fixed inset-0 z-[80] flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#020604]" : "overflow-hidden rounded-xl border border-[#143b28] bg-[#020604]"} aria-label="Report editing workspace">
       {/* ============================================================
           EDITOR HEADER
       ============================================================ */}
 
-      <header className="border-b border-[#143b28] bg-[radial-gradient(circle_at_top_right,rgba(32,220,115,0.07),transparent_40%)] p-5 sm:p-6">
+      <header className={`border-b border-[#143b28] bg-[radial-gradient(circle_at_top_right,rgba(32,220,115,0.07),transparent_40%)] p-5 sm:p-6 ${expanded ? "shrink-0" : ""}`}>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -655,7 +707,7 @@ export default function ReportEditor({
               Human Review & Report Editing
             </h2>
 
-            <p className="mt-1 max-w-3xl text-xs leading-6 text-white/40">
+            <p className={`mt-1 max-w-3xl text-xs leading-6 text-white/40 ${expanded ? "hidden sm:block" : ""}`}>
               Review the AI-assisted draft against
               the underlying investigation record.
               Human edits are part of the investigative
@@ -665,7 +717,21 @@ export default function ReportEditor({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {expanded ? <>
+              <button type="button" onClick={() => { setSectionNavigationOpen((value) => !value); setRegisterPanelOpen(false) }} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/15 px-3 text-sm font-semibold text-white/70 transition hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-expanded={sectionNavigationOpen}>
+                {sectionNavigationOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+                <span className="hidden sm:inline">Sections</span>
+              </button>
+              {!readOnly ? <button type="button" onClick={() => { setRegisterPanelOpen((value) => !value); setSectionNavigationOpen(false) }} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/15 px-3 text-sm font-semibold text-white/70 transition hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-expanded={registerPanelOpen}>
+                {registerPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+                <span className="hidden sm:inline">Registers</span>
+              </button> : null}
+            </> : null}
             <button type="button" onClick={prepareFormatPreview} disabled={readOnly} className="inline-flex h-10 items-center justify-center rounded-md border border-[#20dc73]/35 px-3 text-sm font-semibold text-[#20dc73] disabled:opacity-35">Format Report</button>
+            <button type="button" onClick={() => setExpanded((value) => !value)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/15 px-3 text-sm font-semibold text-white/70 transition hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-label={expanded ? "Collapse editor" : "Expand editor"}>
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              <span className="hidden sm:inline">{expanded ? "Collapse Editor" : "Expand Editor"}</span>
+            </button>
             <button
               type="button"
               onClick={saveChanges}
@@ -689,6 +755,23 @@ export default function ReportEditor({
           </div>
         </div>
       </header>
+
+      <div className={expanded ? "flex min-h-0 flex-1 overflow-hidden" : ""}>
+        {expanded && sectionNavigationOpen ? (
+          <aside className="fixed inset-x-3 top-24 z-[90] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-lg border border-[#143b28] bg-[#06110f] shadow-2xl md:static md:z-auto md:w-60 md:shrink-0 md:rounded-none md:border-y-0 md:border-l-0">
+            <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
+              <div><p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/35">Report Sections</p><p className="mt-1 text-xs text-white/45">{sections.length} sections</p></div>
+              <button type="button" onClick={() => setSectionNavigationOpen(false)} className="grid h-8 w-8 place-items-center rounded border border-white/10 text-white/55 hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-label="Close section navigation"><PanelLeftClose className="h-4 w-4" /></button>
+            </div>
+            {!readOnly ? <button type="button" onClick={() => { setShowNewSection(true); setSectionNavigationOpen(false); setRegisterPanelOpen(false); window.requestAnimationFrame(() => sectionEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })) }} className="m-3 h-9 w-[calc(100%-1.5rem)] rounded border border-[#20dc73]/30 text-xs font-semibold text-[#20dc73] hover:bg-[#20dc73]/10">Add Section</button> : null}
+            <nav className="space-y-1 p-2" aria-label="Report sections">
+              {sections.length ? sections.map((section, index) => <button key={section.id} type="button" onClick={() => { selectSection(section.id); setSectionNavigationOpen(false) }} className={`w-full rounded-md border px-3 py-3 text-left transition ${selectedSectionId === section.id ? "border-[#20dc73]/35 bg-[#20dc73]/8" : "border-transparent hover:border-[#143b28] hover:bg-black/20"}`}><span className="block text-[9px] font-mono text-white/30">{String(index + 1).padStart(2, "0")}</span><span className="mt-1 block truncate text-xs font-medium text-white/75">{section.title || "Untitled Section"}</span><span className="mt-1 block truncate font-mono text-[9px] uppercase tracking-[0.08em] text-white/30">{formatLabel(section.section_type)}</span></button>) : <p className="p-3 text-xs leading-5 text-white/35">No report sections exist yet.</p>}
+            </nav>
+          </aside>
+        ) : null}
+
+        <div ref={workspaceScrollRef} className={expanded ? "min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[#010302] p-3 sm:p-6 lg:p-8" : ""}>
+          <div className={expanded ? "mx-auto min-h-full w-full max-w-[210mm] overflow-hidden rounded-[3px] border border-[#31513d] bg-[#07100d] shadow-[0_18px_60px_rgba(0,0,0,0.5)]" : ""}>
 
       {/* ============================================================
           NOTICE
@@ -775,7 +858,7 @@ export default function ReportEditor({
             </label>
 
             <div className="mt-2">
-              <RichTextEditor label="Executive summary" value={executiveSummaryDocument} disabled={readOnly} onChange={(document) => { setExecutiveSummaryDocument(document); markDirty() }} />
+              <RichTextEditor label="Executive summary" value={executiveSummaryDocument} disabled={readOnly} stickyToolbar={expanded} documentMode={expanded} onChange={(document) => { setExecutiveSummaryDocument(document); markDirty() }} />
             </div>
           </div>
         </div>
@@ -838,7 +921,7 @@ export default function ReportEditor({
               }
             />
           </div>
-          {!readOnly ? <div className="mt-4 border-t border-[#143b28] pt-3"><p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">Insert Structured Register</p><div className="mt-2 flex flex-wrap gap-2">{(["evidence", "entities", "relationships", "financial", "chronology", "correlation", "findings"] as RegisterKind[]).map((kind) => <button key={kind} type="button" onClick={() => insertRegister(kind)} className="h-8 rounded border border-[#20dc73]/25 px-2.5 text-[10px] capitalize text-[#9ef4bd] transition hover:bg-[#20dc73]/10">{kind}</button>)}</div></div> : null}
+          {!readOnly && !expanded ? <div className="mt-4 border-t border-[#143b28] pt-3"><p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">Insert Structured Register</p><div className="mt-2 flex flex-wrap gap-2">{REGISTER_KINDS.map((kind) => <button key={kind} type="button" onClick={() => insertRegister(kind)} className="h-8 rounded border border-[#20dc73]/25 px-2.5 text-[10px] capitalize text-[#9ef4bd] transition hover:bg-[#20dc73]/10">{kind}</button>)}</div></div> : null}
         </div>
       </div>
 
@@ -878,8 +961,8 @@ export default function ReportEditor({
           SECTION NAVIGATION
       ============================================================ */}
 
-      <div className="grid min-h-[32rem] lg:grid-cols-[17rem_1fr]">
-        <aside className="border-b border-[#143b28] bg-black/20 lg:border-b-0 lg:border-r">
+      <div className={`min-h-[32rem] ${expanded ? "block" : "grid lg:grid-cols-[17rem_1fr]"}`}>
+        <aside className={expanded ? "hidden" : "border-b border-[#143b28] bg-black/20 lg:border-b-0 lg:border-r"}>
           <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
             <div>
               <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/25">
@@ -926,11 +1009,7 @@ export default function ReportEditor({
                           section.id
                         }
                         type="button"
-                        onClick={() =>
-                          setSelectedSectionId(
-                            section.id,
-                          )
-                        }
+                        onClick={() => selectSection(section.id)}
                         className={`w-full rounded-md border px-3 py-3 text-left transition ${
                           active
                             ? "border-[#20dc73]/35 bg-[#20dc73]/8"
@@ -975,7 +1054,7 @@ export default function ReportEditor({
             SECTION EDITOR
         ========================================================== */}
 
-        <div className="p-5 sm:p-6">
+        <div ref={sectionEditorRef} className={`p-5 sm:p-6 ${expanded ? "sm:p-8" : ""}`}>
           {showNewSection ? (
             <div className="rounded-xl border border-[#17462f] bg-[#06110f] p-5">
               <div className="flex items-start justify-between gap-4">
@@ -1236,7 +1315,7 @@ export default function ReportEditor({
                   </label>
 
                   <div className="mt-2">
-                    <RichTextEditor label="Section content" value={selectedSection.content_document || plainTextDocument(selectedSection.content)} disabled={readOnly} onChange={(document) => updateSectionDocument(selectedSection.id, document)} />
+                    <RichTextEditor label="Section content" value={selectedSection.content_document || plainTextDocument(selectedSection.content)} disabled={readOnly} stickyToolbar={expanded} documentMode={expanded} onChange={(document) => updateSectionDocument(selectedSection.id, document)} />
                   </div>
                 </div>
               </div>
@@ -1314,6 +1393,22 @@ export default function ReportEditor({
           </div>
         </div>
       </footer>
+          </div>
+        </div>
+
+        {expanded && registerPanelOpen && !readOnly ? (
+          <aside className="fixed inset-x-3 top-24 z-[90] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-lg border border-[#143b28] bg-[#06110f] shadow-2xl md:static md:z-auto md:w-60 md:shrink-0 md:rounded-none md:border-y-0 md:border-r-0">
+            <div className="flex items-center justify-between border-b border-[#143b28] px-4 py-3">
+              <div><p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/35">Insert Register</p><p className="mt-1 text-xs text-white/45">Case records only</p></div>
+              <button type="button" onClick={() => setRegisterPanelOpen(false)} className="grid h-8 w-8 place-items-center rounded border border-white/10 text-white/55 hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-label="Close insert register panel"><PanelRightClose className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-2 p-3">
+              <p className="text-xs leading-5 text-white/45">Insert an editable table populated only with authorized case records. Empty source groups remain clearly marked.</p>
+              {REGISTER_KINDS.map((kind) => <button key={kind} type="button" onClick={() => { insertRegister(kind); setRegisterPanelOpen(false); window.requestAnimationFrame(() => sectionEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })) }} className="flex min-h-10 w-full items-center justify-between rounded border border-[#20dc73]/25 px-3 text-left text-xs capitalize text-[#9ef4bd] transition hover:bg-[#20dc73]/10"><span>{kind}</span><span className="font-mono text-[9px] text-white/30">INSERT</span></button>)}
+            </div>
+          </aside>
+        ) : null}
+      </div>
     </section>
   )
 }

@@ -20,7 +20,7 @@ function titleCase(value: string) {
   return value.toLowerCase().replace(/\b([a-z])/g, (letter) => letter.toUpperCase())
 }
 
-export default function RichTextEditor({ value, onChange, disabled = false, label }: { value: RichDocument; onChange: (document: RichDocument) => void; disabled?: boolean; label: string }) {
+export default function RichTextEditor({ value, onChange, disabled = false, label, stickyToolbar = false, documentMode = false }: { value: RichDocument; onChange: (document: RichDocument) => void; disabled?: boolean; label: string; stickyToolbar?: boolean; documentMode?: boolean }) {
   const editor = useEditor({
     immediatelyRender: false,
     editable: !disabled,
@@ -34,7 +34,7 @@ export default function RichTextEditor({ value, onChange, disabled = false, labe
       TableCell,
     ],
     content: value,
-    editorProps: { attributes: { class: "min-h-52 px-4 py-3 outline-none prose-invert max-w-none text-sm leading-7 text-white/75" } },
+    editorProps: { attributes: { class: `min-h-52 px-4 py-3 outline-none max-w-none text-sm leading-7 ${documentMode ? "text-[#1d2821]" : "prose-invert text-white/75"}` } },
     onUpdate: ({ editor: current }) => onChange(current.getJSON() as RichDocument),
   })
 
@@ -71,8 +71,8 @@ export default function RichTextEditor({ value, onChange, disabled = false, labe
   const command = (run: () => void) => () => { if (!disabled) run() }
   const active = (name: string, attrs?: Record<string, unknown>) => editor.isActive(name, attrs) ? "border-[#20dc73]/60 bg-[#20dc73]/15 text-[#20dc73]" : ""
 
-  return <div className="overflow-hidden rounded-md border border-[#143b28] bg-black/30 focus-within:border-[#20dc73]/55">
-    {!disabled ? <div className="flex flex-wrap gap-1 border-b border-[#143b28] bg-[#06110f] p-2" role="toolbar" aria-label={`${label} formatting`}>
+  return <div className={`overflow-hidden rounded-md border border-[#143b28] focus-within:border-[#20dc73]/55 ${documentMode ? "bg-[#fcfdf9]" : "bg-black/30"}`}>
+    {!disabled ? <div className={`flex flex-wrap gap-1 border-b border-[#143b28] bg-[#06110f] p-2 ${stickyToolbar ? "sticky top-0 z-20 shadow-[0_10px_20px_rgba(0,0,0,0.28)]" : ""}`} role="toolbar" aria-label={`${label} formatting`}>
       <button type="button" title="Undo" aria-label="Undo" className={buttonClass} onClick={command(() => editor.chain().focus().undo().run())} disabled={!editor.can().undo()}><Undo2 className="h-3.5 w-3.5" /></button>
       <button type="button" title="Redo" aria-label="Redo" className={buttonClass} onClick={command(() => editor.chain().focus().redo().run())} disabled={!editor.can().redo()}><Redo2 className="h-3.5 w-3.5" /></button>
       <span className="mx-1 h-8 w-px bg-[#143b28]" />

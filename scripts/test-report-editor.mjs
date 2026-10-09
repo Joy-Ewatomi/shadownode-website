@@ -71,6 +71,7 @@ test("structured registers use only supplied records and preserve an empty-state
 
 const route = read("app/api/cases/[id]/reports/route.ts")
 const editor = read("components/reports/RichTextEditor.tsx")
+const reportEditor = read("components/reports/ReportEditor.tsx")
 const viewer = read("components/reports/RichDocumentContent.tsx")
 const pdf = read("lib/report-pdf.tsx")
 const word = read("app/api/reports/[id]/export/route.ts")
@@ -90,6 +91,17 @@ test("editor supplies the approved formatting controls as a client component", (
   for (const control of ["toggleBold", "toggleItalic", "toggleUnderline", "toggleBulletList", "toggleOrderedList", "insertTable", "undo", "redo", "setTextAlign"]) assert.match(editor, new RegExp(control))
   assert.match(editor, /immediatelyRender: false/)
   assert.match(viewer, /RichDocumentContent/)
+})
+
+test("expanded editor preserves the existing draft state and exposes responsive workspace controls", () => {
+  for (const value of ["Expand Editor", "Collapse Editor", "Unsaved Changes", "Report Sections", "Insert Register", "sectionNavigationOpen", "registerPanelOpen", "stickyToolbar={expanded}", "documentMode={expanded}"]) assert.match(reportEditor, new RegExp(value))
+  assert.match(reportEditor, /fixed inset-0/)
+  assert.match(reportEditor, /max-w-\[210mm\]/)
+  assert.match(reportEditor, /setExpanded\(\(value\) => !value\)/)
+  assert.match(reportEditor, /setDirty\(false\)/)
+  assert.match(reportEditor, /selectSection\(section\.id\)/)
+  assert.match(editor, /stickyToolbar = false/)
+  assert.match(editor, /documentMode = false/)
 })
 
 test("API validates rich JSON, preserves plaintext, and rejects changes after approval", () => {
@@ -132,4 +144,4 @@ test("ELK lays out every node and preserves directed cross-links", () => {
   assert.ok(hierarchy.height >= 520)
 })
 
-console.log("\n11 report editor checks passed.")
+console.log("\n12 report editor checks passed.")
