@@ -24,6 +24,8 @@ import ReportViewer, {
   CaseReport,
   ReportSection,
 } from "./ReportViewer"
+import ReportGraphAttachment from "./ReportGraphAttachment"
+import type { RichDocument } from "@/lib/report-document"
 
 type EvidenceOption = {
   id: string
@@ -790,10 +792,12 @@ export default function ReportBuilder({
   async function saveEditedReport({
     title,
     executive_summary,
+    executive_summary_document,
     sections,
   }: {
     title: string
     executive_summary: string
+    executive_summary_document: RichDocument
     sections: LocalSection[]
   }) {
     if (
@@ -821,6 +825,7 @@ export default function ReportBuilder({
 
           executive_summary:
             executive_summary.trim(),
+          executive_summary_document,
         })
 
       if (!reportUpdate) {
@@ -881,6 +886,8 @@ export default function ReportBuilder({
 
             content:
               contentValue,
+            content_document:
+              editedSection.content_document,
 
             order_index:
               editedSection.order_index,
@@ -902,6 +909,8 @@ export default function ReportBuilder({
 
             content:
               contentValue,
+            content_document:
+              editedSection.content_document,
           })
         }
       }
@@ -1746,6 +1755,12 @@ if (refreshedResponse.ok) {
                 </div>
               </div>
 
+              <ReportGraphAttachment
+                caseId={caseId}
+                reportId={selectedReport.id}
+                locked={reportLocked}
+              />
+
               {/* EDITOR */}
 
               {editorMode &&
@@ -1762,6 +1777,7 @@ if (refreshedResponse.ok) {
                       async ({
                         title,
                         executive_summary,
+                        executive_summary_document,
                         sections,
                       }) => {
                         await saveEditedReport(
@@ -1770,12 +1786,18 @@ if (refreshedResponse.ok) {
 
                             executive_summary,
 
+                            executive_summary_document,
+
                             sections:
                               sections as LocalSection[],
                           },
                         )
                       }
                     }
+                    registerRows={{
+                      evidence: (selectedReport.evidence || []).map((item) => [item.file_name || item.id, item.evidence_type || "Evidence", item.sha256_hash || "Hash not recorded", item.status || "unreviewed"]),
+                      entities: (selectedReport.entities || []).map((item) => [item.name || item.id, item.entity_type || "ENTITY", item.verification_status || "unreviewed", item.confidence_score == null ? "Not scored" : `${item.confidence_score}%`]),
+                    }}
                   />
                 </div>
               ) : null}

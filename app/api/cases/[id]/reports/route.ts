@@ -15,6 +15,9 @@ import {
 import { emitCaseWorkspaceEvent } from "@/lib/realtime/workspace-events"
 import { calculateReportDraftingReadiness } from "@/lib/report-drafting-readiness"
 import { buildEvidenceBasedDraft } from "@/lib/evidence-based-report"
+import { freezeApprovedReportVersion, getApprovedReportVersion } from "@/lib/report-artifacts"
+import { validateRichDocument } from "@/lib/report-document"
+import { richDocumentStorageAvailable } from "@/lib/report-rich-document-storage"
 import {
   notifyAdmins,
   notifySuperAdmins,
@@ -698,6 +701,7 @@ async function loadReportDetails(
   caseId: string,
   reportId?: string,
 ) {
+  const richDocuments = await richDocumentStorageAvailable()
   const reportFilter = reportId
     ? "AND cr.id = $2"
     : ""
@@ -714,6 +718,7 @@ async function loadReportDetails(
         cr.title,
         cr.file_url,
         cr.summary,
+        ${richDocuments ? "cr.summary_document, cr.summary_document_version," : "NULL::jsonb AS summary_document, NULL::smallint AS summary_document_version,"}
         cr.report_type,
         cr.status,
         cr.classification,
@@ -771,6 +776,7 @@ async function loadReportDetails(
           section_type,
           title,
           content,
+          ${richDocuments ? "content_document, content_document_version," : "NULL::jsonb AS content_document, NULL::smallint AS content_document_version,"}
           order_index,
           created_by,
           created_at,
@@ -856,6 +862,8 @@ async function loadReportDetails(
 
       executive_summary:
         report.summary,
+      summary_document:
+        report.summary_document || null,
 
       sections:
         sections.rows
@@ -880,6 +888,8 @@ async function loadReportDetails(
               content:
                 section.content ||
                 null,
+              content_document:
+                section.content_document || null,
               order_index:
                 Number(
                   section.order_index ||
@@ -904,6 +914,9 @@ async function loadReportDetails(
               ),
               file_name:
                 item.file_name ||
+                null,
+              evidence_type:
+                item.evidence_type ||
                 null,
               status:
                 "submitted",
@@ -3011,6 +3024,14 @@ export async function PATCH(
         )
       }
 
+      let sectionDocument: string | null = null
+      if (body?.content_document !== undefined) {
+        if (!await richDocumentStorageAvailable()) return NextResponse.json({ error: "Rich report editing requires the pending report rich-document migration." }, { status: 409 })
+        const validated = validateRichDocument(body.content_document)
+        if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 })
+        sectionDocument = JSON.stringify(validated.document)
+      }
+
       const requestedOrder =
         Number(
           body?.order_index,
@@ -3051,14 +3072,15 @@ export async function PATCH(
         ],
       )
 
-      const sectionResult =
-        await query(
-          `
+      const sectionResult = await query(
+          sectionDocument ? `
             INSERT INTO case_report_sections (
               report_id,
               section_type,
               title,
               content,
+              content_document,
+              content_document_version,
               order_index,
               created_by,
               created_at,
@@ -3071,13 +3093,19 @@ export async function PATCH(
               $3,
               $4,
               $5,
+              1,
               $6,
+              $7,
               NOW(),
               NOW()
             )
-
+            RETURNING *
+          ` : `
+            INSERT INTO case_report_sections (report_id, section_type, title, content, order_index, created_by, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
             RETURNING *
           `,
+          sectionDocument ? [reportId, sectionType, sectionTitle, sectionContent, sectionDocument, orderIndex, actorProfileId] :
           [
             reportId,
             sectionType,
@@ -3262,9 +3290,55 @@ export async function PATCH(
         )
       }
 
+      let nextDocument: string | null = null
+      if (body?.content_document !== undefined) {
+        if (!await richDocumentStorageAvailable()) {
+          return NextResponse.json(
+            {
+              error:
+                "Rich report editing requires the pending report rich-document migration.",
+            },
+            { status: 409 },
+          )
+        }
+
+        const validated =
+          validateRichDocument(
+            body.content_document,
+          )
+
+        if (!validated.ok) {
+          return NextResponse.json(
+            { error: validated.error },
+            { status: 400 },
+          )
+        }
+
+        nextDocument =
+          JSON.stringify(
+            validated.document,
+          )
+      }
+
       const updatedSection =
         await query(
-          `
+          nextDocument ? `
+            UPDATE case_report_sections
+
+            SET
+              section_type = $2,
+              title = $3,
+              content = $4,
+              content_document = $5::jsonb,
+              content_document_version = 1,
+              updated_at = NOW()
+
+            WHERE
+              id = $1
+              AND report_id = $6
+
+            RETURNING *
+          ` : `
             UPDATE case_report_sections
 
             SET
@@ -3291,7 +3365,9 @@ export async function PATCH(
             nextType,
             nextTitle,
             nextContent,
-            reportId,
+            ...(nextDocument
+              ? [nextDocument, reportId]
+              : [reportId]),
           ],
         )
 
@@ -4083,6 +4159,7 @@ export async function PATCH(
       body?.file_url,
       body?.summary,
       body?.executive_summary,
+      body?.executive_summary_document,
       body?.report_type,
       body?.classification,
     ].some((value) => value !== undefined)
@@ -4274,6 +4351,36 @@ export async function PATCH(
         body?.executive_summary,
       )
 
+    let summaryDocument: string | null = null
+    if (body?.executive_summary_document !== undefined) {
+      if (!await richDocumentStorageAvailable()) {
+        return NextResponse.json(
+          {
+            error:
+              "Rich report editing requires the pending report rich-document migration.",
+          },
+          { status: 409 },
+        )
+      }
+
+      const validated =
+        validateRichDocument(
+          body.executive_summary_document,
+        )
+
+      if (!validated.ok) {
+        return NextResponse.json(
+          { error: validated.error },
+          { status: 400 },
+        )
+      }
+
+      summaryDocument =
+        JSON.stringify(
+          validated.document,
+        )
+    }
+
     const reportType =
       optionalText(
         body?.report_type,
@@ -4301,6 +4408,23 @@ export async function PATCH(
         },
         { status: 409 },
       )
+    }
+
+    if (nextStatus && ["delivered", "published"].includes(nextStatus)) {
+      const frozenVersion = await getApprovedReportVersion(reportId)
+      const graphArtifactId = frozenVersion?.content_snapshot?.graph_artifact_id
+      if (graphArtifactId) {
+        const graphArtifact = await query<{ visibility_scope: string }>(
+          "SELECT visibility_scope FROM case_report_artifacts WHERE id = $1 AND report_id = $2 AND removed_at IS NULL LIMIT 1",
+          [graphArtifactId, reportId],
+        )
+        if (graphArtifact.rows[0]?.visibility_scope !== "client") {
+          return NextResponse.json(
+            { error: "This approved report contains an internal-only graph snapshot. Create a revised draft with a client-visible graph before delivery or publication." },
+            { status: 409 },
+          )
+        }
+      }
     }
 
     /*
@@ -4389,7 +4513,32 @@ export async function PATCH(
      */
     const updated =
       await query(
-        `
+        summaryDocument ? `
+          UPDATE case_reports
+
+          SET
+            title = COALESCE($2, title),
+            file_url = COALESCE($3, file_url),
+            summary = COALESCE($4, summary),
+            summary_document = $5::jsonb,
+            summary_document_version = 1,
+            report_type = COALESCE($6, report_type),
+            classification = COALESCE($7, classification),
+            status = COALESCE($8, status),
+            approved_by =
+              CASE
+                WHEN $8 IN ('approved', 'delivered', 'final', 'published')
+                THEN $9
+                WHEN $8 = 'draft'
+                THEN NULL
+                ELSE approved_by
+              END,
+            updated_at = NOW()
+
+          WHERE id = $1 AND case_id = $10
+
+          RETURNING *
+        ` : `
           UPDATE case_reports
 
           SET
@@ -4453,11 +4602,22 @@ export async function PATCH(
           title,
           fileUrl,
           summary,
-          reportType,
-          classification,
-          nextStatus,
-          actorProfileId,
-          access.caseId,
+          ...(summaryDocument
+            ? [
+                summaryDocument,
+                reportType,
+                classification,
+                nextStatus,
+                actorProfileId,
+                access.caseId,
+              ]
+            : [
+                reportType,
+                classification,
+                nextStatus,
+                actorProfileId,
+                access.caseId,
+              ]),
         ],
       )
 
@@ -4475,6 +4635,26 @@ export async function PATCH(
 
     const updatedReport =
       updated.rows[0]
+
+    if (nextStatus === "approved") {
+      try {
+        await freezeApprovedReportVersion({
+          reportId,
+          caseId: access.caseId,
+          approvedBy: actorProfileId,
+        })
+      } catch (freezeError) {
+        await query(
+          "UPDATE case_reports SET status = $2, approved_by = NULL, updated_at = NOW() WHERE id = $1 AND case_id = $3",
+          [reportId, currentStatus, access.caseId],
+        ).catch(() => undefined)
+        console.error("REPORT VERSION FREEZE ERROR", freezeError)
+        return NextResponse.json(
+          { error: "The report could not be frozen for approval. Confirm the report artifact migration has been applied, then try again." },
+          { status: 500 },
+        )
+      }
+    }
 
     const finalTitle =
       typeof updatedReport.title ===

@@ -16,11 +16,16 @@ import {
   useState,
 } from "react"
 
+import { documentPlainText, formatPlainTextAsDocument, plainTextDocument, registerDocument, type RegisterKind, type RichDocument } from "@/lib/report-document"
+
+import RichTextEditor from "./RichTextEditor"
+
 export type EditableReportSection = {
   id: string
   section_type: string | null
   title: string | null
   content: string | null
+  content_document?: RichDocument | null
   order_index: number
 }
 
@@ -37,8 +42,11 @@ export type EditableCaseReport = {
   approved_by_username?: string | null
   created_at?: string | null
   updated_at?: string | null
+  summary_document?: RichDocument | null
   sections?: EditableReportSection[]
 }
+
+export type ReportRegisterRows = Partial<Record<RegisterKind, string[][]>>
 
 type ReportEditorProps = {
   report: EditableCaseReport
@@ -46,10 +54,12 @@ type ReportEditorProps = {
     changes: {
       title: string
       executive_summary: string
+      executive_summary_document: RichDocument
       sections: EditableReportSection[]
     },
   ) => Promise<void> | void
   saving?: boolean
+  registerRows?: ReportRegisterRows
 }
 
 const SECTION_TYPES = [
@@ -156,6 +166,11 @@ function cloneSections(
         content:
           section.content ??
           "",
+        content_document:
+          section.content_document ||
+          plainTextDocument(
+            section.content,
+          ),
         section_type:
           section.section_type ||
           "analysis",
@@ -172,17 +187,13 @@ export default function ReportEditor({
   report,
   onSave,
   saving = false,
+  registerRows = {},
 }: ReportEditorProps) {
   const [title, setTitle] =
     useState(report.title || "")
 
-  const [
-    executiveSummary,
-    setExecutiveSummary,
-  ] = useState(
-    report.executive_summary ??
-      report.summary ??
-      "",
+  const [executiveSummaryDocument, setExecutiveSummaryDocument] = useState<RichDocument>(
+    report.summary_document || plainTextDocument(report.executive_summary ?? report.summary ?? ""),
   )
 
   const [
@@ -218,6 +229,11 @@ export default function ReportEditor({
     setShowNewSection,
   ] = useState(false)
 
+  const [formatPreview, setFormatPreview] = useState<{
+    executive: RichDocument
+    sections: Record<string, RichDocument>
+  } | null>(null)
+
   const [
     newSection,
     setNewSection,
@@ -240,11 +256,7 @@ export default function ReportEditor({
       report.title || "",
     )
 
-    setExecutiveSummary(
-      report.executive_summary ??
-        report.summary ??
-        "",
-    )
+    setExecutiveSummaryDocument(report.summary_document || plainTextDocument(report.executive_summary ?? report.summary ?? ""))
 
     setSections(
       cloneSections(
@@ -256,11 +268,13 @@ export default function ReportEditor({
 
     setDirty(false)
     setNotice(null)
+    setFormatPreview(null)
   }, [
     report.id,
     report.title,
     report.executive_summary,
     report.summary,
+    report.summary_document,
     report.sections,
     report.status,
   ])
@@ -307,6 +321,37 @@ export default function ReportEditor({
         ),
     )
 
+    markDirty()
+  }
+
+  function updateSectionDocument(sectionId: string, document: RichDocument) {
+    setSections((current) => current.map((section) => section.id === sectionId ? { ...section, content_document: document, content: documentPlainText(document) } : section))
+    markDirty()
+  }
+
+  function prepareFormatPreview() {
+    const formattedSections = Object.fromEntries(sections.map((section) => [section.id, formatPlainTextAsDocument(documentPlainText(section.content_document || plainTextDocument(section.content)))]))
+    setFormatPreview({ executive: formatPlainTextAsDocument(documentPlainText(executiveSummaryDocument)), sections: formattedSections })
+  }
+
+  function applyFormatPreview() {
+    if (!formatPreview) return
+    setExecutiveSummaryDocument(formatPreview.executive)
+    setSections((current) => current.map((section) => {
+      const document = formatPreview.sections[section.id]
+      return document ? { ...section, content_document: document, content: documentPlainText(document) } : section
+    }))
+    setFormatPreview(null)
+    markDirty()
+    setNotice("Formatting preview applied to the working draft. Review all changes before saving.")
+  }
+
+  function insertRegister(kind: RegisterKind) {
+    const document = registerDocument(kind, registerRows[kind] || [])
+    const label = `${kind[0].toUpperCase()}${kind.slice(1)} Register`
+    const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setSections((current) => [...current, { id, section_type: "evidence", title: label, content: documentPlainText(document), content_document: document, order_index: current.length }])
+    setSelectedSectionId(id)
     markDirty()
   }
 
@@ -532,7 +577,9 @@ export default function ReportEditor({
           cleanTitle,
 
         executive_summary:
-          executiveSummary.trim(),
+          documentPlainText(executiveSummaryDocument),
+        executive_summary_document:
+          executiveSummaryDocument,
 
         sections:
           sections.map(
@@ -547,10 +594,9 @@ export default function ReportEditor({
                     "",
                 ).trim(),
               content:
-                String(
-                  section.content ||
-                    "",
-                ).trim(),
+                documentPlainText(section.content_document || plainTextDocument(section.content)),
+              content_document:
+                section.content_document || plainTextDocument(section.content),
               order_index:
                 index,
             }),
@@ -618,16 +664,18 @@ export default function ReportEditor({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={saveChanges}
-            disabled={
-              saving ||
-              readOnly ||
-              !dirty
-            }
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#20dc73] px-4 text-sm font-bold text-black transition hover:bg-[#39ea87] disabled:cursor-not-allowed disabled:opacity-35"
-          >
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={prepareFormatPreview} disabled={readOnly} className="inline-flex h-10 items-center justify-center rounded-md border border-[#20dc73]/35 px-3 text-sm font-semibold text-[#20dc73] disabled:opacity-35">Format Report</button>
+            <button
+              type="button"
+              onClick={saveChanges}
+              disabled={
+                saving ||
+                readOnly ||
+                !dirty
+              }
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#20dc73] px-4 text-sm font-bold text-black transition hover:bg-[#39ea87] disabled:cursor-not-allowed disabled:opacity-35"
+            >
             {saving ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
             ) : (
@@ -637,7 +685,8 @@ export default function ReportEditor({
             {saving
               ? "Saving..."
               : "Save Changes"}
-          </button>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -684,6 +733,17 @@ export default function ReportEditor({
         </div>
       ) : null}
 
+      {formatPreview ? (
+        <div className="border-b border-[#20dc73]/20 bg-[#20dc73]/5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#20dc73]">Formatting Preview</p><p className="mt-1 text-xs leading-5 text-white/55">This preview changes structure only. It does not generate facts, attach evidence, or change verification states.</p></div>
+            <div className="flex gap-2"><button type="button" onClick={() => setFormatPreview(null)} className="h-9 rounded border border-white/15 px-3 text-xs text-white/60">Cancel</button><button type="button" onClick={applyFormatPreview} className="h-9 rounded bg-[#20dc73] px-3 text-xs font-semibold text-black">Apply formatting</button></div>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2"><div className="rounded border border-white/10 bg-black/20 p-3"><p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/35">Executive summary: original text</p><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-xs leading-5 text-white/60">{documentPlainText(executiveSummaryDocument)}</pre></div><div className="rounded border border-[#20dc73]/20 bg-black/20 p-3"><p className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#20dc73]">Executive summary: proposed structure</p><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-xs leading-5 text-white/60">{documentPlainText(formatPreview.executive)}</pre></div></div>
+          {sections.length ? <div className="mt-4 space-y-3">{sections.map((section) => <details key={section.id} className="rounded border border-white/10 bg-black/20 p-3"><summary className="cursor-pointer text-xs font-semibold text-white/75">{section.title || "Untitled section"}</summary><div className="mt-3 grid gap-3 lg:grid-cols-2"><div><p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/35">Original text</p><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-sans text-xs leading-5 text-white/60">{documentPlainText(section.content_document || plainTextDocument(section.content))}</pre></div><div><p className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#20dc73]">Proposed structure</p><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-sans text-xs leading-5 text-white/60">{documentPlainText(formatPreview.sections[section.id])}</pre></div></div></details>)}</div> : null}
+        </div>
+      ) : null}
+
       {/* ============================================================
           REPORT IDENTITY
       ============================================================ */}
@@ -714,20 +774,9 @@ export default function ReportEditor({
               Executive Summary
             </label>
 
-            <textarea
-              value={
-                executiveSummary
-              }
-              disabled={readOnly}
-              onChange={(event) => {
-                setExecutiveSummary(
-                  event.target.value,
-                )
-                markDirty()
-              }}
-              className="mt-2 min-h-40 w-full rounded-md border border-[#143b28] bg-black px-3 py-3 text-sm leading-7 text-white/70 outline-none placeholder:text-white/20 focus:border-[#20dc73]/50 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Summarize the investigation, principal findings, evidentiary position, limitations and overall assessment."
-            />
+            <div className="mt-2">
+              <RichTextEditor label="Executive summary" value={executiveSummaryDocument} disabled={readOnly} onChange={(document) => { setExecutiveSummaryDocument(document); markDirty() }} />
+            </div>
           </div>
         </div>
 
@@ -789,6 +838,7 @@ export default function ReportEditor({
               }
             />
           </div>
+          {!readOnly ? <div className="mt-4 border-t border-[#143b28] pt-3"><p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">Insert Structured Register</p><div className="mt-2 flex flex-wrap gap-2">{(["evidence", "entities", "relationships", "financial", "chronology", "correlation", "findings"] as RegisterKind[]).map((kind) => <button key={kind} type="button" onClick={() => insertRegister(kind)} className="h-8 rounded border border-[#20dc73]/25 px-2.5 text-[10px] capitalize text-[#9ef4bd] transition hover:bg-[#20dc73]/10">{kind}</button>)}</div></div> : null}
         </div>
       </div>
 
@@ -1185,24 +1235,9 @@ export default function ReportEditor({
                     Section Content
                   </label>
 
-                  <textarea
-                    value={
-                      selectedSection.content ||
-                      ""
-                    }
-                    disabled={
-                      readOnly
-                    }
-                    onChange={(event) =>
-                      updateSection(
-                        selectedSection.id,
-                        "content",
-                        event.target.value,
-                      )
-                    }
-                    className="mt-2 min-h-[22rem] w-full rounded-md border border-[#143b28] bg-black px-4 py-3 text-sm leading-7 text-white/70 outline-none placeholder:text-white/20 focus:border-[#20dc73]/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    placeholder="Investigative section content..."
-                  />
+                  <div className="mt-2">
+                    <RichTextEditor label="Section content" value={selectedSection.content_document || plainTextDocument(selectedSection.content)} disabled={readOnly} onChange={(document) => updateSectionDocument(selectedSection.id, document)} />
+                  </div>
                 </div>
               </div>
 

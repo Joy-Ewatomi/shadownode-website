@@ -1,0 +1,30 @@
+import assert from "node:assert/strict"
+import fs from "node:fs"
+
+const read = (path) => fs.readFileSync(path, "utf8")
+const artifacts = read("lib/report-artifacts.ts")
+const pdf = read("lib/report-pdf.tsx")
+const exportRoute = read("app/api/reports/[id]/export/route.ts")
+const reportRoute = read("app/api/cases/[id]/reports/route.ts")
+const graphRoute = read("app/api/cases/[id]/reports/[reportId]/graph/route.ts")
+
+assert.match(artifacts, /client_visible = true/)
+assert.match(artifacts, /Relationship labels describe recorded links/)
+assert.match(artifacts, /page_count/)
+assert.match(artifacts, /freezeApprovedReportVersion/)
+assert.match(artifacts, /content_sha256/)
+assert.match(pdf, /NotoSans/)
+assert.match(pdf, /SHA-256 identifies the exact exported PDF bytes/)
+assert.match(pdf, /graphSources\.slice\(1\)/)
+assert.match(exportRoute, /format === "pdf"/)
+assert.match(exportRoute, /sha256\(pdfBytes\)/)
+assert.match(exportRoute, /reused/)
+assert.match(exportRoute, /frozenSnapshot/)
+assert.match(reportRoute, /freezeApprovedReportVersion/)
+assert.match(graphRoute, /requireCaseOperationalAccess/)
+assert.match(graphRoute, /Approved report versions are immutable/)
+assert.match(graphRoute, /function graphArtifactResponse/)
+assert.match(graphRoute, /artifact: graphArtifactResponse\(artifact\)/)
+assert.doesNotMatch(graphRoute, /storage_path/)
+
+console.log("Report artifact source checks passed: 18")

@@ -121,6 +121,16 @@ const unauthorizedRoute = compile(routeSource, {
   "@/lib/realtime/workspace-events": { emitCaseWorkspaceEvent: async () => undefined },
   "@/lib/report-drafting-readiness": { calculateReportDraftingReadiness },
   "@/lib/evidence-based-report": { buildEvidenceBasedDraft },
+  "@/lib/report-artifacts": {
+    freezeApprovedReportVersion: async () => undefined,
+    getApprovedReportVersion: async () => null,
+  },
+  "@/lib/report-document": {
+    validateRichDocument: () => ({ ok: true, document: { type: "doc", content: [] } }),
+  },
+  "@/lib/report-rich-document-storage": {
+    richDocumentStorageAvailable: async () => false,
+  },
   "@/lib/services/notification-service": {
     notifyAdmins: async () => undefined,
     notifySuperAdmins: async () => undefined,

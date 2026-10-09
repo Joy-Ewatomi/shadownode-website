@@ -14,11 +14,16 @@ import {
   UserCheck,
 } from "lucide-react"
 
+import ReportGraphAttachment from "./ReportGraphAttachment"
+import RichDocumentContent from "./RichDocumentContent"
+import type { RichDocument } from "@/lib/report-document"
+
 export type ReportSection = {
   id: string
   section_type: string | null
   title: string | null
   content: string | null
+  content_document?: RichDocument | null
   order_index: number
 }
 
@@ -27,6 +32,7 @@ export type ReportEvidence = {
   file_name: string | null
   status: string | null
   sha256_hash: string | null
+  evidence_type?: string | null
 }
 
 export type ReportEntity = {
@@ -44,6 +50,7 @@ export type CaseReport = {
   file_url?: string | null
   summary?: string | null
   executive_summary?: string | null
+  summary_document?: RichDocument | null
   report_type?: string | null
   status?: string | null
   classification?: string | null
@@ -386,6 +393,14 @@ export default function ReportViewer({
                   <Download className="h-3 w-3" />
                   Download Word
                 </a>
+
+                <a
+                  href={`/api/reports/${encodeURIComponent(report.id)}/export?format=pdf`}
+                  className="inline-flex items-center gap-1.5 rounded border border-blue-400/25 px-2.5 py-1 text-[9px] uppercase tracking-[0.1em] text-blue-200 transition hover:bg-blue-400/10"
+                >
+                  <Download className="h-3 w-3" />
+                  Download PDF
+                </a>
               </div>
 
               <p className="mt-5 font-mono text-[9px] uppercase tracking-[0.2em] text-white/25">
@@ -510,9 +525,7 @@ export default function ReportViewer({
           />
 
           <div className="mt-5 rounded-lg border border-[#17462f] bg-[#06110f] p-5">
-            <p className="whitespace-pre-wrap text-sm leading-7 text-white/70">
-              {executiveSummary}
-            </p>
+            <RichDocumentContent document={report.summary_document} fallback={executiveSummary} />
           </div>
         </section>
       ) : null}
@@ -570,6 +583,10 @@ export default function ReportViewer({
           />
         </div>
       </section>
+
+      <div className="border-b border-[#143b28] p-5 sm:p-7">
+        <ReportGraphAttachment caseId={report.case_id} reportId={report.id} locked={approved} manage={false} />
+      </div>
 
       {/* ============================================================
           REPORT CONTENT
@@ -634,10 +651,7 @@ export default function ReportViewer({
                     </div>
 
                     <div className="px-4 py-5">
-                      <p className="whitespace-pre-wrap text-sm leading-7 text-white/65">
-                        {section.content ||
-                          "No content recorded for this section."}
-                      </p>
+                      <RichDocumentContent document={section.content_document} fallback={section.content || "No content recorded for this section."} />
                     </div>
                   </section>
                 )
