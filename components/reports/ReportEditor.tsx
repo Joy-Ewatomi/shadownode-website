@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  Eye,
   FileText,
   Fingerprint,
   LockKeyhole,
@@ -25,6 +26,7 @@ import {
 
 import { documentPlainText, formatPlainTextAsDocument, plainTextDocument, registerDocument, type RegisterKind, type RichDocument } from "@/lib/report-document"
 
+import RichDocumentContent from "./RichDocumentContent"
 import RichTextEditor from "./RichTextEditor"
 
 export type EditableReportSection = {
@@ -252,6 +254,7 @@ export default function ReportEditor({
   } | null>(null)
 
   const [expanded, setExpanded] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   const [sectionNavigationOpen, setSectionNavigationOpen] = useState(true)
   const [registerPanelOpen, setRegisterPanelOpen] = useState(false)
   const workspaceScrollRef = useRef<HTMLDivElement>(null)
@@ -292,6 +295,7 @@ export default function ReportEditor({
     setDirty(false)
     setNotice(null)
     setFormatPreview(null)
+    setShowPreview(false)
   }, [
     report.id,
     report.title,
@@ -727,7 +731,11 @@ export default function ReportEditor({
                 <span className="hidden sm:inline">Registers</span>
               </button> : null}
             </> : null}
-            <button type="button" onClick={prepareFormatPreview} disabled={readOnly} className="inline-flex h-10 items-center justify-center rounded-md border border-[#20dc73]/35 px-3 text-sm font-semibold text-[#20dc73] disabled:opacity-35">Format Report</button>
+            <button type="button" onClick={() => { setShowPreview(false); prepareFormatPreview() }} disabled={readOnly} className="inline-flex h-10 items-center justify-center rounded-md border border-[#20dc73]/35 px-3 text-sm font-semibold text-[#20dc73] disabled:opacity-35">Format Report</button>
+            <button type="button" onClick={() => setShowPreview((value) => !value)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/15 px-3 text-sm font-semibold text-white/70 transition hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-pressed={showPreview}>
+              <Eye className="h-4 w-4" />
+              <span className="hidden sm:inline">{showPreview ? "Edit" : "Preview"}</span>
+            </button>
             <button type="button" onClick={() => setExpanded((value) => !value)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/15 px-3 text-sm font-semibold text-white/70 transition hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-label={expanded ? "Collapse editor" : "Expand editor"}>
               {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               <span className="hidden sm:inline">{expanded ? "Collapse Editor" : "Expand Editor"}</span>
@@ -772,6 +780,21 @@ export default function ReportEditor({
 
         <div ref={workspaceScrollRef} className={expanded ? "min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[#010302] p-3 sm:p-6 lg:p-8" : ""}>
           <div className={expanded ? "mx-auto min-h-full w-full max-w-[210mm] overflow-hidden rounded-[3px] border border-[#31513d] bg-[#07100d] shadow-[0_18px_60px_rgba(0,0,0,0.5)]" : ""}>
+      {showPreview ? (
+        <article className="p-6 sm:p-10">
+          <div className="border-b border-[#143b28] pb-7">
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#20dc73]">Live Draft Preview</p>
+            <h2 className="mt-3 text-2xl font-semibold text-white sm:text-3xl">{title || "Untitled investigation report"}</h2>
+            <p className="mt-3 text-xs uppercase tracking-[0.12em] text-white/45">{formatLabel(report.classification || "confidential")} · {formatLabel(status)}</p>
+            {dirty ? <p className="mt-4 rounded border border-yellow-400/25 bg-yellow-400/5 px-3 py-2 text-xs text-yellow-100">Previewing unsaved working changes. Save the report to persist them.</p> : null}
+          </div>
+          <section className="mt-8">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#20dc73]">Executive Summary</p>
+            <div className="mt-4"><RichDocumentContent document={executiveSummaryDocument} fallback={documentPlainText(executiveSummaryDocument)} /></div>
+          </section>
+          {sections.map((section, index) => <section key={section.id} className="mt-9 border-t border-[#143b28] pt-7"><p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#20dc73]">{String(index + 1).padStart(2, "0")} · {formatLabel(section.section_type)}</p><h3 className="mt-2 text-xl font-semibold text-white">{section.title || "Untitled section"}</h3><div className="mt-4"><RichDocumentContent document={section.content_document || plainTextDocument(section.content)} fallback={section.content} /></div></section>)}
+        </article>
+      ) : <>
 
       {/* ============================================================
           NOTICE
@@ -1393,6 +1416,7 @@ export default function ReportEditor({
           </div>
         </div>
       </footer>
+      </>}
           </div>
         </div>
 

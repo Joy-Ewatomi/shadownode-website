@@ -1,6 +1,6 @@
 "use client"
 
-import { FileArchive, Fingerprint, Loader2, ShieldCheck, Trash2, UploadCloud } from "lucide-react"
+import { FileArchive, Fingerprint, Image as ImageIcon, Loader2, ShieldCheck, Trash2, UploadCloud, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import EvidenceAssociationList, { type EvidenceAssociation } from "./EvidenceAssociationList"
 import EvidenceUpload from "./EvidenceUpload"
@@ -40,6 +40,7 @@ export default function EvidencePanel({ caseId }: { caseId: string }) {
   const [removingAssociationId, setRemovingAssociationId] = useState<string | null>(null)
   const [associations, setAssociations] = useState<Record<string, EvidenceAssociation[]>>({})
   const [error, setError] = useState("")
+  const [previewItem, setPreviewItem] = useState<EvidenceFile | null>(null)
 
   async function load() {
     setLoading(true)
@@ -120,6 +121,10 @@ export default function EvidencePanel({ caseId }: { caseId: string }) {
     }
   }
 
+  function canPreviewImage(item: EvidenceFile) {
+    return ["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"].includes((item.file_type || "").toLowerCase())
+  }
+
   return (
     <section className="rounded-md border border-[#143b28] bg-[#06110f] p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -156,6 +161,7 @@ export default function EvidencePanel({ caseId }: { caseId: string }) {
                     <FileArchive className="h-3.5 w-3.5" />
                     {item.evidence_type || "evidence"}
                   </span>
+                  {canPreviewImage(item) ? <button type="button" onClick={() => setPreviewItem(item)} title="View authorized evidence image" className="grid h-8 w-8 place-items-center rounded border border-[#20dc73]/30 text-[#20dc73] transition hover:bg-[#20dc73]/10" aria-label={`View ${item.file_name}`}><ImageIcon className="h-4 w-4" /></button> : null}
                   <button
                     type="button"
                     onClick={() => void deleteEvidence(item)}
@@ -209,6 +215,13 @@ export default function EvidencePanel({ caseId }: { caseId: string }) {
           )
         })}
       </div>
+
+      {previewItem ? <div role="dialog" aria-modal="true" aria-label={`Evidence image preview: ${previewItem.file_name}`} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setPreviewItem(null)}>
+        <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[#27543a] bg-[#06110f] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between gap-4 border-b border-[#143b28] px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{previewItem.file_name}</p><p className="mt-1 text-xs text-white/45">Authorized case-evidence preview. This view is not a verification determination.</p></div><button type="button" onClick={() => setPreviewItem(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded border border-white/15 text-white/65 hover:border-[#20dc73]/35 hover:text-[#20dc73]" aria-label="Close image preview"><X className="h-4 w-4" /></button></div>
+          <div className="min-h-0 flex-1 overflow-auto bg-black p-3"><img src={`/api/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(previewItem.id)}/preview`} alt={previewItem.file_name} className="mx-auto max-h-[calc(100dvh-10rem)] max-w-full object-contain" /></div>
+        </div>
+      </div> : null}
     </section>
   )
 }

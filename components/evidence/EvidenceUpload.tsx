@@ -3,7 +3,11 @@
 import { Upload } from "lucide-react"
 import { useState } from "react"
 
-export default function EvidenceUpload({ caseId, onUploaded }: { caseId: string; onUploaded: () => void }) {
+import EvidenceDropzone from "./EvidenceDropzone"
+
+export type EvidenceUploadResult = { id: string; file_hash?: string }
+
+export default function EvidenceUpload({ caseId, onUploaded }: { caseId: string; onUploaded: (result: EvidenceUploadResult) => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [evidenceType, setEvidenceType] = useState("digital")
   const [description, setDescription] = useState("")
@@ -38,17 +42,19 @@ export default function EvidenceUpload({ caseId, onUploaded }: { caseId: string;
       return
     }
 
+    const data = await res.json().catch(() => ({}))
+
     setFile(null)
     setEvidenceType("digital")
     setDescription("")
     setProgress(0)
-    onUploaded()
+    onUploaded(data as EvidenceUploadResult)
   }
 
   return (
     <div className="rounded-md border border-[#143b28] bg-black/25 p-4">
       <div className="grid gap-3 md:grid-cols-[1fr_11rem_1fr_auto]">
-        <input type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} className="rounded-md border border-[#143b28] bg-black px-3 py-2 text-sm text-white file:mr-3 file:rounded file:border-0 file:bg-[#20dc73] file:px-3 file:py-1 file:text-sm file:font-bold file:text-black" />
+        <EvidenceDropzone file={file} onFileChange={setFile} disabled={uploading} label="Drop evidence file" />
         <input value={evidenceType} onChange={(event) => setEvidenceType(event.target.value)} placeholder="Evidence type" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60" />
         <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Evidence description" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none focus:border-[#20dc73]/60" />
         <button onClick={upload} disabled={!file || uploading} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#20dc73] px-4 font-bold text-black disabled:opacity-50">

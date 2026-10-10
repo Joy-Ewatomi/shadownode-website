@@ -61,6 +61,7 @@ import { useParams } from "next/navigation"
 import EvidenceAssociationList, {
   type EvidenceAssociation,
 } from "@/components/evidence/EvidenceAssociationList"
+import EvidenceDropzone from "@/components/evidence/EvidenceDropzone"
 import GraphDomainIntelligence from "@/components/intelligence/GraphDomainIntelligence"
 
 import "reactflow/dist/style.css"
@@ -210,6 +211,18 @@ type GraphRelationship = {
   client_visible?: boolean | null
   confidence_score?: number | null
   verification_status?: string | null
+}
+
+type PendingEvidenceUpload = {
+  file: File | null
+  evidenceType: string
+  description: string
+}
+
+const EMPTY_PENDING_EVIDENCE: PendingEvidenceUpload = {
+  file: null,
+  evidenceType: "digital",
+  description: "",
 }
 
 type StagedOsintResult = {
@@ -446,6 +459,12 @@ export default function InvestigationGraphPage() {
     relationshipDescription,
     setRelationshipDescription,
   ] = useState("")
+
+  const [entityEvidenceUpload, setEntityEvidenceUpload] =
+    useState<PendingEvidenceUpload>(EMPTY_PENDING_EVIDENCE)
+
+  const [relationshipEvidenceUpload, setRelationshipEvidenceUpload] =
+    useState<PendingEvidenceUpload>(EMPTY_PENDING_EVIDENCE)
 
   const [paletteQuery, setPaletteQuery] =
     useState("")
@@ -1289,6 +1308,7 @@ export default function InvestigationGraphPage() {
     setAliases("")
     setVerificationStatus("unreviewed")
     setConfidence(50)
+    setEntityEvidenceUpload(EMPTY_PENDING_EVIDENCE)
     setShowEntityPanel(true)
     setShowRelationshipPanel(false)
   }
@@ -1316,6 +1336,7 @@ export default function InvestigationGraphPage() {
       setSourceProvider(entity.source_provider || "")
       setSourceReference(entity.source_reference || "")
       setNotes(entity.notes || "")
+      setEntityEvidenceUpload(EMPTY_PENDING_EVIDENCE)
       setShowEntityPanel(true)
       setShowRelationshipPanel(false)
       return
@@ -1330,6 +1351,7 @@ export default function InvestigationGraphPage() {
     setTarget(relationship.target_entity_id)
     setRelationshipType(relationship.relationship_type || "")
     setRelationshipDescription(relationship.description || "")
+    setRelationshipEvidenceUpload(EMPTY_PENDING_EVIDENCE)
     setShowRelationshipPanel(true)
     setShowEntityPanel(false)
   }
@@ -1917,6 +1939,38 @@ export default function InvestigationGraphPage() {
       ],
     )
 
+  async function uploadAndLinkEvidence(
+    targetType: "entity" | "relationship",
+    targetId: string,
+    pending: PendingEvidenceUpload,
+  ) {
+    if (!pending.file) return
+
+    const form = new FormData()
+    form.append("file", pending.file)
+    form.append("evidence_type", pending.evidenceType.trim() || "digital")
+    form.append("description", pending.description.trim())
+
+    const uploadResponse = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/evidence`,
+      { method: "POST", credentials: "include", body: form },
+    )
+    const uploaded = await uploadResponse.json().catch(() => ({})) as { id?: string; error?: string }
+    if (!uploadResponse.ok || !uploaded.id) throw new Error(uploaded.error || "Evidence file upload failed.")
+
+    const linkResponse = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/graph/provenance`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_type: targetType, target_id: targetId, evidence_id: uploaded.id }),
+      },
+    )
+    const linked = await linkResponse.json().catch(() => ({})) as { error?: string }
+    if (!linkResponse.ok) throw new Error(linked.error || "Evidence was uploaded but could not be linked to this graph record.")
+  }
+
   async function createEntity() {
     const trimmedName =
       entityName.trim()
@@ -1931,6 +1985,8 @@ export default function InvestigationGraphPage() {
     if (creatingEntity) {
       return
     }
+
+    const wasEditing = Boolean(editingEntityId)
 
     try {
       setCreatingEntity(
@@ -2018,6 +2074,22 @@ export default function InvestigationGraphPage() {
         )
       }
 
+      if (!("id" in result) || typeof result.id !== "string") {
+        throw new Error("Entity save did not return a graph record id.")
+      }
+
+      const savedEntityId = result.id
+
+      if (entityEvidenceUpload.file) {
+        try {
+          await uploadAndLinkEvidence("entity", savedEntityId, entityEvidenceUpload)
+          setEntityEvidenceUpload(EMPTY_PENDING_EVIDENCE)
+        } catch (uploadError) {
+          if (!wasEditing) setEditingEntityId(savedEntityId)
+          throw new Error(`Entity saved, but its evidence was not attached: ${uploadError instanceof Error ? uploadError.message : "Upload failed."}`)
+        }
+      }
+
       setEntityName("")
       setValue("")
       setAliases("")
@@ -2041,7 +2113,7 @@ export default function InvestigationGraphPage() {
       setActionError(
         err instanceof Error
           ? err.message
-          : editingEntityId ? "Entity update failed" : "Entity creation failed",
+          : wasEditing ? "Entity update failed" : "Entity creation failed",
       )
     } finally {
       setCreatingEntity(
@@ -2074,6 +2146,8 @@ export default function InvestigationGraphPage() {
     ) {
       return
     }
+
+    const wasEditing = Boolean(editingRelationshipId)
 
     try {
       setCreatingRelationship(
@@ -2132,6 +2206,22 @@ export default function InvestigationGraphPage() {
         )
       }
 
+      if (!("id" in result) || typeof result.id !== "string") {
+        throw new Error("Relationship save did not return a graph record id.")
+      }
+
+      const savedRelationshipId = result.id
+
+      if (relationshipEvidenceUpload.file) {
+        try {
+          await uploadAndLinkEvidence("relationship", savedRelationshipId, relationshipEvidenceUpload)
+          setRelationshipEvidenceUpload(EMPTY_PENDING_EVIDENCE)
+        } catch (uploadError) {
+          if (!wasEditing) setEditingRelationshipId(savedRelationshipId)
+          throw new Error(`Relationship saved, but its evidence was not attached: ${uploadError instanceof Error ? uploadError.message : "Upload failed."}`)
+        }
+      }
+
       setSource("")
       setTarget("")
       setRelationshipType("")
@@ -2146,7 +2236,7 @@ export default function InvestigationGraphPage() {
       setActionError(
         err instanceof Error
           ? err.message
-          : editingRelationshipId ? "Relationship update failed" : "Relationship creation failed",
+          : wasEditing ? "Relationship update failed" : "Relationship creation failed",
       )
     } finally {
       setCreatingRelationship(
@@ -2162,6 +2252,7 @@ export default function InvestigationGraphPage() {
 
     setShowEntityPanel(false)
     setEditingEntityId(null)
+    setEntityEvidenceUpload(EMPTY_PENDING_EVIDENCE)
     setActionError(null)
   }
 
@@ -2177,6 +2268,7 @@ export default function InvestigationGraphPage() {
     )
 
     setEditingRelationshipId(null)
+    setRelationshipEvidenceUpload(EMPTY_PENDING_EVIDENCE)
 
     setActionError(null)
   }
@@ -3742,6 +3834,18 @@ export default function InvestigationGraphPage() {
               className="min-h-20 w-full resize-y rounded-md border border-[#143b28] bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60"
             />
 
+            <div className="border-t border-[#143b28] pt-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#20dc73]">Supporting Evidence (Optional)</p>
+              <p className="mt-1 text-xs leading-5 text-white/45">Upload a file and it will be linked after this entity is saved. A link records relevance; it does not verify the entity by itself.</p>
+              <div className="mt-3 space-y-3">
+                <EvidenceDropzone file={entityEvidenceUpload.file} disabled={creatingEntity} label="Drop evidence for this entity" onFileChange={(file) => setEntityEvidenceUpload((current) => ({ ...current, file }))} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <input value={entityEvidenceUpload.evidenceType} onChange={(event) => setEntityEvidenceUpload((current) => ({ ...current, evidenceType: event.target.value }))} disabled={creatingEntity} placeholder="Evidence type" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60" />
+                  <input value={entityEvidenceUpload.description} onChange={(event) => setEntityEvidenceUpload((current) => ({ ...current, description: event.target.value }))} disabled={creatingEntity} placeholder="Evidence description" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60" />
+                </div>
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={
@@ -3918,6 +4022,18 @@ export default function InvestigationGraphPage() {
               }
               className="min-h-24 w-full resize-y rounded-md border border-[#143b28] bg-black px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60"
             />
+
+            <div className="border-t border-[#143b28] pt-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#20dc73]">Supporting Evidence (Optional)</p>
+              <p className="mt-1 text-xs leading-5 text-white/45">Upload a file and it will be linked after this relationship is saved. A link records relevance; it does not verify the relationship by itself.</p>
+              <div className="mt-3 space-y-3">
+                <EvidenceDropzone file={relationshipEvidenceUpload.file} disabled={creatingRelationship} label="Drop evidence for this relationship" onFileChange={(file) => setRelationshipEvidenceUpload((current) => ({ ...current, file }))} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <input value={relationshipEvidenceUpload.evidenceType} onChange={(event) => setRelationshipEvidenceUpload((current) => ({ ...current, evidenceType: event.target.value }))} disabled={creatingRelationship} placeholder="Evidence type" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60" />
+                  <input value={relationshipEvidenceUpload.description} onChange={(event) => setRelationshipEvidenceUpload((current) => ({ ...current, description: event.target.value }))} disabled={creatingRelationship} placeholder="Evidence description" className="h-10 rounded-md border border-[#143b28] bg-black px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#20dc73]/60" />
+                </div>
+              </div>
+            </div>
 
             <button
               type="button"

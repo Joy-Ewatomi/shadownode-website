@@ -71,7 +71,7 @@ export default function RichTextEditor({ value, onChange, disabled = false, labe
   const command = (run: () => void) => () => { if (!disabled) run() }
   const active = (name: string, attrs?: Record<string, unknown>) => editor.isActive(name, attrs) ? "border-[#20dc73]/60 bg-[#20dc73]/15 text-[#20dc73]" : ""
 
-  return <div className={`overflow-hidden rounded-md border border-[#143b28] focus-within:border-[#20dc73]/55 ${documentMode ? "bg-[#fcfdf9]" : "bg-black/30"}`}>
+  return <div className={`rounded-md border border-[#143b28] focus-within:border-[#20dc73]/55 ${stickyToolbar ? "overflow-visible" : "overflow-hidden"} ${documentMode ? "bg-[#fcfdf9]" : "bg-black/30"}`}>
     {!disabled ? <div className={`flex flex-wrap gap-1 border-b border-[#143b28] bg-[#06110f] p-2 ${stickyToolbar ? "sticky top-0 z-20 shadow-[0_10px_20px_rgba(0,0,0,0.28)]" : ""}`} role="toolbar" aria-label={`${label} formatting`}>
       <button type="button" title="Undo" aria-label="Undo" className={buttonClass} onClick={command(() => editor.chain().focus().undo().run())} disabled={!editor.can().undo()}><Undo2 className="h-3.5 w-3.5" /></button>
       <button type="button" title="Redo" aria-label="Redo" className={buttonClass} onClick={command(() => editor.chain().focus().redo().run())} disabled={!editor.can().redo()}><Redo2 className="h-3.5 w-3.5" /></button>

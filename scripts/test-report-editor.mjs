@@ -94,7 +94,7 @@ test("editor supplies the approved formatting controls as a client component", (
 })
 
 test("expanded editor preserves the existing draft state and exposes responsive workspace controls", () => {
-  for (const value of ["Expand Editor", "Collapse Editor", "Unsaved Changes", "Report Sections", "Insert Register", "sectionNavigationOpen", "registerPanelOpen", "stickyToolbar={expanded}", "documentMode={expanded}"]) assert.match(reportEditor, new RegExp(value))
+  for (const value of ["Expand Editor", "Collapse Editor", "Preview", "Live Draft Preview", "Unsaved Changes", "Report Sections", "Insert Register", "sectionNavigationOpen", "registerPanelOpen", "stickyToolbar={expanded}", "documentMode={expanded}"]) assert.match(reportEditor, new RegExp(value))
   assert.match(reportEditor, /fixed inset-0/)
   assert.match(reportEditor, /max-w-\[210mm\]/)
   assert.match(reportEditor, /setExpanded\(\(value\) => !value\)/)
