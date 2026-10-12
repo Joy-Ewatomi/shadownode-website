@@ -5,6 +5,7 @@ import { query } from "@/lib/db"
 import { profileIdForUser } from "@/lib/investigation-workspace"
 import { isSuperAdministratorRole } from "@/lib/role-access"
 import CreateInternalCaseControl from "@/components/cases/CreateInternalCaseControl"
+import DeleteInternalCaseControl from "@/components/cases/DeleteInternalCaseControl"
 
 type CaseRow = {
   id: string
@@ -37,6 +38,7 @@ type CaseRow = {
   evidence_count: number
   report_count: number
   unread_notification_count: number
+  is_internal_case: boolean
 }
 
 function formatStatus(value: string | null) {
@@ -208,7 +210,22 @@ export default async function CasesPage() {
                 AND COALESCE(n.metadata->>'resource_id', n.metadata->>'resourceId') = c.id::text
               )
             )
-        ) AS unread_notification_count
+        ) AS unread_notification_count,
+
+        (
+          c.client_profile_id IS NULL
+          AND c.case_user_id IS NULL
+          AND COALESCE(c.payment_status, '') = 'waived'
+          AND NOT EXISTS (
+            SELECT 1 FROM requests internal_request
+            WHERE internal_request.converted_case_id = c.id
+          )
+          AND EXISTS (
+            SELECT 1 FROM case_updates internal_update
+            WHERE internal_update.case_id = c.id
+              AND internal_update.update_type = 'internal_case_created'
+          )
+        ) AS is_internal_case
 
       FROM cases c
 
@@ -404,8 +421,8 @@ export default async function CasesPage() {
         ) : null}
 
         {rows.map((item) => (
+          <article key={item.id}>
           <Link
-            key={item.id}
             href={`/dashboard/cases/${item.id}`}
             className={[
               "group block rounded-md border p-5 transition hover:border-[#20dc73]/55 hover:bg-[#071510]",
@@ -659,6 +676,8 @@ export default async function CasesPage() {
               </span>
             </div>
           </Link>
+          {isSuperAdministrator && item.is_internal_case ? <DeleteInternalCaseControl caseId={item.id} caseNumber={item.case_number} /> : null}
+          </article>
         ))}
       </section>
     </div>
