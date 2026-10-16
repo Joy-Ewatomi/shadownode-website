@@ -58,7 +58,7 @@ const tests = [
     assert.equal(verifyIntelligenceClaim(relationship({ source_value: "example.com", target_value: "2001:db8::1", artifact_ids: ["dns-v6"] }), [item]).status, "SUPPORTED")
   }],
   ["unknown schema fails closed", () => assert.equal(verifyIntelligenceClaim(relationship(), [artifact("dns-1", { note: "chatgpt.com resolves to 172.64.155.209" })]).status, "INSUFFICIENT_EVIDENCE")],
-  ["SDIA without canonical contract fails", () => assert.equal(verifyIntelligenceClaim(relationship(), [{ ...dns, integrity_error: "canonical contract unavailable" }]).status, "FAILED_VERIFICATION")],
+  ["generic artifact with an integrity error fails", () => assert.equal(verifyIntelligenceClaim(relationship(), [{ ...dns, integrity_error: "stored integrity failure" }]).status, "FAILED_VERIFICATION")],
 ]
 
 for (const [name, test] of tests) {

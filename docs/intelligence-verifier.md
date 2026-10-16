@@ -34,7 +34,7 @@ Hostnames are lowercased, converted through IDNA, and stripped of a trailing dot
 
 ## SDIA integrity
 
-SDIA's artifact and manifest contract remains authoritative. This repository does not contain SDIA's canonical serializer or manifest verifier, so the website does not reconstruct SDIA hashes with `JSON.stringify`. An SDIA result without an authoritative verifiable contract fails integrity closed. Integrating that contract requires importing a versioned verifier from SDIA or consuming an SDIA-produced signed manifest; inventing a website-specific hash interpretation is prohibited.
+SDIA's artifact and manifest contract remains authoritative. This repository does not contain SDIA's canonical serializer or manifest verifier, so the website does not reconstruct SDIA hashes with `JSON.stringify`. Imported SDIA reports preserve the report identity, manifest, artifact IDs, hashes, parent references, and graph links in the SDIA bridge tables, while the original report payload remains available through the case-scoped analysis result. Artifact `payload_locator` values are relative to that stored job envelope, for example `result.evidence[0]`; raw response bodies are not copied into the artifact index. The graph verification route exposes a separate `sdia_verification_state`: `MIGRATION_UNAVAILABLE`, `BRIDGE_RECORD_UNAVAILABLE`, `MISSING_EVIDENCE_REFERENCES`, `CANONICAL_VERIFIER_UNAVAILABLE`, or `CANONICAL_VERIFICATION_COMPLETED`. A matching digest never establishes producer authenticity. Local attached-evidence verification remains a separate result.
 
 ## API and access
 

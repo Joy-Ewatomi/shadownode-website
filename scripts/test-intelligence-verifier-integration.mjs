@@ -21,6 +21,7 @@ function compile(source, mocks = {}) {
 const integritySource = fs.readFileSync("lib/evidence-integrity.ts", "utf8")
 const verifierSource = fs.readFileSync("lib/intelligence-verifier.ts", "utf8").replace('import { hashesMatch, sha256Buffer } from "@/lib/evidence-integrity"', "")
 const verifier = compile(`${integritySource}\n${verifierSource}`)
+const bridge = compile(fs.readFileSync("lib/sdia-evidence-bridge.ts", "utf8"))
 
 const CASE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 const CASE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
@@ -42,6 +43,7 @@ function baseState() {
     sources: [{ id: "src-a", case_id: CASE_A, title: "Test DNS collector", source_type: "dns", collected_at: "2026-01-01T00:00:00Z" }],
     sourceLinks: [{ target_type: "relationship", target_id: "rel-a", source_id: "src-a" }],
     storage: new Map([["case-a/dns.json", bytes]]), storageErrors: new Set(), jobs: [],
+    sdia: { migrationUnavailable: false, reportRows: [], artifactRows: [], provenanceRows: [] },
   }
 }
 let state = baseState()
@@ -72,6 +74,18 @@ async function query(sql, params = []) {
     return { rows: state.sources.filter((item) => ids.includes(item.id) && item.case_id === params[1]).sort((a, b) => (a.collected_at || "~").localeCompare(b.collected_at || "~") || a.id.localeCompare(b.id)) }
   }
   if (compact.includes("FROM entity_sources link")) return { rows: [] }
+  if (compact.includes("FROM sdia_analysis_reports")) {
+    if (state.sdia.migrationUnavailable) throw Object.assign(new Error("missing bridge migration"), { code: "42P01" })
+    return { rows: state.sdia.reportRows }
+  }
+  if (compact.includes("FROM sdia_evidence_artifacts")) {
+    if (state.sdia.migrationUnavailable) throw Object.assign(new Error("missing bridge migration"), { code: "42P01" })
+    return { rows: state.sdia.artifactRows }
+  }
+  if (compact.includes("FROM sdia_graph_provenance")) {
+    if (state.sdia.migrationUnavailable) throw Object.assign(new Error("missing bridge migration"), { code: "42P01" })
+    return { rows: state.sdia.provenanceRows }
+  }
   if (compact.includes("FROM analysis_results")) return { rows: state.jobs.filter((item) => item.id === params[0] && item.case_id === params[1]) }
   if (compact.includes("WHERE er.case_id=$1 AND er.relationship_type='resolves_to'")) {
     const [caseId, endpointA, endpointB] = params
@@ -93,13 +107,33 @@ async function downloadEvidenceFile(path) {
 }
 const parseSdiaJobPayload = (value) => { try { return typeof value === "string" ? JSON.parse(value) : value } catch { return null } }
 const routeSource = fs.readFileSync("app/api/cases/[id]/graph/verification/route.ts", "utf8")
-const route = compile(routeSource, { "@/lib/db": { query }, "@/lib/investigation-workspace": { requireCaseOperationalAccess }, "@/lib/intelligence-verifier": verifier, "@/lib/services/storage-service": { downloadEvidenceFile }, "@/lib/sdia-analysis-jobs": { parseSdiaJobPayload } })
+const route = compile(routeSource, { "@/lib/db": { query }, "@/lib/investigation-workspace": { requireCaseOperationalAccess }, "@/lib/intelligence-verifier": verifier, "@/lib/services/storage-service": { downloadEvidenceFile }, "@/lib/sdia-analysis-jobs": { parseSdiaJobPayload }, "@/lib/sdia-evidence-bridge": bridge })
 const { NextRequest } = require("next/server")
 async function request(caseId, targetType, targetId) {
   const response = await route.GET(new NextRequest(`http://integration.test/api/cases/${caseId}/graph/verification?target_type=${targetType}&target_id=${targetId}`), { params: Promise.resolve({ id: caseId }) })
   return { statusCode: response.status, body: await response.json() }
 }
 async function test(name, run) { state = baseState(); await run(); console.log(`PASS ${name}`) }
+
+function attachSdia({ migrationUnavailable = false, bridgeRecord = true, missingReference = false, verificationStatus = "unavailable", sourceClassification = null } = {}) {
+  state.relationships[0].source_reference = `${JOB_ID}:relationship:r1`
+  state.evidence = []
+  state.evidenceLinks = []
+  state.sourceLinks = []
+  const evidenceIds = missingReference ? ["missing-rdap"] : ["artifact-rdap"]
+  state.jobs = state.jobs.filter((job) => job.id !== JOB_ID)
+  state.jobs.push({ id: JOB_ID, case_id: CASE_A, updated_at: "2026-01-01T00:00:00Z", findings: JSON.stringify({ status: "completed", domain: "chatgpt.com", requested_by: "test-user", result: {
+    evidence: [{ artifact_id: "artifact-rdap", artifact_type: "rdap_domain", source: "RDAP registry", collected_at: "2026-01-01T00:00:00Z", sha256: "a".repeat(64), collector: "RDAP", collector_version: "1", classification: "observed", parent_artifacts: [], context: {} }],
+    entities: [{ entity_id: "domain:d1", value: "chatgpt.com" }, { entity_id: "ip:i1", value: "172.64.155.209" }],
+    relationships: [{ relationship_id: "relationship:r1", source_entity_id: "domain:d1", target_entity_id: "ip:i1", relationship_type: "resolves_to", classification: sourceClassification || undefined, evidence_artifacts: evidenceIds }],
+  } }) })
+  state.sdia = {
+    migrationUnavailable,
+    reportRows: bridgeRecord ? [{ analysis_result_id: JOB_ID, schema_version: "1.0", evidence_contract_version: "sdia-evidence-v1", tool: "SDIA", tool_version: "1", domain: "chatgpt.com", run_id: "run-1", investigation: {}, evidence_manifest: { artifact_count: 1 }, producer_authenticity: "not_established", verification: { status: verificationStatus } }] : [],
+    artifactRows: bridgeRecord ? [{ artifact_id: "artifact-rdap", artifact_type: "rdap_domain", source: "RDAP registry", collected_at: "2026-01-01T00:00:00Z", sha256: "a".repeat(64), collector: "RDAP", collector_version: "1", classification: "observed", parent_artifacts: [], context: {}, payload_locator: "result.evidence[0]" }] : [],
+    provenanceRows: bridgeRecord ? [{ report_id: JOB_ID, source_record_id: "relationship:r1", evidence_artifact_ids: evidenceIds, missing_artifact_ids: missingReference ? ["missing-rdap"] : [] }] : [],
+  }
+}
 
 await test("valid observed DNS route", async () => assert.equal((await request(CASE_A, "relationship", "rel-a")).body.status, "SUPPORTED"))
 await test("semantic mismatch route", async () => { entity("ip-a").value = "1.2.3.4"; assert.equal((await request(CASE_A, "relationship", "rel-a")).body.status, "FAILED_VERIFICATION") })
@@ -138,12 +172,53 @@ await test("duplicate endpoint cannot satisfy derived route", async () => {
   assert.notEqual((await request(CASE_A, "relationship", "derived")).body.status, "SUPPORTED_AS_DERIVED")
 })
 
-await test("SDIA response without canonical contract fails closed", async () => {
+await test("SDIA response without canonical contract is explicitly unavailable", async () => {
   state.relationships[0].source_reference = `${JOB_ID}:relationship:r1`
+  state.evidence = []
+  state.evidenceLinks = []
   state.jobs.push({ id: JOB_ID, case_id: CASE_A, updated_at: "2026-01-01T00:00:00Z", findings: JSON.stringify({ status: "completed", domain: "chatgpt.com", requested_by: "test-user", result: { entities: [{ entity_id: "domain:d1", value: "chatgpt.com" }, { entity_id: "ip:i1", value: "172.64.155.209" }], relationships: [{ relationship_id: "relationship:r1", source_entity_id: "domain:d1", target_entity_id: "ip:i1", relationship_type: "resolves_to" }] } }) })
   const body = (await request(CASE_A, "relationship", "rel-a")).body
-  assert.equal(body.integrity.status, "INVALID")
-  assert.equal(body.status, "FAILED_VERIFICATION")
+  assert.equal(body.integrity.status, "UNAVAILABLE")
+  assert.equal(body.verification_availability, "UNAVAILABLE")
+  assert.equal(body.producer_authenticity, "not_established")
+  assert.equal(body.status, "INSUFFICIENT_EVIDENCE")
 })
 
-console.log("\n15 isolated verifier route integration tests passed.")
+await test("SDIA verification states remain distinct", async () => {
+  attachSdia({ migrationUnavailable: true })
+  const migrationResponse = await request(CASE_A, "relationship", "rel-a")
+  assert.equal((migrationResponse.body.sdia_verification || migrationResponse.body).sdia_verification_state, "MIGRATION_UNAVAILABLE")
+  attachSdia({ bridgeRecord: false })
+  { const body = (await request(CASE_A, "relationship", "rel-a")).body; assert.equal((body.sdia_verification || body).sdia_verification_state, "BRIDGE_RECORD_UNAVAILABLE") }
+  attachSdia({ missingReference: true })
+  { const body = (await request(CASE_A, "relationship", "rel-a")).body; assert.equal((body.sdia_verification || body).sdia_verification_state, "MISSING_EVIDENCE_REFERENCES") }
+  attachSdia({ verificationStatus: "unavailable" })
+  { const body = (await request(CASE_A, "relationship", "rel-a")).body; assert.equal((body.sdia_verification || body).sdia_verification_state, "CANONICAL_VERIFIER_UNAVAILABLE") }
+  attachSdia({ verificationStatus: "verified", sourceClassification: "observed" })
+  const body = (await request(CASE_A, "relationship", "rel-a")).body
+  assert.equal((body.sdia_verification || body).sdia_verification_state, "CANONICAL_VERIFICATION_COMPLETED")
+  assert.equal((body.sdia_verification || body).classification, "OBSERVED")
+})
+
+await test("SDIA source IDs do not fabricate observed classification", async () => {
+  attachSdia({ verificationStatus: "unavailable" })
+  const body = (await request(CASE_A, "relationship", "rel-a")).body
+  assert.equal((body.sdia_verification || body).classification, "UNCLASSIFIED")
+})
+
+await test("local evidence verification remains separate from SDIA state", async () => {
+  attachSdia({ verificationStatus: "unavailable" })
+  const bytes = dnsBytes("chatgpt.com", "172.64.155.209")
+  state.evidence = [{ id: "ev-a", case_id: CASE_A, file_name: "dns.json", file_type: "application/json", file_hash: sha256(bytes), storage_path: "case-a/dns.json", evidence_type: "dns", description: null, created_at: "2026-01-01T00:00:00Z" }]
+  state.evidenceLinks = [{ target_type: "relationship", target_id: "rel-a", evidence_id: "ev-a" }]
+  state.sources = [{ id: "src-a", case_id: CASE_A, title: "Test DNS collector", source_type: "dns", collected_at: "2026-01-01T00:00:00Z" }]
+  state.sourceLinks = [{ target_type: "relationship", target_id: "rel-a", source_id: "src-a" }]
+  state.storage.set("case-a/dns.json", bytes)
+  const body = (await request(CASE_A, "relationship", "rel-a")).body
+  assert.equal(body.status, "SUPPORTED")
+  assert.equal(body.local_verification.status, "SUPPORTED")
+  assert.equal(body.sdia_verification.status, "INSUFFICIENT_EVIDENCE")
+  assert.equal(body.sdia_verification.sdia_verification_state, "CANONICAL_VERIFIER_UNAVAILABLE")
+})
+
+console.log("\n19 isolated verifier route integration tests passed.")

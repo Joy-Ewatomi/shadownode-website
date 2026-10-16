@@ -6,6 +6,7 @@ import { requireCaseOperationalAccess } from "@/lib/investigation-workspace"
 import { isSameOriginMutation } from "@/lib/security-center"
 import { normalizeDomainInput } from "@/lib/sdia"
 import { failSdiaJob, parseSdiaJobPayload, SDIA_ANALYSIS_TYPE, signSdiaJob } from "@/lib/sdia-analysis-jobs"
+import { redactSdiaResultForClient } from "@/lib/sdia-evidence-bridge"
 
 const HEADERS = { "Cache-Control": "private, no-store" }
 export const dynamic = "force-dynamic"
@@ -66,5 +67,5 @@ export async function GET(request: NextRequest) {
   const row = result.rows[0]
   const payload = parseSdiaJobPayload(row?.findings)
   if (!row || !payload) return NextResponse.json({ error: "Analysis job was not found." }, { status: 404, headers: HEADERS })
-  return NextResponse.json({ job_id: jobId, status: payload.status, domain: payload.domain, analysis: payload.status === "completed" ? payload.result : undefined, error: payload.status === "failed" ? "Domain analysis service could not complete the request." : undefined }, { headers: HEADERS })
+  return NextResponse.json({ job_id: jobId, status: payload.status, domain: payload.domain, analysis: payload.status === "completed" ? redactSdiaResultForClient(payload.result) : undefined, error: payload.status === "failed" ? "Domain analysis service could not complete the request." : undefined }, { headers: HEADERS })
 }

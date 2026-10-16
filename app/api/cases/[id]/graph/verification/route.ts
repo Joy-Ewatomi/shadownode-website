@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { QueryResultRow } from "pg"
 
 import { query } from "@/lib/db"
 import { requireCaseOperationalAccess } from "@/lib/investigation-workspace"
 import { verifyIntelligenceClaim, type VerificationArtifact, type VerificationClaim } from "@/lib/intelligence-verifier"
 import { downloadEvidenceFile } from "@/lib/services/storage-service"
 import { parseSdiaJobPayload } from "@/lib/sdia-analysis-jobs"
+import { sdiaArtifactIndex, sdiaEvidenceArtifactIds, sdiaMissingArtifactIds, sdiaReportMetadata, sdiaUnavailableVerification, sdiaVerificationState, type SdiaReportMetadata, type SdiaVerificationContext } from "@/lib/sdia-evidence-bridge"
 
 type Json = Record<string, unknown>
 type TargetRow = {
@@ -39,24 +41,129 @@ function asObject(value: unknown): Json | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Json : null
 }
 
+function text(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
 function findSdiaRecord(result: Json, sourceReference: string) {
   const externalId = sourceReference.split(":").slice(1).join(":")
-  for (const key of ["entities", "relationships", "evidence", "artifacts"]) {
+  for (const key of ["entities", "relationships", "findings", "evidence", "artifacts"]) {
     const items = Array.isArray(result[key]) ? result[key] as unknown[] : []
     const match = items.find((item) => {
       const record = asObject(item)
-      return record && [record.id, record.entity_id, record.relationship_id, record.artifact_id].some((id) => String(id || "") === externalId)
+      return record && [record.id, record.entity_id, record.relationship_id, record.finding_id, record.artifact_id].some((id) => String(id || "") === externalId)
     })
     if (match) return match
   }
   return null
 }
 
-function findSdiaEntity(result: Json, id: unknown) {
-  return (Array.isArray(result.entities) ? result.entities : []).find((item) => {
-    const record = asObject(item)
-    return record && String(record.entity_id || record.id || "") === String(id || "")
-  })
+function strings(value: unknown) {
+  return Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()))] : []
+}
+
+async function optionalMigrationQuery<T extends QueryResultRow>(sql: string, params: unknown[]) {
+  try {
+    const result = await query<T>(sql, params)
+    return { available: true, rows: result.rows }
+  } catch (error: unknown) {
+    if (error && typeof error === "object" && "code" in error && error.code === "42P01") return { available: false, rows: [] as T[] }
+    throw error
+  }
+}
+
+async function loadSdiaContext(target: TargetRow, caseId: string): Promise<SdiaVerificationContext | null> {
+  if (!target.source_reference || !/^[0-9a-f-]{36}:/i.test(target.source_reference)) return null
+  const separator = target.source_reference.indexOf(":")
+  const jobId = target.source_reference.slice(0, separator)
+  const sourceRecordId = target.source_reference.slice(separator + 1)
+  const job = await query<{ findings: string }>("SELECT findings FROM analysis_results WHERE id=$1 AND case_id=$2 AND severity='completed' LIMIT 1", [jobId, caseId])
+  const payload = parseSdiaJobPayload(job.rows[0]?.findings)
+  const result = asObject(payload?.result)
+  if (!result) return null
+  const record = findSdiaRecord(result, target.source_reference)
+  const reportResult = await optionalMigrationQuery<{
+    analysis_result_id: string
+    schema_version: string | null
+    evidence_contract_version: string | null
+    tool: string | null
+    tool_version: string | null
+    domain: string | null
+    run_id: string | null
+    investigation: unknown
+    evidence_manifest: unknown
+    producer_authenticity: string | null
+    verification: unknown
+  }>(
+    `SELECT analysis_result_id, schema_version, evidence_contract_version, tool, tool_version,
+            domain, run_id, investigation, evidence_manifest, producer_authenticity, verification
+       FROM sdia_analysis_reports WHERE analysis_result_id=$1 AND case_id=$2 LIMIT 1`,
+    [jobId, caseId],
+  )
+  const artifactResult = await optionalMigrationQuery<{
+    artifact_id: string
+    artifact_type: string | null
+    source: string | null
+    collected_at: string | null
+    sha256: string | null
+    collector: string | null
+    collector_version: string | null
+    classification: string | null
+    parent_artifacts: unknown
+    context: unknown
+    payload_locator: string
+  }>(
+    `SELECT artifact_id, artifact_type, source, collected_at, sha256, collector, collector_version,
+            classification, parent_artifacts, context, payload_locator
+       FROM sdia_evidence_artifacts WHERE report_id=$1 ORDER BY artifact_id ASC`,
+    [jobId],
+  )
+  const provenanceResult = await optionalMigrationQuery<{
+    report_id: string
+    source_record_id: string
+    evidence_artifact_ids: unknown
+    missing_artifact_ids: unknown
+  }>(
+    `SELECT report_id, source_record_id, evidence_artifact_ids, missing_artifact_ids
+       FROM sdia_graph_provenance
+      WHERE report_id=$1 AND case_id=$2 AND target_type=$3 AND target_id=$4 LIMIT 1`,
+    [jobId, caseId, target.target_type, target.id],
+  )
+  const report: SdiaReportMetadata | null = reportResult.rows[0]
+    ? {
+        schema_version: reportResult.rows[0].schema_version,
+        evidence_contract_version: reportResult.rows[0].evidence_contract_version,
+        tool: reportResult.rows[0].tool,
+        tool_version: reportResult.rows[0].tool_version,
+        domain: reportResult.rows[0].domain,
+        run_id: reportResult.rows[0].run_id,
+        investigation: asObject(reportResult.rows[0].investigation) || {},
+        evidence_manifest: asObject(reportResult.rows[0].evidence_manifest) || {},
+        producer_authenticity: reportResult.rows[0].producer_authenticity || "not_established",
+        verification: asObject(reportResult.rows[0].verification) || { status: "unavailable" },
+      }
+    : sdiaReportMetadata(result)
+  const artifacts = artifactResult.rows.length
+    ? artifactResult.rows.map((item) => ({ ...item, parent_artifacts: strings(item.parent_artifacts), context: asObject(item.context) || {} }))
+    : sdiaArtifactIndex(result)
+  const storedProvenance = provenanceResult.rows[0]
+  const recordObject = asObject(record)
+  const evidenceArtifactIds = storedProvenance ? strings(storedProvenance.evidence_artifact_ids) : recordObject ? sdiaEvidenceArtifactIds(recordObject) : []
+  const missingArtifactIds = storedProvenance ? strings(storedProvenance.missing_artifact_ids) : sdiaMissingArtifactIds(evidenceArtifactIds, artifacts)
+  const migrationAvailable = reportResult.available && artifactResult.available && provenanceResult.available
+  const bridgeRecordAvailable = Boolean(reportResult.rows[0])
+  return {
+    report_id: storedProvenance?.report_id || reportResult.rows[0]?.analysis_result_id || jobId,
+    source_record_id: storedProvenance?.source_record_id || sourceRecordId,
+    evidence_artifact_ids: evidenceArtifactIds,
+    missing_artifact_ids: missingArtifactIds,
+    artifacts,
+    report,
+    verification_state: sdiaVerificationState({ migration_available: migrationAvailable, bridge_record_available: bridgeRecordAvailable, missing_artifact_ids: missingArtifactIds, report }),
+    migration_available: migrationAvailable,
+    bridge_record_available: bridgeRecordAvailable,
+    source_classification: text(recordObject?.classification),
+  }
 }
 
 async function loadArtifacts(target: TargetRow, caseId: string) {
@@ -83,20 +190,7 @@ async function loadArtifacts(target: TargetRow, caseId: string) {
     artifacts.push({ id: item.id, case_id: item.case_id, data: content.data, raw_content: content.raw, recorded_sha256: item.file_hash, source: null, source_type: null, collected_at: null, evidence_classification: "observed", record_exists: true, content_available: contentAvailable })
   }
 
-  if (target.source_reference && /^[0-9a-f-]{36}:/i.test(target.source_reference)) {
-    const jobId = target.source_reference.split(":", 1)[0]
-    const job = await query<{ findings: string; updated_at: string | null }>("SELECT findings, updated_at FROM analysis_results WHERE id=$1 AND case_id=$2 AND severity='completed' LIMIT 1", [jobId, caseId])
-    const payload = parseSdiaJobPayload(job.rows[0]?.findings)
-    const result = asObject(payload?.result)
-    const record = result ? findSdiaRecord(result, target.source_reference) : null
-    if (record) {
-      const object = asObject(record)
-      const data = target.target_type === "relationship" && object
-        ? { relationship: record, source_entity: findSdiaEntity(result!, object.source_entity_id), target_entity: findSdiaEntity(result!, object.target_entity_id) }
-        : record
-      artifacts.push({ id: `sdia:${target.source_reference}`, case_id: caseId, data, raw_content: null, recorded_sha256: null, source: "SDIA", source_type: "sdia", collected_at: typeof object?.collected_at === "string" ? object.collected_at : null, evidence_classification: "observed", record_exists: true, content_available: true, integrity_error: "The authoritative SDIA canonical manifest verifier is not available in this repository." })
-    }
-  }
+  const sdia = await loadSdiaContext(target, caseId)
 
   if (sources.rows.length) artifacts.forEach((artifact, index) => {
     const source = sources.rows[index] || sources.rows[0]
@@ -104,7 +198,7 @@ async function loadArtifacts(target: TargetRow, caseId: string) {
     artifact.source_type = source.source_type
     artifact.collected_at = source.collected_at
   })
-  return artifacts
+  return { artifacts, sdia }
 }
 
 function claimFromTarget(target: TargetRow, artifactIds: string[]): VerificationClaim {
@@ -127,7 +221,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const target = targetResult.rows[0]
     if (!target) return NextResponse.json({ error: "Graph item not found in this case." }, { status: 404 })
 
-    const artifacts = await loadArtifacts(target, access.caseId)
+    const loaded = await loadArtifacts(target, access.caseId)
+    const artifacts = loaded.artifacts
     const claim = claimFromTarget(target, artifacts.map((item) => item.id))
     if (target.relationship_type === "shares_observed_ip_with" && target.source_entity_id && target.target_entity_id) {
       const parents = await query<TargetRow>(`
@@ -156,7 +251,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           const endpointCandidates = candidates.filter((item) => item.source_entity_id === endpointId)
           let fallback: { claim: VerificationClaim; artifacts: VerificationArtifact[] } | null = null
           for (const parent of endpointCandidates) {
-            const parentArtifacts = await loadArtifacts(parent, access.caseId)
+            const parentLoaded = await loadArtifacts(parent, access.caseId)
+            const parentArtifacts = parentLoaded.artifacts
             const parentClaim = claimFromTarget(parent, parentArtifacts.map((item) => item.id))
             fallback ||= { claim: parentClaim, artifacts: parentArtifacts }
             if (verifyIntelligenceClaim(parentClaim, parentArtifacts).status === "SUPPORTED") { fallback = { claim: parentClaim, artifacts: parentArtifacts }; break }
@@ -169,6 +265,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           break
         }
       }
+    }
+    if (loaded.sdia) {
+      const unavailable = sdiaUnavailableVerification(target, loaded.sdia)
+      if (!artifacts.length) return NextResponse.json({ ...unavailable, local_verification: { status: "NOT_RUN", reason: "no_locally_attached_evidence" } }, { headers: { "Cache-Control": "private, no-store" } })
+      const verified = verifyIntelligenceClaim(claim, artifacts)
+      return NextResponse.json({
+        ...verified,
+        local_verification: { status: verified.status, integrity: verified.integrity, provenance: verified.provenance, evidence_artifacts: verified.evidence_artifacts },
+        sdia_verification: unavailable,
+        limitations: [...verified.limitations, "Local evidence verification and SDIA bridge verification are reported separately."],
+      }, { headers: { "Cache-Control": "private, no-store" } })
     }
     const result = verifyIntelligenceClaim(claim, artifacts)
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } })
