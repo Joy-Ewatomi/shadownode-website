@@ -1,121 +1,146 @@
 # ShadowNode Operations Bureau
 
-The official digital operations platform of **ShadowNode Operations Bureau Limited**.
+The official digital operations platform of
+**ShadowNode Operations Bureau Limited**.
 
-ShadowNode is a secure investigation, intelligence, cybersecurity, and professional-training platform designed to manage client requests from initial submission through review, quotation, payment, case execution, reporting, and completion.
+Website: https://shadownodebureau.com
 
-Website: [shadownodebureau.com](https://shadownodebureau.com)
+## About ShadowNode
 
----
+ShadowNode Operations Bureau Limited provides
+investigation, intelligence, cybersecurity, and
+professional training services.
 
-## Platform Overview
+The ShadowNode platform supports the delivery and
+management of these services through secure,
+role-aware client and operational workspaces.
 
-The platform provides separate, role-aware workspaces for:
+It brings together client engagement, case management,
+intelligence analysis, evidence preservation,
+professional training, reporting, and administrative
+operations within a unified digital environment.
 
-- Clients
-- Operational staff
-- Administrators
-- Super administrators
-- Assigned investigators, analysts, reviewers, and trainers
+## Services
 
-Access to operational case information is controlled by both the user’s permanent platform role and their assignment to the relevant case or training engagement.
+### Open-Source Intelligence (OSINT)
 
----
+Lawful intelligence collection, verification, analysis,
+and reporting using publicly available information.
 
-## Core Capabilities
+Service areas include:
 
-### Client Services
+- Digital footprint and identity research
+- Domain and internet infrastructure intelligence
+- Public social-media and username investigations
+- Corporate and reputational due diligence
+- Public-source documentation for authorized investigations
 
-- Submit investigation and cybersecurity requests
-- Submit professional-training requests
-- Upload supporting information
-- Receive and respond to quotations
-- Complete approved payments
-- Monitor case and training progress
-- Communicate through secure case conversations
-- View released reports and certificates
-- Receive portal and approved external notifications
+### Cybersecurity Services
 
-### Case Management
+Cybersecurity-related services are managed through
+the platform's client request and operational workflows.
 
-- Request-to-case conversion
-- Payment and activation workflow
-- Assignment-based workspace access
-- Case status and progress tracking
-- Team management
-- Secure client and staff messaging
-- Investigation timeline and case updates
-- Evidence management
-- Report preparation, review and delivery
+Specific engagements are subject to authorization,
+scope review, available expertise, and applicable law.
 
-### OSINT Intelligence Workspace
+### Cybersecurity Training
 
-The investigation graph supports:
+Practical cybersecurity education for individuals,
+students, professionals, organizations, and authorized
+institutions.
 
-- Searchable entity palette
-- Manual entity and relationship creation
-- Node-position persistence
-- Confidence and verification states
-- Source and evidence provenance
-- Staged external-search results
-- Investigator review before graph import
-- Investigation pivots
-- Graph-assisted automation
-- Integration with report preparation
+Training areas include:
 
-External provider integrations must use approved APIs, valid licences and properly configured credentials. The platform does not authorize unlawful access, prohibited scraping or unauthorized data collection.
+- Security awareness
+- Phishing and social engineering
+- Privacy and digital safety
+- Online fraud and scam awareness
+- Security operations
+- Digital forensics and incident response
+- Open-source intelligence
+- Penetration testing fundamentals
+- Customized professional training
 
-### Evidence and Reporting
+## Platform Capabilities
 
-- Evidence metadata management
-- SHA-256 integrity hashes
-- Chain-of-custody records
-- Evidence and source linkage
-- Investigation timeline
-- Structured report sections
-- Internal review and approval workflow
-- Client-controlled report release
-- Editable document export
-- Evidence register and integrity manifest
+### Client Portal
 
-The platform supports professional evidence documentation but does not independently guarantee legal admissibility. Admissibility depends on applicable law, collection authority, handling procedures and judicial requirements.
+Clients can submit service requests, upload supporting
+materials, review quotations, manage approved payments,
+monitor engagements, communicate with assigned teams,
+and access released deliverables.
+
+### Operations and Case Management
+
+The platform supports request assessment, engagement
+approval, case activation, assignment-based access,
+investigation management, reporting, and completion.
+
+### Intelligence Workspace
+
+The intelligence workspace supports structured
+investigations through entity graphs, relationship
+analysis, source documentation, evidence linkage,
+investigation pivots, and reviewed external results.
+
+### Evidence Integrity and Chain of Custody
+
+The shared evidence-intake service:
+
+- Computes SHA-256 hashes from received file bytes
+- Preserves original uploaded content
+- Reads stored files back for integrity verification
+- Assigns unique evidence identifiers
+- Records receipt and verification timestamps
+- Creates custody events
+- Records failed intake attempts
+- Handles partial multi-file upload failures
+
+Additional custody protection, automated report-stage
+reverification, and safe file-inspection controls
+remain development priorities.
+
+### Reporting
+
+The platform supports structured investigation reports,
+evidence references, internal review, approval, and
+controlled delivery to clients.
 
 ### Training Management
 
-- Training engagement creation
-- Trainer assignment
-- Plans, schedules and materials
-- Participant progress
-- Assessments and feedback
-- Completion workflow
-- Certificate generation and verification
+Training workflows support engagement administration,
+trainer assignment, schedules, materials, assessments,
+participant progress, and completion records.
 
-### Notifications
 
-- Canonical in-platform notifications
-- Communication-preference-aware delivery
-- Brief email alerts for portal-selected communication
-- Full approved email notifications where appropriate
-- WhatsApp-ready provider architecture
-- Per-user message receipts and unread counts
-- Delivery status and audit records
+## Security and Operational Principles
 
-WhatsApp delivery requires an approved provider, configured credentials and valid recipient consent.
+ShadowNode is designed around:
 
----
+- Lawful and authorized operations
+- Role-based and assignment-based access
+- Evidence integrity
+- Source provenance
+- Auditability
+- Reproducible investigative methods
+- Clear separation of observations and conclusions
+- Confidentiality and responsible information handling
+- Documented operational limitations
+
+The platform does not guarantee legal admissibility
+of evidence or the accuracy of third-party information.
 
 ## Technology Stack
 
-- **Framework:** Next.js
-- **Language:** TypeScript
-- **Interface:** React and Tailwind CSS
-- **Database:** PostgreSQL through Supabase
-- **Storage:** Supabase Storage
-- **Authentication:** Application-managed authentication and authorization
-- **Email:** Resend-compatible delivery architecture
-- **Payments:** Paystack
-- **Graph interface:** React Flow
-- **Deployment:** Netlify
-- **Domain and DNS:** Cloudflare
-
----
+- Next.js
+- TypeScript
+- React
+- Tailwind CSS
+- PostgreSQL
+- Supabase
+- Supabase Storage
+- React Flow
+- Paystack
+- Resend-compatible email delivery
+- Netlify
+- Cloudflare
